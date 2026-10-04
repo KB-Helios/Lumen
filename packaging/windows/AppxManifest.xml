@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" xmlns:systemai="http://schemas.microsoft.com/appx/manifest/systemai/windows10" IgnorableNamespaces="uap uap3 uap10 rescap systemai">
+  <Identity Name="Bridgehammer.Lumen" Publisher="CN=Bridgehammer" Version="0.1.0.0" ProcessorArchitecture="neutral" />
+  <Properties><DisplayName>Lumen</DisplayName><PublisherDisplayName>Bridgehammer</PublisherDisplayName><Logo>Assets\Lumen.png</Logo><uap10:AllowExternalContent>true</uap10:AllowExternalContent></Properties>
+  <Resources><Resource Language="en-us" /></Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.26100.0" MaxVersionTested="10.0.28000.0" />
+    <PackageDependency Name="Microsoft.WindowsAppRuntime.2-experimentalF" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" MinVersion="2.5.4.0" />
+  </Dependencies>
+  <Capabilities><rescap:Capability Name="runFullTrust" /><rescap:Capability Name="unvirtualizedResources" /><systemai:Capability Name="systemAIModels" /></Capabilities>
+  <Applications>
+    <Application Id="Lumen" Executable="lumen.exe" uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements AppListEntry="none" DisplayName="Lumen" Description="Keyboard-first search and supervised browser agents" BackgroundColor="transparent" Square150x150Logo="Assets\Lumen.png" Square44x44Logo="Assets\Lumen.png" />
+      <Extensions>
+        <uap:Extension Category="windows.protocol"><uap:Protocol Name="lumen"><uap:DisplayName>Lumen browser agent</uap:DisplayName></uap:Protocol></uap:Extension>
+        <uap3:Extension Category="windows.appExtension"><uap3:AppExtension Name="com.microsoft.windows.ai.actions" Id="LumenBrowserAgent" DisplayName="Lumen browser agent" PublicFolder="Assets"><uap3:Properties><Registration>actions.json</Registration></uap3:Properties></uap3:AppExtension></uap3:Extension>
+      </Extensions>
+    </Application>
+    <Application Id="WindowsAiHelper" Executable="windows-ai\lumen-windows-ai.exe" uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements AppListEntry="none" DisplayName="Lumen Windows AI helper" Description="Supervised local Windows AI bridge" BackgroundColor="transparent" Square150x150Logo="Assets\Lumen.png" Square44x44Logo="Assets\Lumen.png" />
+    </Application>
+  </Applications>
+</Package>

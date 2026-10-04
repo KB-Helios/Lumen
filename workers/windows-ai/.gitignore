@@ -1,0 +1,6 @@
+bin/
+obj/
+.build/
+.nuget/
+Tests/bin/
+Tests/obj/

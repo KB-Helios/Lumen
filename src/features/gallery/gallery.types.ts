@@ -57,6 +57,10 @@ export const requiredScenarioIds = [
   'settings-general',
   'settings-agent-gateway',
   'onboarding-welcome',
+  'windows-ai-ready',
+  'windows-ai-unavailable',
+  'windows-ai-preparing',
+  'windows-ai-failed',
 ] as const;
 
 export type GalleryScenarioId = (typeof requiredScenarioIds)[number];
@@ -85,7 +89,8 @@ export type GallerySurface =
   | {kind: 'settings-page'; page: SettingsPageId}
   | {kind: 'settings-shell'; page: SettingsPageId}
   | {kind: 'onboarding'; step: number}
-  | {kind: 'computer-use'; state: 'approval'};
+  | {kind: 'computer-use'; state: 'approval'}
+  | {kind: 'windows-ai'; state: 'ready' | 'unavailable' | 'preparing' | 'failed'};
 
 export interface GalleryScenario {
   id: GalleryScenarioId;

@@ -1,0 +1,14 @@
+{
+  "windowsAppSdk": "2.5.4-experimental",
+  "windowsRuntimeRelease": "2.5-experimentalF",
+  "csWinRt": "2.3.1",
+  "windowsSdkNetRef": "10.0.28000.87",
+  "aion": {
+    "version": "1.0.0",
+    "release": "v1.0.0.0",
+    "sdkUrl": "https://github.com/microsoft/Aion-Instruct-Preview-Sample/releases/download/v1.0.0.0/AionInstructPreview.Text.Framework.1.0.0.nupkg",
+    "sdkSha256": "208e739716ba35e87c8a7b0c10013fee63080c8cfb383793a706d0a5a73e7a7f",
+    "frameworkUrl": "https://github.com/microsoft/Aion-Instruct-Preview-Sample/releases/download/v1.0.0.0/AionInstructPreview.LanguageModel.Framework_1.0.0.0_ARM64.msix",
+    "frameworkSha256": "871ef1fa7c9f995e906521f3ddf0778853804c93595ced66aa62b2ebdce6b451"
+  }
+}

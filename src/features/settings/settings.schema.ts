@@ -84,6 +84,7 @@ export const settingsSchema = z.object({
       'images',
       'recent',
       'related',
+      'app-content',
     ])).min(1),
     filenamePriority: z.number().int().min(0).max(100),
     recency: z.enum(['low', 'balanced', 'high']),

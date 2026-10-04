@@ -1,7 +1,7 @@
 import type {
   AppContentMatch, WindowsAgentActivation, WindowsAiEvent, WindowsAiFeatureId,
   WindowsAiImageRequest, WindowsAiOperationResult, WindowsAiPreferences,
-  WindowsAiSnapshot, WindowsAiTextRequest, WindowsAiTextResult,
+  WindowsAiSnapshot, WindowsAiTextRequest, WindowsAiTextResult, WindowsAgent,
 } from './windows-ai.types';
 
 export type WindowsAiEventListener = (event: WindowsAiEvent) => void;
@@ -17,11 +17,13 @@ export interface WindowsAiService {
   searchContent(query: string, signal?: AbortSignal): Promise<AppContentMatch[]>;
   rebuildContent(): Promise<WindowsAiOperationResult>;
   deleteContent(): Promise<WindowsAiOperationResult>;
+  discoverAgents(): Promise<WindowsAgent[]>;
   invokeAgent(agentId: string, prompt: string): Promise<WindowsAiOperationResult>;
   setRegistration(enabled: boolean): Promise<WindowsAiSnapshot>;
   setAccessToken(token: string): Promise<WindowsAiSnapshot>;
   cancel(requestId: string): Promise<void>;
   consumeActivation(): Promise<WindowsAgentActivation | null>;
+  subscribeActivation(listener: () => void): () => void;
   subscribe(listener: (snapshot: WindowsAiSnapshot) => void): () => void;
   startDictation(listener: DictationListener): Promise<DictationSession>;
 }

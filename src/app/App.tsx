@@ -20,6 +20,10 @@ import {createWindowService} from '../platform/window/tauri-window-service';
 import {windowGeometry} from '../platform/window/window-service';
 import type {WindowMode, WindowService} from '../platform/window/window-service';
 import {TauriAnswerService} from '../services/answer/tauri-answer-service';
+import {WindowsAiAnswerService} from '../services/answer/windows-ai-answer-service';
+import {CatalogueSearchService} from '../services/search/catalogue-search-service';
+import {windowsAiService} from '../services/windows-ai';
+import {getWindowsAiPreferences, useWindowsAiStore} from '../features/windows-ai/windows-ai.store';
 import {UnavailableAnswerService} from '../services/answer/unavailable-answer-service';
 import {TauriComputerUseService} from '../services/computer-use/tauri-computer-use-service';
 import {UnavailableComputerUseService} from '../services/computer-use/unavailable-computer-use-service';
@@ -103,9 +107,9 @@ function createDefaultSearchService() {
   });
 }
 
-const defaultSearchService = createDefaultSearchService();
+const defaultFileSearchService = createDefaultSearchService();
 const defaultActivityService = createActivityService();
-const defaultAnswerService = isNativeRuntime()
+const runtimeAnswerService = isNativeRuntime()
   ? new TauriAnswerService()
   : new UnavailableAnswerService();
 const developmentComputerUse = import.meta.env.DEV &&
@@ -116,6 +120,11 @@ const defaultComputerUseService = developmentComputerUse
     ? new TauriComputerUseService()
     : new UnavailableComputerUseService();
 const appWindowService = createWindowService();
+const defaultSearchService = new CatalogueSearchService(defaultFileSearchService, windowsAiService, getWindowsAiPreferences, async (page) => {
+  useSettingsStore.getState().setActivePage(page);
+  await requestWindowShow(appWindowService, 'settings');
+});
+const defaultAnswerService = new WindowsAiAnswerService(runtimeAnswerService, windowsAiService, () => useWindowsAiStore.getState().snapshot);
 const OnboardingFlow = lazy(async () => {
   const module = await import('../features/onboarding/OnboardingFlow');
   return {default: module.OnboardingFlow};
@@ -230,6 +239,30 @@ export function App({
       void hydrateSettings();
     }
   }, [foundationPreview, galleryPreview, hydrateSettings]);
+
+  useEffect(() => {
+    if (foundationPreview || galleryPreview) return;
+    void useWindowsAiStore.getState().refresh();
+    return windowsAiService.subscribe((snapshot) => useWindowsAiStore.setState({snapshot, hydrated: true}));
+  }, [foundationPreview, galleryPreview]);
+
+  useEffect(() => {
+    if (foundationPreview || galleryPreview || !settingsHydrated) return;
+    let active = true;
+    const consume = async () => {
+      try {
+        const activation = await windowsAiService.consumeActivation();
+        if (!active || !activation) return;
+        useQueryStore.getState().clear();
+        useLauncherStore.getState().setIntent('computer');
+        useQueryStore.getState().setDraft(activation.prompt);
+        await requestWindowShow(windowService, 'expanded');
+      } catch { /* Malformed or unavailable activations cannot execute a task. */ }
+    };
+    const unsubscribe = windowsAiService.subscribeActivation(() => void consume());
+    void consume();
+    return () => { active = false; unsubscribe(); };
+  }, [foundationPreview, galleryPreview, settingsHydrated, windowService]);
 
   useEffect(() => {
     if (!developmentComputerUse || !settingsHydrated) return;

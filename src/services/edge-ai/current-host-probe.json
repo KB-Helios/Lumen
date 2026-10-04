@@ -1,0 +1,94 @@
+{
+  "observedAt": "2026-10-04T14:35:28.019Z",
+  "host": "Installed Microsoft Edge, headless Playwright, fresh automation profile, secure loopback origin",
+  "modelDownloadsRequested": false,
+  "modelSessionsCreated": false,
+  "microphoneActivated": false,
+  "experimentalFlagsEnabled": false,
+  "webView2Readiness": "Not probed; installed Edge does not establish WebView2 support",
+  "browserVersion": "154.0.4258.53",
+  "secureContext": true,
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+  "presence": {
+    "LanguageModel": false,
+    "Summarizer": true,
+    "Writer": false,
+    "Rewriter": false,
+    "LanguageDetector": true,
+    "Translator": true,
+    "SpeechRecognition": true,
+    "webkitSpeechRecognition": true
+  },
+  "features": [
+    {
+      "id": "edgePrompt",
+      "host": "edge",
+      "label": "Edge prompt",
+      "availability": "unsupported",
+      "reasonCode": "edge_api_missing",
+      "detail": "This executing browser host does not expose this Edge on-device API.",
+      "enabled": true,
+      "model": null
+    },
+    {
+      "id": "edgeSummarize",
+      "host": "edge",
+      "label": "Edge summarize",
+      "availability": "unavailable",
+      "reasonCode": "edge_unavailable",
+      "detail": "This executing browser host cannot run the requested local model or language.",
+      "enabled": true,
+      "model": null
+    },
+    {
+      "id": "edgeWrite",
+      "host": "edge",
+      "label": "Edge write",
+      "availability": "unsupported",
+      "reasonCode": "edge_api_missing",
+      "detail": "This executing browser host does not expose this Edge on-device API.",
+      "enabled": true,
+      "model": null
+    },
+    {
+      "id": "edgeRewrite",
+      "host": "edge",
+      "label": "Edge rewrite",
+      "availability": "unsupported",
+      "reasonCode": "edge_api_missing",
+      "detail": "This executing browser host does not expose this Edge on-device API.",
+      "enabled": true,
+      "model": null
+    },
+    {
+      "id": "edgeLanguageDetection",
+      "host": "edge",
+      "label": "Edge language detection",
+      "availability": "unavailable",
+      "reasonCode": "edge_unavailable",
+      "detail": "This executing browser host cannot run the requested local model or language.",
+      "enabled": true,
+      "model": null
+    },
+    {
+      "id": "edgeTranslation",
+      "host": "edge",
+      "label": "Edge translation",
+      "availability": "unavailable",
+      "reasonCode": "edge_unavailable",
+      "detail": "This executing browser host cannot run the requested local model or language.",
+      "enabled": true,
+      "model": null
+    },
+    {
+      "id": "edgeSpeech",
+      "host": "edge",
+      "label": "Edge local dictation",
+      "availability": "unavailable",
+      "reasonCode": "edge_unavailable",
+      "detail": "This executing browser host cannot run the requested local model or language.",
+      "enabled": true,
+      "model": null
+    }
+  ]
+}

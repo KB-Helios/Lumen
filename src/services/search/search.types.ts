@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {windowsAiSettingsPages} from '../windows-ai/windows-ai.types';
 
 export const searchScopeSchema = z.enum([
   'all',
@@ -9,6 +10,7 @@ export const searchScopeSchema = z.enum([
   'images',
   'recent',
   'related',
+  'app-content',
 ]);
 export type SearchScope = z.infer<typeof searchScopeSchema>;
 
@@ -26,6 +28,7 @@ export const searchResultKindSchema = z.enum([
   'executable',
   'model',
   'unknown',
+  'app-content',
 ]);
 export type SearchResultKind = z.infer<typeof searchResultKindSchema>;
 
@@ -85,7 +88,8 @@ export const searchResultSchema = z.object({
   provenance: searchProvenanceSchema.optional(),
   pinned: z.boolean().optional(),
   availability: searchAvailabilitySchema.optional().default('available'),
-});
+  target: z.object({kind: z.literal('app-content'), itemId: z.string().min(1).max(80), settingsPage: z.enum(windowsAiSettingsPages)}).optional(),
+}).refine((result) => result.kind === 'app-content' ? result.target !== undefined : result.target === undefined, {message: 'Only app content results may carry a settings target.'});
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
 export const searchFilterSchema = z.object({

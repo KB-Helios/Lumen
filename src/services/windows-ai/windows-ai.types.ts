@@ -46,7 +46,18 @@ export const windowsAiPreferencesSchema = z.object({
   keepWarm: z.boolean().default(false),
 });
 export type WindowsAiPreferences = z.infer<typeof windowsAiPreferencesSchema>;
-export const windowsAiPreferencePatchSchema = windowsAiPreferencesSchema.partial().strict();
+const fields = windowsAiPreferencesSchema.shape;
+// Partial defaulted fields still emit defaults in Zod 4. Patches must contain
+// only the requested keys so a language change cannot revoke other consent.
+export const windowsAiPreferencePatchSchema = z.object({
+  localEngine: fields.localEngine.unwrap(), windowsEnabled: fields.windowsEnabled.unwrap(),
+  modelDownloadsAllowed: fields.modelDownloadsAllowed.unwrap(), appContentEnabled: fields.appContentEnabled.unwrap(),
+  agentsEnabled: fields.agentsEnabled.unwrap(), registerLumenAgent: fields.registerLumenAgent.unwrap(),
+  textToolsEnabled: fields.textToolsEnabled.unwrap(), ocrEnabled: fields.ocrEnabled.unwrap(),
+  imageDescriptionsEnabled: fields.imageDescriptionsEnabled.unwrap(), edgeEnabled: fields.edgeEnabled.unwrap(),
+  dictationEnabled: fields.dictationEnabled.unwrap(), keepWarm: fields.keepWarm.unwrap(),
+  sourceLanguage: fields.sourceLanguage.unwrap(), targetLanguage: fields.targetLanguage.unwrap(), speechLanguage: fields.speechLanguage.unwrap(),
+}).partial().strict();
 export const defaultWindowsAiPreferences = windowsAiPreferencesSchema.parse({});
 
 export const windowsAgentSchema = z.object({

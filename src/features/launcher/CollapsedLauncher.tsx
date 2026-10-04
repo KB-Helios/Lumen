@@ -23,6 +23,7 @@ interface LauncherComposerProps {
   onEscapeEmpty(): void;
   onIntentChange(): void;
   onVoiceRequest?: () => void;
+  voiceActive?: boolean;
 }
 
 function LauncherComposer({
@@ -32,6 +33,7 @@ function LauncherComposer({
   onEscapeEmpty,
   onIntentChange,
   onVoiceRequest,
+  voiceActive = false,
 }: LauncherComposerProps) {
   const intent = useLauncherStore((state) => state.intent);
   return (
@@ -63,7 +65,7 @@ function LauncherComposer({
       />
       {onVoiceRequest ? (
         <LumenButton
-          aria-label="Start voice input"
+          aria-label={voiceActive ? 'Stop voice input' : 'Start voice input'}
           className="shrink-0"
           size="small"
           variant="quiet"
@@ -101,6 +103,7 @@ export interface CollapsedLauncherProps {
   statusLabel?: string;
   windowService?: WindowService;
   onVoiceRequest?: () => void;
+  voiceActive?: boolean;
   intentLocked?: boolean;
   focusOnMount?: boolean;
   onComputerSubmit?: (task: string) => void;
@@ -113,6 +116,7 @@ export function CollapsedLauncher({
   statusLabel,
   windowService: providedWindowService,
   onVoiceRequest,
+  voiceActive = false,
   intentLocked = false,
   focusOnMount = true,
   onComputerSubmit,
@@ -180,6 +184,7 @@ export function CollapsedLauncher({
           onEscapeEmpty={handleEscapeEmpty}
           onIntentChange={handleIntentChange}
           onVoiceRequest={onVoiceRequest}
+          voiceActive={voiceActive}
         />
       )}
       expanded={expanded}

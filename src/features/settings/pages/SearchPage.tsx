@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react';
+import {WindowsAppContentControls} from '../../windows-ai/WindowsAiControls';
 
 import {LumenText} from '../../../design-system/primitives/LumenText';
 import {
@@ -106,6 +107,7 @@ export function SearchPage({semanticService = defaultSemanticSearchService}: {se
           ? `${semanticStatus.indexedChunks} embedded chunks`
           : semanticStatus?.reason ?? 'Exact filename and folder search remains available with every AI provider off.'}
       </LumenText>
+      <WindowsAppContentControls />
     </SettingsPage>
   );
 }

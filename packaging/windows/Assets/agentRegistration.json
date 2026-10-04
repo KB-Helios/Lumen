@@ -1,0 +1,10 @@
+{
+  "manifest_version": "0.1.0",
+  "version": "0.1.0",
+  "name": "lumen.browser",
+  "display_name": "Lumen browser agent",
+  "description": "Review and explicitly start a browser task in a fresh Microsoft Edge context.",
+  "placeholder_text": "Describe a browser task",
+  "icon": "ms-resource://Files/Assets/Lumen.png",
+  "action_id": "LumenBrowserAgent"
+}
