@@ -145,4 +145,38 @@ describe('ResultGrid', () => {
     );
     expect(container.querySelectorAll('[data-result-id]').length).toBeLessThan(40);
   });
+
+  it('renders the selected result FileGlyph with text-accent', () => {
+    const {rerender} = render(
+      <ResultGrid
+        results={[file('alpha'), file('beta'), file('gamma')]}
+        selectedId="beta"
+      />,
+    );
+
+    const selectedRow = screen.getByRole('row', {name: /beta\.tsx/i});
+    const selectedGlyph = selectedRow.querySelector('[data-testid="file-glyph"]');
+    expect(selectedGlyph).toHaveClass('text-accent');
+    expect(selectedGlyph).toHaveAttribute('data-selected', 'true');
+
+    const unselectedRow = screen.getByRole('row', {name: /alpha\.tsx/i});
+    const unselectedGlyph = unselectedRow.querySelector('[data-testid="file-glyph"]');
+    expect(unselectedGlyph).toHaveClass('text-text-secondary');
+    expect(unselectedGlyph).not.toHaveAttribute('data-selected', 'true');
+
+    rerender(
+      <ResultGrid
+        results={[file('alpha'), file('beta'), file('gamma')]}
+        selectedId="gamma"
+      />,
+    );
+
+    const previouslySelectedGlyph = screen.getByRole('row', {name: /beta\.tsx/i})
+      .querySelector('[data-testid="file-glyph"]');
+    expect(previouslySelectedGlyph).toHaveClass('text-text-secondary');
+
+    const newlySelectedGlyph = screen.getByRole('row', {name: /gamma\.tsx/i})
+      .querySelector('[data-testid="file-glyph"]');
+    expect(newlySelectedGlyph).toHaveClass('text-accent');
+  });
 });

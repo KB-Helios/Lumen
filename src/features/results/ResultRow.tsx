@@ -33,6 +33,7 @@ export interface ResultRowProps {
   isOpening?: boolean;
   reducedMotion?: boolean;
   result: SearchResult;
+  selected?: boolean;
   positionStyle?: CSSProperties;
   positionIndex?: number;
   totalCount?: number;
@@ -44,6 +45,7 @@ export function ResultRow({
   isOpening = false,
   reducedMotion = false,
   result,
+  selected = false,
   positionStyle,
   positionIndex,
   totalCount,
@@ -80,7 +82,7 @@ export function ResultRow({
       textValue={result.name}
     >
       <>
-        <FileGlyph kind={result.kind} size="large" />
+        <FileGlyph kind={result.kind} selected={selected} size="large" />
         <div className="grid min-w-0 gap-0.5">
           <div className="flex min-w-0 items-baseline gap-2">
             <span className="truncate font-sans text-sm font-medium text-[color:var(--einui-command-text)]">{result.name}</span>

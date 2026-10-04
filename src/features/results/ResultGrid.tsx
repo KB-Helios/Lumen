@@ -168,6 +168,7 @@ export function ResultGrid({
                 transform: `translateY(${entry.start}px)`,
               }}
               result={entry.result}
+              selected={entry.id === effectiveSelectedId}
               totalCount={results.length}
             />
           )}
@@ -194,6 +195,7 @@ export function ResultGrid({
               isOpening={entry.result.id === openingId}
               reducedMotion={reducedMotion}
               result={entry.result}
+              selected={entry.id === effectiveSelectedId}
               totalCount={results.length}
             />
           )}

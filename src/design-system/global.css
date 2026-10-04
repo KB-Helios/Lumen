@@ -42,17 +42,17 @@
 }
 
 :root {
-  --lumen-canvas: #edf0f2;
-  --lumen-surface-glass: rgba(247, 249, 250, 0.78);
-  --lumen-surface-raised: rgba(255, 255, 255, 0.88);
-  --lumen-surface-inset: rgba(214, 220, 224, 0.58);
-  --lumen-text-primary: rgba(22, 25, 28, 0.94);
-  --lumen-text-secondary: rgba(43, 47, 51, 0.7);
-  --lumen-text-tertiary: rgba(71, 76, 81, 0.52);
+  --lumen-canvas: #f7f7f5;
+  --lumen-surface-glass: rgba(255, 255, 252, 0.82);
+  --lumen-surface-raised: rgba(255, 255, 255, 0.9);
+  --lumen-surface-inset: rgba(226, 225, 222, 0.66);
+  --lumen-text-primary: rgba(31, 30, 29, 0.94);
+  --lumen-text-secondary: rgba(55, 53, 50, 0.7);
+  --lumen-text-tertiary: rgba(81, 78, 74, 0.52);
   --lumen-text-inverse: #f9fafb;
-  --lumen-text-button: rgba(22, 25, 28, 0.94);
-  --lumen-accent: #087fc3;
-  --lumen-focus: #087dc1;
+  --lumen-text-button: rgba(31, 30, 29, 0.94);
+  --lumen-accent: #0f7a67;
+  --lumen-focus: #0b6f5c;
   --lumen-border-subtle: rgba(37, 43, 48, 0.12);
   --lumen-border-strong: rgba(37, 43, 48, 0.2);
   --lumen-border-specular: rgba(255, 255, 255, 0.88);
@@ -73,17 +73,17 @@
 }
 
 [data-resolved-theme="dark"] {
-  --lumen-canvas: #16181a;
-  --lumen-surface-glass: rgba(34, 37, 40, 0.78);
-  --lumen-surface-raised: rgba(48, 51, 55, 0.82);
-  --lumen-surface-inset: rgba(10, 12, 14, 0.56);
-  --lumen-text-primary: rgba(249, 250, 251, 0.96);
-  --lumen-text-secondary: rgba(222, 225, 228, 0.74);
-  --lumen-text-tertiary: rgba(199, 204, 208, 0.54);
-  --lumen-text-inverse: #16181a;
-  --lumen-text-button: rgba(249, 250, 251, 0.96);
-  --lumen-accent: #7dc9ff;
-  --lumen-focus: #8fd3ff;
+  --lumen-canvas: #111110;
+  --lumen-surface-glass: rgba(28, 28, 27, 0.82);
+  --lumen-surface-raised: rgba(43, 43, 41, 0.86);
+  --lumen-surface-inset: rgba(8, 8, 8, 0.58);
+  --lumen-text-primary: rgba(250, 250, 249, 0.96);
+  --lumen-text-secondary: rgba(225, 224, 221, 0.74);
+  --lumen-text-tertiary: rgba(196, 194, 190, 0.54);
+  --lumen-text-inverse: #111110;
+  --lumen-text-button: rgba(250, 250, 249, 0.96);
+  --lumen-accent: #63c7af;
+  --lumen-focus: #76d2bb;
   --lumen-border-subtle: rgba(240, 243, 245, 0.12);
   --lumen-border-strong: rgba(240, 243, 245, 0.22);
   --lumen-border-specular: rgba(255, 255, 255, 0.36);
@@ -99,17 +99,17 @@
 }
 
 [data-transparency='disabled'] {
-  --lumen-canvas: #edf3f7;
-  --lumen-surface-glass: #f4f8fb;
+  --lumen-canvas: #f5f4f0;
+  --lumen-surface-glass: #fbfaf8;
   --lumen-surface-raised: #ffffff;
-  --lumen-surface-inset: #e2ebf1;
+  --lumen-surface-inset: #e8e7e3;
 }
 
 [data-resolved-theme='dark']:where([data-transparency='disabled']) {
-  --lumen-canvas: #071017;
-  --lumen-surface-glass: #111c27;
-  --lumen-surface-raised: #223246;
-  --lumen-surface-inset: #0b141d;
+  --lumen-canvas: #10100f;
+  --lumen-surface-glass: #1b1b19;
+  --lumen-surface-raised: #292927;
+  --lumen-surface-inset: #0c0c0b;
 }
 
 [data-contrast='high'] {
@@ -323,9 +323,9 @@ input[type='search']::-webkit-search-cancel-button {
 
 .einui-command-exterior-colour-glow {
   inset: -0.75rem;
-  background: linear-gradient(to right, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2), rgba(168, 85, 247, 0.2));
+  background: radial-gradient(circle, color-mix(in srgb, var(--lumen-accent) 22%, transparent) 0%, transparent 72%);
   filter: blur(40px);
-  opacity: 0.8;
+  opacity: 0.58;
 }
 
 .einui-command-exterior-white-glow {

@@ -4,22 +4,6 @@ import {LumenIcon} from '../icons/LumenIcon';
 import {cn} from '../../lib/cn';
 import type {FileKind} from './file-kind';
 
-const kindClasses: Record<FileKind, string> = {
-  folder: 'text-warning',
-  pdf: 'text-danger',
-  document: 'text-accent',
-  spreadsheet: 'text-success',
-  presentation: 'text-warning',
-  source: 'text-accent',
-  image: 'text-success',
-  video: 'text-accent',
-  audio: 'text-warning',
-  archive: 'text-text-secondary',
-  executable: 'text-accent',
-  model: 'text-accent',
-  unknown: 'text-text-tertiary',
-};
-
 function Sheet({children}: {children: ReactNode}) {
   return (
     <>
@@ -133,8 +117,7 @@ export function FileGlyph({
     <span
       className={cn(
         'inline-grid shrink-0 place-items-center',
-        kindClasses[kind],
-        selected && 'text-text-primary drop-shadow-[0_0_7px_var(--lumen-focus)]',
+        selected ? 'text-accent' : 'text-text-secondary',
       )}
       data-kind={kind}
       data-selected={selected}
