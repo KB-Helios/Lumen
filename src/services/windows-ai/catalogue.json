@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "items": [
+    {"id":"lumen.folders","title":"Choose indexed folders","description":"Select local folders to search. Pause roots, exclude generated folders, and control hidden files.","settingsPage":"indexed-roots","keywords":["files","directories","index","roots","exclude"]},
+    {"id":"lumen.search","title":"Control search and app content","description":"Choose search scopes, filename priority, semantic search, and the public Lumen help index.","settingsPage":"search","keywords":["meaning","semantic","find","ranking","help"]},
+    {"id":"lumen.local-ai","title":"Set up on-device AI","description":"Choose a local engine, check Windows AI and NPU availability, and prepare supported local language models.","settingsPage":"local-ai","keywords":["offline","model","download","NPU","Aion","Windows","summarize","rewrite"]},
+    {"id":"lumen.agents","title":"Windows agents and provider routes","description":"Discover Windows agent launchers, register Lumen's browser agent, and manage AgentGateway provider routes.","settingsPage":"agent-gateway","keywords":["agents","launcher","ODR","App Actions","provider"]},
+    {"id":"lumen.browser-agent","title":"Control browser tasks","description":"Configure browser-only Computer Use in Microsoft Edge. Review cloud consent and one-time safety approvals.","settingsPage":"computer-use","keywords":["browser","computer use","Gemini","Edge","automation","approval"]},
+    {"id":"lumen.privacy","title":"Manage AI privacy and permissions","description":"Control local text tools, OCR, image descriptions, language tools, model downloads, and local microphone dictation.","settingsPage":"privacy","keywords":["consent","microphone","speech","translate","permissions","delete","private"]},
+    {"id":"lumen.activity","title":"Pause work while gaming or on battery","description":"Control indexing activity during games, fullscreen video, and battery use.","settingsPage":"activity","keywords":["battery","power","gaming","fullscreen","pause","performance"]},
+    {"id":"lumen.appearance","title":"Change appearance and motion","description":"Choose theme, transparency, density, previews, reduced effects, and reduced motion.","settingsPage":"appearance","keywords":["dark","light","contrast","animation","glass","accessibility"]},
+    {"id":"lumen.diagnostics","title":"Check integration availability","description":"Refresh diagnostics for local search, Windows AI, Edge APIs, package identity, models, and native services.","settingsPage":"diagnostics","keywords":["status","unavailable","error","runtime","hardware","health","setup"]},
+    {"id":"lumen.shortcut","title":"Configure the launcher shortcut","description":"Set the keyboard shortcut, startup behavior, and launcher monitor placement.","settingsPage":"general","keywords":["Alt Space","hotkey","keyboard","startup","monitor"]}
+  ]
+}

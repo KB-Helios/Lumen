@@ -2,7 +2,7 @@
 
 Date: 2026-10-04
 
-Status: The user approved previews with availability checks and the native bridge plus detected Edge API approach. This written specification is awaiting user review before implementation.
+Status: The user approved previews with availability checks and the native bridge plus detected Edge API approach. Implementation proceeds under that existing design authorization, following the linked implementation plan.
 
 ## Outcome
 
@@ -139,4 +139,4 @@ Document exactly which native and Edge acceptance lanes ran, the observed host/p
 
 ## Review
 
-Self-review checked scope, service/backend ownership, package identity, conditional support, download/microphone/cloud consent, source-file confinement, routing fallback, and the distinction between fixture/build evidence and live activation. Implementation begins after the user reviews this written specification.
+Self-review checked scope, service/backend ownership, package identity, conditional support, download/microphone/cloud consent, source-file confinement, routing fallback, and the distinction between fixture/build evidence and live activation. Implementation follows `docs/superpowers/plans/2026-10-04-windows-ai-integrations.md` under the user's approved design direction.
