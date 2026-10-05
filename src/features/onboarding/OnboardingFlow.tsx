@@ -202,13 +202,13 @@ export function OnboardingFlow({
               enter: (direction: 'forward' | 'backward') => (
                 reducedMotion
                   ? {opacity: 0}
-                  : {opacity: 0, x: direction === 'forward' ? 18 : -18}
+                  : {opacity: 0, transform: `translateX(${direction === 'forward' ? 18 : -18}px)`}
               ),
-              center: {opacity: 1, x: 0},
+              center: {opacity: 1, transform: 'translateX(0px)'},
               exit: (direction: 'forward' | 'backward') => (
                 reducedMotion
                   ? {opacity: 0}
-                  : {opacity: 0, x: direction === 'forward' ? -14 : 14}
+                  : {opacity: 0, transform: `translateX(${direction === 'forward' ? -14 : 14}px)`}
               ),
             }}
           >

@@ -1,49 +1,169 @@
 # High-refresh performance report
 
-**Original baseline:** 2026-07-31; Windows 11 build 26200, NVIDIA GeForce RTX 5070 Ti, 2560 × 1440 at 150 percent scale; driver-reported 500 Hz; Edge 150  
-**Task 12 refresh:** 2026-08-09; AMD Radeon 890M, 2560 × 1600 at 240 Hz; Edge 151.0.4129.72  
-**Result:** The current cadence-aware release profile passes and retains the raw strict-240 result separately. Lumen does not claim a fixed 240 FPS output.
+**Verified:** 2026-10-05, Windows 11, AMD Radeon 890M, driver
+32.0.31041.1004, 2560 × 1600 at a driver-reported 240 Hz, 150 percent desktop
+scale, Edge/WebView2 154.0.4258.53.
 
-## Method
+Lumen's motion follows the display cadence, with hardware-accelerated transform
+animation verified in its visible native WebView2 window. The cadence-aware
+browser release profile passes. The strict aggregate 120/240 Hz checks do not
+pass; these results do not establish a fixed 120 or 240 FPS presentation rate.
 
-`bun run profile` launches a non-background-throttled Edge context at 800 × 540 against the deterministic development adapter. It warms lazy routes and input work, records 24 launcher round trips, 30 paced input samples, 120 paced selection samples, 80 hover samples paired with their directly surrounding animation-frame intervals, and two unpaced 30-event renderer-side burst guards. It then samples React Profiler commits, browser Long Tasks, active animations, one second of idle task time, garbage-collected JavaScript heap, and 120 animation-frame intervals. A Playwright trace is saved with the JSON summary.
+## Implementation
 
-Isolated p95 samples are paced so they measure response latency rather than whole-query replacements overlapping their own deferred work. The input burst is one renderer-side synchronous callback containing 30 native input-value updates and bubbled input events, not 30 awaited automation calls. The selection burst similarly dispatches 30 bubbled keyboard events in one renderer callback. Their directly measured synchronous durations must each remain below 16 ms while sample count, final-state correctness, and one selected row are asserted independently.
+- Launcher, preview, shimmer, settings, and onboarding movement use full
+  transform strings so Motion can delegate suitable animations to WAAPI.
+- The selection capsule uses Motion's native mini WAAPI spring with the existing
+  quiet spring tokens. Keyboard selection intent and accessibility attributes
+  update immediately; row measurement and animation retargeting coalesce to one
+  requested display frame. Interrupted movement commits its current style.
+- Capsule geometry includes virtual-row transforms and scroll offsets. Late
+  collection mounts are observed. Reduced motion and environments without native
+  animation snap directly. Queued frames, observers, and animations are cleaned up.
+- The active three-dot Lottie mark interpolates its authored 60 fps artwork on
+  every animation frame. Idle, reduced-motion, and forced-color states remain
+  static. No per-frame React updates or permanent GPU layers were added.
+- Refresh diagnostics sample complete intervals on demand, support rates above
+  360 Hz, start as unmeasured, and cancel stalled/hidden sampling. Input handler
+  duration is distinguished from the next animation-frame callback.
 
-The nominal target remains `1000 / 240 = 4.1667 ms`. Raw input, selection, and hover results against that strict target are recorded under `strict240Hz`. The release check compares input and selection with `max(nominal target, observed p95 frame interval) + 2 ms`; the explicit tolerance covers browser scheduling at the automation-to-animation-frame boundary. Hover is paired with its actual surrounding frame interval and uses the equivalent contemporaneous p95 maximum. Both cadence measurements must be available. Hover dispatch has a separate direct synchronous maximum below 16 ms, and both rapid bursts have direct synchronous totals below 16 ms, so observed frame cadence cannot excuse slow handler work.
+These choices preserve the existing tight, subtle motion and timing tokens. See
+the [motion contract](../architecture/motion-system.md) and Motion's
+[performance guidance](https://motion.dev/docs/performance).
 
-The browser Long Tasks API is a separate coarse signal: by definition it reports tasks of at least 50 ms, not tasks over 16 ms. The profile therefore records those entries as `*BrowserLongTasksOver50Ms`, budgets them at 50 ms, and requires none in the rapid-input, rapid-selection, paced-selection, or hover windows. It does not use that API to substantiate the independent 16 ms synchronous-work guards.
+## Browser profile
 
-## Budgets and repeatability
+Run `bun run profile -- --headed` for the recorded configuration. It uses the
+deterministic development search adapter at an 800 × 540 viewport. Browser screen
+dimensions in the JSON are emulated context values; native desktop dimensions
+are recorded separately. No GPU or vsync overrides are applied.
 
-| Metric | Release budget | Current result |
+The profiler warms lazy routes, records 24 launcher round trips, 30 paced input
+samples, 120 paced selection samples, and 80 hover samples paired with their
+surrounding frame intervals. Two 30-event synchronous input/selection bursts
+assert final state and sample counts. It also measures React commits, browser
+Long Tasks, settled animation counts, one second of idle renderer task time,
+garbage-collected heap, and 120 complete animation-frame intervals.
+
+Timing runs without Playwright tracing, DOM snapshots, screenshots, or video.
+Tracing during the timed phase produced occasional input p95 delays around
+16–17 ms; an isolated untraced experiment measured 2.2 ms. The final sample below
+is retained, including its variation. `interaction-trace.zip` is a separate
+visual interaction study recorded after measurements, not a correlated timing
+trace. Gallery screenshots and six motion-enabled recordings are also refreshed.
+Recordings warm the development route before capture and demonstrate interaction
+flow. The launcher clip includes initial browser loading before the interface
+appears; it is not a startup benchmark. Their 25 fps encoding does not measure a
+high-refresh display's frame rate.
+
+| Metric | Release budget | Final result |
 | --- | ---: | ---: |
-| Warm launcher visible p95 | < 20 ms | 4.1 ms |
-| Input to paint p95 | < observed frame + 2 ms | 0.1 ms |
-| Arrow selection to paint p95 | < observed frame + 2 ms | 2.3 ms |
-| Hover to paint p95 | < 13.8 ms paired frame | 10.7 ms |
-| Raw strict-240 input / selection / hover | < 4.1667 ms each | true / true / false |
+| Warm launcher visible p95 | < 20 ms | 3.7 ms |
+| Synchronous input handler p95 | < observed frame + 2 ms | 0.1 ms |
+| Input to next frame p95 | < 6.3 ms | 2.2 ms |
+| Selection to next frame p95 | < 6.3 ms | 4.9 ms |
+| Hover to next frame p95 | < paired frame p95, 10.2 ms | 6.8 ms |
 | Ordinary React commit p95 | < 3 ms | 0 ms |
-| Direct synchronous input/selection bursts and hover dispatch | < 16 ms | 1.0 / 1.9 / 1.3 ms |
-| Browser Long Tasks | none >= 50 ms | none |
-| Active animations after settle | 0 | 0 |
-| Idle UI CPU | < 2 percent | 0.77 percent |
-| JavaScript heap after GC | < 100 MB | 27.53 MB |
-| Unpaced input/selection bursts | correct final state, direct synchronous duration < 16 ms | 1.0 / 1.9 ms; passed |
+| Synchronous 30-event input / selection bursts | < 16 ms each | 0.9 / 3.1 ms |
+| Synchronous hover dispatch maximum | < 16 ms | 1.2 ms |
+| Browser Long Tasks | none ≥ 50 ms | none |
+| Active animations / indicators after settling | 0 / 0 | 0 / 0 |
+| Idle renderer task time | < 2 percent | 0.11 percent |
+| JavaScript heap after GC | < 100 MB | 29.51 MB |
+| Idle frame interval median / p95 | recorded without forcing cadence | 4.2 / 4.3 ms |
 
-The machine-readable result for source commit `4d384c75b4ca265c27801ae927560347bfe650ca` is `artifacts/performance/profile-summary.json`; `interaction-trace.zip` contains the correlated trace. The JSON records that exact source SHA, browser build, samples, budgets, checks, and observed cadence. A later evidence-only commit may contain these generated files without changing the source SHA they identify.
+All 16 cadence-aware release checks pass. Direct synchronous work is bounded
+independently of observed frame latency; the Long Tasks API's 50 ms threshold
+cannot establish a 16 ms or 4.167 ms work bound.
 
-## Render-path findings
+Strict target checks preserve the nominal 8.333 ms (120 Hz) and 4.167 ms (240 Hz)
+budgets. Cadence permits one 0.1 ms timestamp quantum; work budgets remain strict.
+At 120 Hz all interaction/work checks pass, while the hover-paired cadence p95
+exceeds its target. At 240 Hz selection, hover, and cadence checks miss
+their targets; input and synchronous-work checks pass. Both aggregate `passed`
+values are **false**. Raw chronological
+intervals and individual samples remain in
+[profile-summary.json](../../artifacts/performance/profile-summary.json).
 
-- The search input is uncontrolled, so visible typing is not gated on global React state.
-- Direct input response is measured independently; debounced query work aborts or ignores stale searches by request ID.
-- Keyboard selection intent and the capsule paint directly; selection-dependent React and preview work settle afterward.
-- Preview selection is coalesced and stale preview work is abortable.
-- Result-row accessibility selection attributes are updated with the same selection intent.
-- 10,000-result collections remain virtualized with a small mounted-row count.
-- Pointer movement is not connected to synchronous global React renders.
-- Continuous visual work uses opacity/transform; no idle animation loop remains.
+## Native hardware verification
 
-## Interpretation and limits
+The existing Rust shell was compiled with `cargo build --locked` in an x64
+Visual Studio developer shell, then launched with isolated temporary Windows app
+data and a fresh WebView2 data folder. A process-local
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` enabled the
+[documented CDP connection](https://playwright.dev/docs/webview2). No persistent
+browser flag, driver, registry, GPU, or vsync setting was changed. The test process,
+debugging endpoint, and temporary profile were cleaned up afterward.
 
-The original host's observed browser cadence was lower than its driver-reported 500 Hz and varied between 250, 256, and 476 Hz. The current host is driver-configured for 240 Hz while Edge estimated 238 Hz with a 4.2 ms median and 4.3 ms p95 frame interval. The report therefore preserves nominal and observed values rather than inferring a fixed rate. Browser automation is not GPU-present instrumentation, and the Tauri WebView2 compositor was spot-checked visually rather than captured with PresentMon. A future release gate should repeat this profile on representative 60, 120, 144, 165, and 240 Hz panels and add native present/ETW evidence.
+The Lumen window was visible and responding with a real native window handle.
+It used development search fixtures through the normal typed service boundary.
+CDP reported `gpu_compositing: enabled` and an AMD Direct3D11 ANGLE renderer.
+The capsule's layer had the `ActiveTransformAnimation` compositing reason and a
+running native transform keyframe animation with the shared spring easing.
+
+| Native WebView2 measurement | Result |
+| --- | ---: |
+| Desktop logical size / scale | 1707 × 1067 / 150 percent |
+| Tested content viewport | 800 × 540 logical pixels |
+| 180 complete frame intervals, median / p95 | 4.2 / 4.4 ms |
+| Refresh estimate from median | 238 Hz |
+| Input handler / next-frame p95, 30 samples | 0.1 / 15.4 ms |
+| Selection next-frame p95, 120 samples | 5.4 ms |
+| Capsule settled top / height error | 0 / 0 pixels |
+| Running animations after settling | 0 |
+
+The machine-readable native evidence is
+[native-webview-summary.json](../../artifacts/performance/native-webview-summary.json),
+with a [WebView content capture](../../artifacts/performance/native-webview.png).
+WebView2 retains its normal GPU-enabled configuration; actual acceleration is
+verified for this host and run.
+
+The refreshed native input next-frame p95 exceeds both nominal frame targets.
+The small synchronous handler duration does not establish that the subsequent
+browser/window scheduling fits a frame budget. Native timing variation remains
+visible in the retained samples rather than being replaced by the faster browser
+profile. The probe waits for Tauri's initial navigation before loading its test
+URL; connecting as soon as the debugging endpoint appeared previously allowed
+that navigation to replace the query parameters.
+
+## Validation and evidence boundary
+
+Typecheck, zero-warning lint, 53 unit/component files with **387 passing tests**,
+all **54 installed-Edge e2e tests**, the frontend production build, and **14 script
+contract/budget tests** pass. The native development binary and sidecars were
+built and staged earlier the same day; their Rust source is unchanged by this
+integration. Staging ran its existing Windows AI helper checks.
+The current registry produced **57 screenshots** and **six recordings**; the
+contact sheet, ordinary/virtualized selection, native capture, and forced colors
+were inspected. Code review found no remaining issues in the native animation
+or frame batching changes.
+
+The implementation was rebased onto `517f4e5` to preserve the current theme,
+responsive layouts, immediate accessible settings panels, and selected virtual
+row style-change observation. A focused regression test verifies that transform
+changes on a mounted selected row reposition the capsule through the same frame
+batch. Final review found no required integration fixes.
+
+An earlier complete Edge run missed the input next-frame assertion: 8 ms p95
+against a 6.4 ms observed-frame budget. The isolated four performance tests and
+the complete 54-test rerun passed with identical product and test source. No
+threshold or retry setting was changed. This intermittent miss is part of the
+timing evidence, not a claim that variability was fixed.
+
+Both refreshed profiles identify implementation commit
+`925700ce013744218af70ea6b08445cf03ac4f20`. Product source matches that commit;
+`sourceWorktreeDirty` records the regenerated evidence files during the runs.
+The report and refreshed artifacts are saved in a subsequent documentation
+commit.
+The original fresh baseline's selection capsule did not reliably position or
+remain visible, so raw before/after selection timings are not equivalent visual
+workloads. During implementation, per-event animation interruption caused a
+57.8 ms selection burst; frame batching removed that failure, with 4.1 ms before
+integration and 3.1 ms in the refreshed browser run.
+
+Animation-frame callbacks occur before physical presentation. GPU feature
+status and an accelerated animation layer establish the rendering path, not
+photon timing or every delivered display frame. No ETW/PresentMon capture,
+physical 120 Hz panel run, packaged release presentation measurement, or live
+backend workload benchmark is claimed. The implementation follows the host
+display automatically instead of introducing a fixed 60/120/240 Hz timer.

@@ -56,9 +56,10 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       window.clearTimeout(pendingTimer.current);
     };
 
-    const commitAfterInputPaint = (value: string) => {
+    const commitAfterInputPaint = (value: string, startedAt: number) => {
       cancelPendingCommit();
       pendingFrame.current = window.requestAnimationFrame(() => {
+        captureTiming('input-next-frame', performance.now() - startedAt);
         pendingTimer.current = window.setTimeout(() => setDraft(value), 0);
       });
     };
@@ -114,7 +115,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
         clearWrapperRef.current.hidden = value.length === 0;
       }
       captureTiming('input-response', performance.now() - startedAt);
-      commitAfterInputPaint(value);
+      commitAfterInputPaint(value, startedAt);
     };
 
     const handleCompositionEnd = () => {

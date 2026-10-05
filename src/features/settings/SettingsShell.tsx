@@ -111,8 +111,8 @@ export function SettingsShell({onClose, pages}: SettingsShellProps) {
             <motion.div
               key={page.id}
               className="mx-auto grid min-w-0 w-full max-w-[760px] content-start gap-[24px] px-[20px] py-[24px] [overflow-wrap:anywhere]"
-              initial={{opacity: 0, y: reducedMotion ? 0 : 6}}
-              animate={{opacity: 1, y: 0}}
+              initial={{opacity: 0, transform: `translateY(${reducedMotion ? 0 : 6}px)`}}
+              animate={{opacity: 1, transform: 'translateY(0px)'}}
               transition={{duration: pageDuration}}
             >
               <div className="grid min-w-0 gap-[8px]">

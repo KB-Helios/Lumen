@@ -23,7 +23,7 @@ function activeAnimationCount() {
     : 0;
 }
 
-function buildSnapshot(refreshRateHz = 60): DiagnosticsSnapshot {
+function buildSnapshot(refreshRateHz: number | null = null): DiagnosticsSnapshot {
   const activity = useActivityStore.getState();
   const gateway = useGatewayStore.getState();
   return {
@@ -46,7 +46,7 @@ interface DiagnosticsState {
   snapshot: DiagnosticsSnapshot;
   lastExport: DiagnosticsExport | null;
   refresh(): void;
-  sampleRefreshRate(): Promise<number>;
+  sampleRefreshRate(): Promise<number | null>;
   prepareExport(native?: unknown): DiagnosticsExport;
   setOverlay(open: boolean): void;
   toggleOverlay(): void;
@@ -62,21 +62,33 @@ export const useDiagnosticsStore = create<DiagnosticsState>()(
     lastExport: null,
     refresh: () => set({snapshot: buildSnapshot(get().snapshot.refreshRateHz)}),
     sampleRefreshRate: async () => {
-      if (typeof requestAnimationFrame !== 'function') return get().snapshot.refreshRateHz;
+      if (typeof requestAnimationFrame !== 'function' || document.visibilityState === 'hidden') {
+        return get().snapshot.refreshRateHz;
+      }
       const samples: number[] = [];
-      let previous = performance.now();
+      let previous: number | undefined;
       await new Promise<void>((resolve) => {
-        const sample = (now: number) => {
-          samples.push(now - previous);
-          previous = now;
-          if (samples.length >= 24) resolve();
-          else requestAnimationFrame(sample);
+        let frame = 0;
+        const finish = () => {
+          cancelAnimationFrame(frame);
+          window.clearTimeout(timeout);
+          document.removeEventListener('visibilitychange', finish);
+          resolve();
         };
-        requestAnimationFrame(sample);
+        const timeout = window.setTimeout(finish, 3000);
+        document.addEventListener('visibilitychange', finish, {once: true});
+        const sample = (now: number) => {
+          if (previous !== undefined && now > previous) samples.push(now - previous);
+          previous = now;
+          if (samples.length >= 60) finish();
+          else frame = requestAnimationFrame(sample);
+        };
+        frame = requestAnimationFrame(sample);
       });
-      const useful = samples.filter((sample) => sample > 0).sort((a, b) => a - b);
-      const median = useful[Math.floor(useful.length / 2)] ?? 16.67;
-      const refreshRateHz = Math.max(30, Math.min(360, Math.round(1000 / median)));
+      if (samples.length < 60) return get().snapshot.refreshRateHz;
+      samples.sort((a, b) => a - b);
+      const median = samples[Math.floor(samples.length / 2)];
+      const refreshRateHz = Math.round(1000 / median);
       set({snapshot: buildSnapshot(refreshRateHz)});
       return refreshRateHz;
     },

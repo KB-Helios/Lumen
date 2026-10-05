@@ -87,12 +87,12 @@ export const GlassCommandPalette = forwardRef<HTMLDivElement, GlassCommandPalett
             {expanded ? (
               <div className="einui-command-workspace" data-einui-slot="workspace">
                 <motion.div
-                  animate={{opacity: 1, y: 0}}
+                  animate={{opacity: 1, transform: 'translateY(0px)'}}
                   className="flex min-h-0 flex-1 flex-col overflow-hidden"
                   data-launcher-motion="workspace"
                   data-motion-duration={`${workspaceDuration * 1000}ms`}
                   data-motion-offset={`${workspaceOffset}px`}
-                  initial={reducedMotion ? {opacity: 0} : {opacity: 0, y: workspaceOffset}}
+                  initial={reducedMotion ? {opacity: 0} : {opacity: 0, transform: `translateY(${workspaceOffset}px)`}}
                   transition={{duration: workspaceDuration, ease: motionTokens.easing.standard}}
                 >
                   {scopes !== undefined && scopes !== null ? <div className="einui-command-scopes" data-einui-slot="scopes">{scopes}</div> : null}

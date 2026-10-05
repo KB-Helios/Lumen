@@ -74,9 +74,9 @@ function PreviewFrame({
         <AnimatePresence initial={false} mode="wait">
           <motion.div
             key={`${controller.lifecycle}-${controller.preview?.fileId ?? 'none'}`}
-            animate={{opacity: 1, x: 0}}
-            exit={reducedMotion ? undefined : {opacity: 0, x: -6}}
-            initial={reducedMotion ? false : {opacity: 0, x: 8}}
+            animate={{opacity: 1, transform: 'translateX(0px)'}}
+            exit={reducedMotion ? undefined : {opacity: 0, transform: 'translateX(-6px)'}}
+            initial={reducedMotion ? false : {opacity: 0, transform: 'translateX(8px)'}}
             transition={{duration: reducedMotion ? 0 : motionTokens.duration.preview}}
           >
             <PreviewState controller={controller} reducedMotion={reducedMotion} />

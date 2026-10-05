@@ -5,12 +5,14 @@ import path from 'node:path';
 import {chromium} from 'playwright';
 
 import {withLumenDevServer} from './lib/lumen-dev-server.mjs';
+import {evaluateRefreshTarget} from './lib/refresh-budget.mjs';
 
 const outputDirectory = path.resolve('artifacts/performance');
 const tracePath = path.join(outputDirectory, 'interaction-trace.zip');
 const summaryPath = path.join(outputDirectory, 'profile-summary.json');
 const targetFrameBudgetMs = 1000 / 240;
 const frameSchedulingToleranceMs = 2;
+const headed = process.argv.includes('--headed');
 
 function percentile(values, quantile) {
   const sorted = [...values].sort((left, right) => left - right);
@@ -74,20 +76,20 @@ async function hideAndReshowLauncher(page, search) {
 async function measureRefresh(page) {
   return page.evaluate(async () => {
     const intervals = [];
-    let previous = performance.now();
+    let previous;
     await new Promise((resolve) => {
       const sample = (now) => {
-        intervals.push(now - previous);
+        if (previous !== undefined && now > previous) intervals.push(now - previous);
         previous = now;
         if (intervals.length >= 120) resolve();
         else requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);
     });
-    intervals.sort((left, right) => left - right);
+    const sorted = [...intervals].sort((left, right) => left - right);
     return {
-      medianFrameIntervalMs: intervals[Math.floor(intervals.length / 2)] ?? 16.67,
-      p95FrameIntervalMs: intervals[Math.floor(intervals.length * 0.95)] ?? 16.67,
+      medianFrameIntervalMs: sorted[Math.floor(sorted.length / 2)] ?? 16.67,
+      p95FrameIntervalMs: sorted[Math.floor(sorted.length * 0.95)] ?? 16.67,
       intervals,
     };
   });
@@ -97,7 +99,7 @@ async function profile(baseUrl) {
   await mkdir(outputDirectory, {recursive: true});
   const browser = await chromium.launch({
     channel: 'msedge',
-    headless: true,
+    headless: !headed,
     args: [
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
@@ -105,12 +107,37 @@ async function profile(baseUrl) {
     ],
   });
   const context = await browser.newContext({viewport: {width: 800, height: 540}});
-  await context.tracing.start({screenshots: true, snapshots: true, sources: true});
   const page = await context.newPage();
   const browserVersion = browser.version();
+  let traceStarted = false;
 
   try {
     await page.goto(`${baseUrl}/?onboarded=1&service=memory`);
+    const display = await page.evaluate(() => ({
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+      devicePixelRatio: window.devicePixelRatio,
+      visibility: document.visibilityState,
+    }));
+    let graphics = {available: false};
+    let browserSession;
+    try {
+      browserSession = await browser.newBrowserCDPSession();
+      const {gpu} = await browserSession.send('SystemInfo.getInfo');
+      graphics = {
+        available: true,
+        devices: gpu.devices.map(({vendorString, deviceString, driverVersion}) => ({
+          vendor: vendorString, device: deviceString, driverVersion,
+        })),
+        renderer: gpu.auxAttributes?.glRenderer ?? null,
+        featureStatus: gpu.featureStatus,
+        gpuCompositingEnabled: gpu.featureStatus?.gpu_compositing === 'enabled',
+      };
+    } catch {
+      // GPU evidence is unavailable rather than inferred from installed hardware.
+    } finally {
+      if (browserSession) await browserSession.detach();
+    }
     const search = page.getByRole('searchbox', {name: 'Search files'});
     await search.waitFor({state: 'visible'});
 
@@ -139,14 +166,18 @@ async function profile(baseUrl) {
     for (let index = 1; index <= 30; index += 1) {
       await search.fill(`report-${index}`);
       await waitForSamples(page, 'input-response', index);
+      await waitForSamples(page, 'input-next-frame', index);
       await page.waitForTimeout(40);
     }
+    const inputMetrics = await readMetrics(page);
     await search.fill('report');
     await page.getByRole('grid', {name: 'Search results'}).waitFor();
     const refresh = await measureRefresh(page);
-    const inputMetrics = await readMetrics(page);
     const inputSamples = inputMetrics.timings
       .filter((sample) => sample.name === 'input-response')
+      .map((sample) => sample.durationMs);
+    const inputFrameSamples = inputMetrics.timings
+      .filter((sample) => sample.name === 'input-next-frame')
       .map((sample) => sample.durationMs);
 
     await resetMetrics(page);
@@ -248,6 +279,7 @@ async function profile(baseUrl) {
     const measured = {
       warmLauncherP95Ms: percentile(warmSamples, 0.95),
       inputResponseP95Ms: percentile(inputSamples, 0.95),
+      inputToNextFrameP95Ms: percentile(inputFrameSamples, 0.95),
       selectionToPaintP95Ms: percentile(selectionSamples, 0.95),
       hoverToPaintP95Ms: percentile(hoverToPaintSamples, 0.95),
       hoverFrameIntervalP95Ms: percentile(hoverFrameIntervals, 0.95),
@@ -281,12 +313,8 @@ async function profile(baseUrl) {
       measured.hoverFrameIntervalP95Ms,
       targetFrameBudgetMs,
     );
-    const strict240Hz = {
-      input: measured.inputResponseP95Ms < targetFrameBudgetMs,
-      selection: measured.selectionToPaintP95Ms < targetFrameBudgetMs,
-      hover: measured.hoverToPaintP95Ms < targetFrameBudgetMs,
-    };
-    strict240Hz.passed = Object.values(strict240Hz).every(Boolean);
+    const strict120Hz = evaluateRefreshTarget(measured, 120);
+    const strict240Hz = evaluateRefreshTarget(measured, 240);
     const cadenceMeasurementAvailable = Number.isFinite(refresh.p95FrameIntervalMs) &&
       refresh.p95FrameIntervalMs > 0;
     const hoverCadenceMeasurementAvailable = Number.isFinite(measured.hoverFrameIntervalP95Ms) &&
@@ -294,7 +322,8 @@ async function profile(baseUrl) {
     const environmentEligibility = {
       cadenceMeasurementAvailable,
       hoverCadenceMeasurementAvailable,
-      strict240HzCadence: refresh.p95FrameIntervalMs <= targetFrameBudgetMs,
+      strict120HzCadence: strict120Hz.cadence,
+      strict240HzCadence: strict240Hz.cadence,
       cadenceAwareRelease: cadenceMeasurementAvailable && hoverCadenceMeasurementAvailable,
     };
     const budgets = {
@@ -303,6 +332,7 @@ async function profile(baseUrl) {
       effectivePaintFrameBudgetMs,
       effectiveHoverFrameBudgetMs,
       inputResponseP95Ms: effectivePaintFrameBudgetMs,
+      inputToNextFrameP95Ms: effectivePaintFrameBudgetMs,
       selectionToPaintP95Ms: effectivePaintFrameBudgetMs,
       hoverToPaintP95Ms: effectiveHoverFrameBudgetMs,
       ordinaryReactCommitP95Ms: 3,
@@ -316,6 +346,8 @@ async function profile(baseUrl) {
     const checks = {
       warmLauncher: measured.warmLauncherP95Ms < budgets.warmLauncherP95Ms,
       input: measured.inputResponseP95Ms < budgets.inputResponseP95Ms,
+      inputNextFrame: inputFrameSamples.length === 30 &&
+        measured.inputToNextFrameP95Ms < budgets.inputToNextFrameP95Ms,
       selection: measured.selectionToPaintP95Ms < budgets.selectionToPaintP95Ms,
       hover: measured.hoverToPaintP95Ms < budgets.hoverToPaintP95Ms,
       hoverSynchronousDispatch: measured.hoverSynchronousDispatchMaxMs < budgets.synchronousWorkMs,
@@ -340,7 +372,12 @@ async function profile(baseUrl) {
     const summary = {
       generatedAt: new Date().toISOString(),
       gitSha: execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(),
-      browser: {name: 'Microsoft Edge', version: browserVersion},
+      sourceWorktreeDirty: execFileSync('git', ['status', '--porcelain'], {encoding: 'utf8'}).trim().length > 0,
+      browser: {name: 'Microsoft Edge', version: browserVersion, headless: !headed},
+      instrumentation: {timedPhaseTracing: false, tracePhase: 'separate interaction study after measurements'},
+      display,
+      graphics,
+      measurementBoundary: 'input-response is synchronous handler time; input-next-frame, selection-paint and hover timings end at a requestAnimationFrame callback before presentation. Cadence and GPU evidence describe this Edge process, not native WebView2 presentation.',
       profile: 'warm deterministic browser adapter, 800x540 viewport, 30 paced input samples, 120 paced selection samples, 80 contemporaneously paired hover/frame samples with direct dispatch timing, renderer-side synchronous 30-event input and selection bursts, plus activity-indicator settle verification',
       target: {
         refreshRateHz: 240,
@@ -352,12 +389,15 @@ async function profile(baseUrl) {
       environmentEligibility,
       budgets,
       measured,
+      strict120Hz,
       strict240Hz,
       checks,
       passed: Object.values(checks).every(Boolean),
       samples: {
+        frameIntervalMs: refresh.intervals,
         warmLauncherMs: warmSamples,
         inputResponseMs: inputSamples,
+        inputToNextFrameMs: inputFrameSamples,
         selectionToPaintMs: selectionSamples,
         hoverToPaintMs: hoverToPaintSamples,
         hoverFrameIntervalMs: hoverFrameIntervals,
@@ -368,8 +408,19 @@ async function profile(baseUrl) {
     await writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
     if (!summary.passed) process.exitCode = 1;
     process.stdout.write(`${summaryPath}\n${JSON.stringify(measured, null, 2)}\n`);
+    // DOM snapshots/screenshots can delay the very next-frame response being
+    // measured. Preserve a visual study without recording the timed phase.
+    await context.tracing.start({screenshots: true, snapshots: true, sources: true});
+    traceStarted = true;
+    await page.goto(`${baseUrl}/?onboarded=1&service=memory`);
+    await search.fill('report');
+    await page.getByRole('grid', {name: 'Search results'}).waitFor();
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(100);
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(400);
   } finally {
-    await context.tracing.stop({path: tracePath});
+    if (traceStarted) await context.tracing.stop({path: tracePath});
     await context.close();
     await browser.close();
   }

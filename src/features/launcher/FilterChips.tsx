@@ -23,9 +23,9 @@ export function FilterChips({filters, onClear, onRemove}: FilterChipsProps) {
           key="active-filters"
           aria-label="Active filters"
           className="flex min-w-0 items-center gap-2 overflow-x-auto border-b border-[color:var(--einui-command-divider)] px-4 py-1.5 [scrollbar-width:none]"
-          animate={{opacity: 1, y: 0}}
-          exit={reducedMotion ? {opacity: 0} : {opacity: 0, y: -4}}
-          initial={reducedMotion ? {opacity: 0} : {opacity: 0, y: -6}}
+          animate={{opacity: 1, transform: 'translateY(0px)'}}
+          exit={reducedMotion ? {opacity: 0} : {opacity: 0, transform: 'translateY(-4px)'}}
+          initial={reducedMotion ? {opacity: 0} : {opacity: 0, transform: 'translateY(-6px)'}}
           transition={{duration}}
         >
           <span className="shrink-0 px-1 text-xs text-[color:var(--einui-command-muted-text)]">Filtered by</span>
