@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
+import {WindowsAgentControls} from '../../windows-ai/WindowsAiControls';
 
 import {McpIcon} from '../../../design-system/icons/lumen-icons';
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
@@ -263,6 +264,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
           </SettingSection>
         </>
       ) : null}
+      <WindowsAgentControls />
     </SettingsPage>
   );
 }

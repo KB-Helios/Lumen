@@ -1,0 +1,14 @@
+{
+  "version": 3,
+  "actions": [{
+    "id": "LumenBrowserAgent",
+    "description": "Open Lumen with a browser task draft for the user to review and start.",
+    "icon": "ms-resource://Files/Assets/Lumen.png",
+    "usesGenerativeAI": true,
+    "allowedAppInvokers": ["*"],
+    "inputs": [{"name":"agentName","kind":"Text"},{"name":"prompt","kind":"Text"}],
+    "inputCombinations": [{"inputs":["agentName","prompt"],"description":"Open Lumen's browser agent with a task draft."}],
+    "outputs": [],
+    "invocation": {"type":"Uri","uri":"lumen:agent?agentName=${agentName.Text}&prompt=${prompt.Text}"}
+  }]
+}

@@ -11,6 +11,9 @@ interface LauncherData {
   visible: boolean;
   focusRegion: LauncherFocusRegion;
   intent: LauncherIntent;
+  externalAgentId: string;
+  agentActivationId: string | null;
+  agentActivationPending: boolean;
 }
 
 interface LauncherActions {
@@ -19,6 +22,8 @@ interface LauncherActions {
   setMode(mode: WindowMode): void;
   setFocusRegion(region: LauncherFocusRegion): void;
   setIntent(intent: LauncherIntent): void;
+  setExternalAgentId(id: string): void;
+  finishAgentActivation(id: string): void;
   reset(): void;
 }
 
@@ -29,16 +34,23 @@ const initialLauncherData: LauncherData = {
   visible: true,
   focusRegion: 'search',
   intent: 'search',
+  externalAgentId: '',
+  agentActivationId: null,
+  agentActivationPending: false,
 };
 
 export const useLauncherStore = create<LauncherStore>()(
-  subscribeWithSelector((set) => ({
+  subscribeWithSelector((set, get) => ({
     ...initialLauncherData,
     show: (mode) => set({mode, visible: true}),
     hide: () => set({visible: false}),
     setMode: (mode) => set({mode}),
     setFocusRegion: (focusRegion) => set({focusRegion}),
     setIntent: (intent) => set({intent, focusRegion: 'search'}),
+    setExternalAgentId: (externalAgentId) => set({externalAgentId}),
+    finishAgentActivation: (id) => {
+      if (get().agentActivationId === id) set({agentActivationId: null});
+    },
     reset: () => set(initialLauncherData),
   })),
 );

@@ -17,6 +17,11 @@ import type {ComputerUseService} from '../../services/computer-use/computer-use-
 import {UnavailableComputerUseService} from '../../services/computer-use/unavailable-computer-use-service';
 import type {SearchService} from '../../services/search/search-service';
 import type {SearchFilter} from '../../services/search/search.types';
+import {windowsAiService} from '../../services/windows-ai';
+import type {DictationSession} from '../../services/windows-ai/windows-ai-service';
+import {canUseWindowsAiFeature} from '../../services/windows-ai/windows-ai.types';
+import {useWindowsAiStore} from '../windows-ai/windows-ai.store';
+import {WindowsAgentPicker} from '../windows-ai/WindowsAgentPicker';
 import {useLumenKeyboard} from '../keyboard/useLumenKeyboard';
 import {ComputerUsePanel} from '../computer-use/ComputerUsePanel';
 import {useComputerUseController} from '../computer-use/useComputerUseController';
@@ -118,6 +123,45 @@ export function SearchExperience({
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const windowsSnapshot = useWindowsAiStore((state) => state.snapshot);
+  const externalAgentId = useLauncherStore((state) => state.externalAgentId);
+  const setExternalAgentId = useLauncherStore((state) => state.setExternalAgentId);
+  const agentActivationId = useLauncherStore((state) => state.agentActivationId);
+  const browserRunPending = useRef(false);
+  const [externalAgentBusy, setExternalAgentBusy] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const voice = useRef<DictationSession | null>(null);
+  const voiceGeneration = useRef(0);
+  const voiceReady = canUseWindowsAiFeature(windowsSnapshot?.features.find((item) => item.id === 'edgeSpeech'));
+  const stopVoice = useCallback(() => {
+    voiceGeneration.current += 1;
+    voice.current?.stop(); voice.current = null; setVoiceActive(false);
+  }, []);
+  useEffect(() => {
+    if (!visible || !voiceReady) stopVoice();
+    return stopVoice;
+  }, [agentActivationId, intent, stopVoice, visible, voiceReady]);
+  useEffect(() => {
+    if (!windowsSnapshot?.preferences.agentsEnabled || !windowsSnapshot.agents.some((agent) => agent.id === externalAgentId)) setExternalAgentId('');
+  }, [externalAgentId, setExternalAgentId, windowsSnapshot]);
+  const toggleVoice = async () => {
+    if (voiceActive) { stopVoice(); return; }
+    const generation = ++voiceGeneration.current;
+    const initial = useQueryStore.getState().draft.trim();
+    setVoiceActive(true);
+    try {
+      const session = await windowsAiService.startDictation({
+        onText: (text) => {
+          if (generation !== voiceGeneration.current) return;
+          useQueryStore.getState().setDraft(`${initial} ${text}`.trim());
+        },
+        onEnd: () => { if (generation === voiceGeneration.current) { voice.current = null; setVoiceActive(false); } },
+        onError: () => { if (generation === voiceGeneration.current) { setActionMessage('Local dictation could not start. Check microphone permission and the selected language.'); setVoiceActive(false); } },
+      });
+      if (generation !== voiceGeneration.current || !useLauncherStore.getState().visible) session.stop();
+      else voice.current = session;
+    } catch { if (generation === voiceGeneration.current) { setVoiceActive(false); setActionMessage('Local dictation is unavailable in this host.'); } }
+  };
 
   useEffect(() => {
     let pendingQuery = 0;
@@ -171,6 +215,7 @@ export function SearchExperience({
     setActionMessage(`Opening ${result?.name ?? 'file'}`);
     try {
       await service.openFile(fileId);
+      if (result?.kind === 'app-content') return;
       await delay(motionTokens.duration.press * 1000);
       const hidden = await requestWindowHide(windowService);
       if (!hidden) setActionMessage(`Opened ${result?.name ?? 'file'}, but Lumen could not hide.`);
@@ -244,13 +289,38 @@ export function SearchExperience({
     await presentation;
   }, [onOpenSettings, setActiveSettingsPage, windowService]);
 
+  const runLumenTask = useCallback(async (task: string) => {
+    if (!task.trim() || browserRunPending.current || ['starting', 'running', 'approval'].includes(computerUse.phase)) return;
+    browserRunPending.current = true;
+    const activationId = useLauncherStore.getState().agentActivationId;
+    try { await computerUse.start(task); }
+    finally {
+      browserRunPending.current = false;
+      if (activationId) useLauncherStore.getState().finishAgentActivation(activationId);
+    }
+  }, [computerUse.phase, computerUse.start]);
+
   const handleStartComputerUse = useCallback(() => {
-    void computerUse.start(inputRef.current?.value ?? useQueryStore.getState().committed);
-  }, [computerUse.start]);
+    void runLumenTask(inputRef.current?.value ?? useQueryStore.getState().committed);
+  }, [runLumenTask]);
+
+  const handleRunExternalAgent = useCallback(async (task: string) => {
+    const {externalAgentId: recipient, agentActivationId: activationId} = useLauncherStore.getState();
+    if (!recipient || externalAgentBusy) return;
+    setExternalAgentBusy(true); setActionMessage('');
+    try {
+      const result = await windowsAiService.invokeAgent(recipient, task);
+      setActionMessage(result.message);
+      if (result.ok && activationId) useLauncherStore.getState().finishAgentActivation(activationId);
+    }
+    catch { setActionMessage('The selected Windows agent could not accept the prompt. Refresh its availability in settings.'); }
+    finally { setExternalAgentBusy(false); }
+  }, [externalAgentBusy]);
 
   const handleSubmitComputerUse = useCallback((task: string) => {
-    void computerUse.start(task);
-  }, [computerUse.start]);
+    if (useLauncherStore.getState().externalAgentId) void handleRunExternalAgent(task);
+    else void runLumenTask(task);
+  }, [handleRunExternalAgent, runLumenTask]);
 
   const handleRemoveFilter = useCallback((filter: SearchFilter) => {
     toggleFilter(filter);
@@ -301,12 +371,17 @@ export function SearchExperience({
     <div className="contents" data-launcher-visible={visible}>
       <CollapsedLauncher
         expandedContent={intent === 'computer' ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          <WindowsAgentPicker selected={externalAgentId} busy={externalAgentBusy || computerUse.phase === 'running' || computerUse.phase === 'approval' || computerUse.phase === 'starting'} message={actionMessage} onChange={setExternalAgentId} onRun={() => void handleRunExternalAgent(useQueryStore.getState().committed)} />
+          {!externalAgentId ? (
           <QueryBoundComputerUsePanel
             cloudConsent={computerUseSettings.cloudConsent}
             controller={computerUse}
             onOpenSettings={() => void handleOpenSettings('computer-use')}
             onStart={handleStartComputerUse}
           />
+          ) : null}
+          </div>
         ) : (
           <ExpandedWorkspace
             activeFilters={activeFilters}
@@ -337,7 +412,9 @@ export function SearchExperience({
           />
         )}
         inputRef={inputRef}
-        intentLocked={computerUse.phase === 'starting' || computerUse.phase === 'running' || computerUse.phase === 'approval'}
+        intentLocked={externalAgentBusy || computerUse.phase === 'starting' || computerUse.phase === 'running' || computerUse.phase === 'approval'}
+        onVoiceRequest={voiceReady || voiceActive ? () => void toggleVoice() : undefined}
+        voiceActive={voiceActive}
         searching={intent === 'computer'
           ? computerUse.phase === 'starting' || computerUse.phase === 'running'
           : controller.lifecycle === 'searching' || answerRunning}

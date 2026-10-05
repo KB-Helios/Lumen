@@ -109,7 +109,10 @@ try {
     $appProcess = Start-Process -FilePath $application.FullName -WindowStyle Hidden -PassThru
     if (-not $appProcess.WaitForExit(90000)) {
         $appProcess.Kill()
-        throw "The installed Lumen smoke run did not finish within 90 seconds."
+        $checkpoint = Get-Content -LiteralPath (Join-Path $isolatedAppData "startup-checkpoints.log") -ErrorAction SilentlyContinue |
+            Where-Object { $_ -match '^(run|plugins-configured|setup|gateway|enrichment|windows-ai|material|checks)$' } | Select-Object -Last 1
+        if (-not $checkpoint) { $checkpoint = "before-rust-entry" }
+        throw "The installed Lumen smoke run did not finish within 90 seconds; last startup checkpoint: $checkpoint."
     }
     if ($appProcess.ExitCode -ne 0) {
         throw "The installed Lumen smoke run exited with code $($appProcess.ExitCode)."

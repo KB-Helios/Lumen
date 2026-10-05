@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
+import {WindowsLocalAiControls} from '../../windows-ai/WindowsAiControls';
 
 import {ProgressBar} from 'react-aria-components';
 
@@ -208,6 +209,7 @@ export function LocalAiPage({
           />
         </SettingRow>
       </SettingSection>
+      <WindowsLocalAiControls />
     </SettingsPage>
   );
 }

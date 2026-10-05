@@ -5,12 +5,42 @@ mod gateway;
 mod privacy;
 mod search;
 mod window;
+mod windows_ai;
 
 use tauri::Manager;
 use tauri_plugin_global_shortcut::ShortcutState;
 
+// Fixed, secret-free checkpoints make isolated packaged startup failures
+// diagnosable without changing normal launches or emitting user content.
+fn smoke_checkpoint(phase: &str) {
+    if std::env::var("LUMEN_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return;
+    }
+    let Some(root) = std::env::var_os("LUMEN_SMOKE_APP_DATA") else {
+        return;
+    };
+    let Ok(root) = std::fs::canonicalize(root) else {
+        return;
+    };
+    let Ok(temporary) = std::fs::canonicalize(std::env::temp_dir()) else {
+        return;
+    };
+    if root == temporary || !root.starts_with(temporary) {
+        return;
+    }
+    use std::io::Write;
+    if let Ok(mut log) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(root.join("startup-checkpoints.log"))
+    {
+        let _ = writeln!(log, "{phase}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    smoke_checkpoint("run");
     let global_shortcut = tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
@@ -22,9 +52,11 @@ pub fn run() {
             }
         })
         .build();
+    smoke_checkpoint("plugins-configured");
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            windows_ai::queue_activations(app, &args);
             let _ = window::show_from_app(
                 app,
                 window::WindowMode::Collapsed,
@@ -43,6 +75,7 @@ pub fn run() {
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            smoke_checkpoint("setup");
             let smoke_enabled = std::env::var("LUMEN_PACKAGED_SMOKE").as_deref() == Ok("1");
             let data_directory = if smoke_enabled {
                 match std::env::var_os("LUMEN_SMOKE_APP_DATA") {
@@ -96,6 +129,7 @@ pub fn run() {
                 &provider_registry.routes(),
             )?;
             let _ = gateway.start();
+            smoke_checkpoint("gateway");
             app.manage(gateway);
             app.manage(provider_registry);
             app.manage(gateway::answer::AnswerRuntime::default());
@@ -137,6 +171,7 @@ pub fn run() {
                 data_directory.join("enrichment"),
             )?;
             let _ = enrichment.start();
+            smoke_checkpoint("enrichment");
             app.manage(enrichment);
             let packaged_vector = app.path().resource_dir()?.join("vector.dll");
             let development_vector =
@@ -157,6 +192,12 @@ pub fn run() {
                 &vector_extension,
                 history_enabled,
             )?);
+            app.manage(std::sync::Arc::new(windows_ai::WindowsAiRuntime::new(
+                &data_directory,
+                &app.path().resource_dir()?,
+            )));
+            smoke_checkpoint("windows-ai");
+            windows_ai::queue_activations(app.handle(), &std::env::args().collect::<Vec<_>>());
             app.manage(window::ShortcutRegistration::default());
             if let Err(error) = window::register_initial_shortcut(app.handle(), &initial_shortcut) {
                 tauri_plugin_log::log::warn!("Global shortcut unavailable: {error}");
@@ -165,8 +206,10 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
                 window::apply_native_material(&main_window)?;
             }
+            smoke_checkpoint("material");
 
             if smoke_enabled {
+                smoke_checkpoint("checks");
                 let report_path = data_directory.join("lumen-packaged-smoke.json");
                 let smoke = (|| -> Result<serde_json::Value, String> {
                     let search = search::run_packaged_search_smoke(
@@ -285,6 +328,20 @@ pub fn run() {
             computer_use::start_computer_use,
             computer_use::respond_computer_use_approval,
             computer_use::cancel_computer_use,
+            windows_ai::windows_ai_status,
+            windows_ai::windows_ai_update_preferences,
+            windows_ai::windows_ai_prepare,
+            windows_ai::windows_ai_text,
+            windows_ai::windows_ai_image,
+            windows_ai::windows_ai_search_content,
+            windows_ai::windows_ai_rebuild_content,
+            windows_ai::windows_ai_delete_content,
+            windows_ai::windows_ai_discover_agents,
+            windows_ai::windows_ai_invoke_agent,
+            windows_ai::windows_ai_set_registration,
+            windows_ai::windows_ai_set_access_token,
+            windows_ai::windows_ai_cancel,
+            windows_ai::windows_ai_consume_activation,
             window::show_lumen_window,
             window::hide_lumen_window,
             window::focus_lumen_input,

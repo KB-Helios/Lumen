@@ -1,0 +1,4 @@
+output/
+*.msix
+*.pfx
+*.cer

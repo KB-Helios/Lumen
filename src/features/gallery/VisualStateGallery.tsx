@@ -21,6 +21,9 @@ import {SettingsShell} from '../settings/SettingsShell';
 import {LocalAiPage} from '../settings/pages/LocalAiPage';
 import {SearchPage} from '../settings/pages/SearchPage';
 import {useSettingsStore} from '../settings/settings.store';
+import {useWindowsAiStore} from '../windows-ai/windows-ai.store';
+import {WindowsLocalAiControls} from '../windows-ai/WindowsAiControls';
+import {unsupportedWindowsAiSnapshot} from '../../services/windows-ai/unavailable-windows-ai-service';
 import {GallerySearchService, galleryResults} from './fixtures';
 import {ScenarioControls} from './ScenarioControls';
 import {galleryScenarios, getGalleryScenario} from './scenarios';
@@ -213,7 +216,20 @@ function ScenarioSurface({scenario}: {scenario: GalleryScenario}) {
     case 'settings-shell': return <GallerySettingsShell page={surface.page === 'agent-gateway' ? 'agent-gateway' : 'general'} />;
     case 'onboarding': return <GalleryOnboarding step={surface.step} />;
     case 'computer-use': return <GalleryComputerUse />;
+    case 'windows-ai': return <GalleryPanel scenario={scenario}><GalleryWindowsAi state={surface.state} /></GalleryPanel>;
   }
+}
+
+function GalleryWindowsAi({state}: {state: 'ready' | 'unavailable' | 'preparing' | 'failed'}) {
+  useLayoutEffect(() => {
+    const snapshot = unsupportedWindowsAiSnapshot();
+    snapshot.preferences = {...snapshot.preferences, windowsEnabled: true, textToolsEnabled: true};
+    snapshot.host = {...snapshot.host, osBuild: 'Development fixture', runtimeVersion: 'Preview fixture'};
+    snapshot.features = snapshot.features.map((feature) => ({...feature, enabled: true, availability: feature.id === 'languageModel' ? state : 'unavailable', reasonCode: 'galleryFixture', detail: feature.id === 'languageModel' ? state === 'preparing' ? 'Preparing model · 42% (fixture)' : state === 'failed' ? 'The preview model could not be prepared (fixture).' : state === 'ready' ? 'Available on this fixture device.' : 'Preview runtime is missing (fixture).' : 'Not available in this fixture.'}));
+    useWindowsAiStore.setState({snapshot, hydrated: true, busy: true, message: ''});
+    return () => useWindowsAiStore.setState({snapshot: null, hydrated: false, busy: false, message: ''});
+  }, [state]);
+  return <WindowsLocalAiControls />;
 }
 
 export interface VisualStateGalleryProps {

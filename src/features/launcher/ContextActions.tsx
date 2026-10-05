@@ -48,7 +48,7 @@ export function ContextActions({
       </LumenButton>
       <LumenButton
         aria-label="Open containing folder"
-        isDisabled={!result}
+        isDisabled={!result || result.kind === 'app-content'}
         size="small"
         variant="quiet"
         onPress={onOpenContainingFolder}

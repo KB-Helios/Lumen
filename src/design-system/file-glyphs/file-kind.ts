@@ -16,5 +16,6 @@ export const fileKinds = [
   'executable',
   'model',
   'unknown',
+  'app-content',
 ] as const satisfies readonly FileKind[];
 

@@ -34,6 +34,7 @@ let forcedColorsActive = false;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  animation.setSubframe.mockReset();
   forcedColorsActive = false;
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query === '(forced-colors: active)' ? forcedColorsActive : false,

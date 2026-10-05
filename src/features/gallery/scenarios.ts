@@ -62,6 +62,7 @@ export const galleryScenarios: readonly GalleryScenario[] = [
   {id: 'onboarding-welcome', label: 'Onboarding · welcome', description: 'First of eight concise first-run scenes.', category: 'Management', surface: {kind: 'onboarding', step: 0}},
   {id: 'computer-use-approval', label: 'Computer Use approval', description: 'A sensitive browser action remains paused for one-time approval.', category: 'Computer Use', surface: {kind: 'computer-use', state: 'approval'}},
   {id: 'constrained-work-area', label: 'Constrained work area', description: 'Short and narrow bounds preserve the composer and internal scrolling.', category: 'Resilience', surface: {kind: 'launcher', state: {mode: 'expanded', query: 'report', resultSet: 'standard', answer: 'streaming', constrained: true}}},
+  ...(['ready', 'unavailable', 'preparing', 'failed'] as const).map((state) => ({id: `windows-ai-${state}` as GalleryScenarioId, label: `Windows AI · ${state}`, description: 'Development fixture for availability controls; no native request runs.', category: 'Local AI' as const, surface: {kind: 'windows-ai' as const, state}})),
 ];
 
 export const galleryScenarioById = new Map(galleryScenarios.map((scenario) => [scenario.id, scenario]));

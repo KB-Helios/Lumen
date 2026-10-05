@@ -20,6 +20,10 @@ import {createWindowService} from '../platform/window/tauri-window-service';
 import {windowGeometry} from '../platform/window/window-service';
 import type {WindowMode, WindowService} from '../platform/window/window-service';
 import {TauriAnswerService} from '../services/answer/tauri-answer-service';
+import {WindowsAiAnswerService} from '../services/answer/windows-ai-answer-service';
+import {CatalogueSearchService} from '../services/search/catalogue-search-service';
+import {windowsAiService} from '../services/windows-ai';
+import {getWindowsAiPreferences, useWindowsAiStore} from '../features/windows-ai/windows-ai.store';
 import {UnavailableAnswerService} from '../services/answer/unavailable-answer-service';
 import {TauriComputerUseService} from '../services/computer-use/tauri-computer-use-service';
 import {UnavailableComputerUseService} from '../services/computer-use/unavailable-computer-use-service';
@@ -103,9 +107,9 @@ function createDefaultSearchService() {
   });
 }
 
-const defaultSearchService = createDefaultSearchService();
+const defaultFileSearchService = createDefaultSearchService();
 const defaultActivityService = createActivityService();
-const defaultAnswerService = isNativeRuntime()
+const runtimeAnswerService = isNativeRuntime()
   ? new TauriAnswerService()
   : new UnavailableAnswerService();
 const developmentComputerUse = import.meta.env.DEV &&
@@ -116,6 +120,11 @@ const defaultComputerUseService = developmentComputerUse
     ? new TauriComputerUseService()
     : new UnavailableComputerUseService();
 const appWindowService = createWindowService();
+const defaultSearchService = new CatalogueSearchService(defaultFileSearchService, windowsAiService, getWindowsAiPreferences, async (page) => {
+  useSettingsStore.getState().setActivePage(page);
+  await requestWindowShow(appWindowService, 'settings');
+});
+const defaultAnswerService = new WindowsAiAnswerService(runtimeAnswerService, windowsAiService, () => useWindowsAiStore.getState().snapshot);
 const OnboardingFlow = lazy(async () => {
   const module = await import('../features/onboarding/OnboardingFlow');
   return {default: module.OnboardingFlow};
@@ -230,6 +239,52 @@ export function App({
       void hydrateSettings();
     }
   }, [foundationPreview, galleryPreview, hydrateSettings]);
+
+  useEffect(() => {
+    if (foundationPreview || galleryPreview) return;
+    void useWindowsAiStore.getState().refresh();
+    return windowsAiService.subscribe((snapshot) => useWindowsAiStore.setState({snapshot, hydrated: true}));
+  }, [foundationPreview, galleryPreview]);
+
+  useEffect(() => {
+    if (foundationPreview || galleryPreview || !settingsHydrated) return;
+    let active = true;
+    let requested = true;
+    const consume = async () => {
+      const launcher = useLauncherStore.getState();
+      if (!active || !requested || launcher.agentActivationPending || launcher.agentActivationId) return;
+      requested = false;
+      useLauncherStore.setState({agentActivationPending: true});
+      try {
+        const activation = await windowsAiService.consumeActivation();
+        if (!activation) return;
+        useQueryStore.getState().clear();
+        useQueryStore.getState().setDraft(activation.prompt);
+        // Preserve a popped draft even if this subscription was disposed while
+        // native IPC was pending. A later mount can present the held draft.
+        useLauncherStore.setState({intent: 'computer', focusRegion: 'search', externalAgentId: '', agentActivationId: activation.activationId});
+        if (active) await requestWindowShow(windowService, 'expanded');
+      } catch { /* Malformed or unavailable activations cannot execute a task. */ }
+      finally { useLauncherStore.setState({agentActivationPending: false}); }
+    };
+    const request = () => { requested = true; void consume(); };
+    const unsubscribe = windowsAiService.subscribeActivation(request);
+    const unsubscribeQuery = useQueryStore.subscribe((state) => {
+      const id = useLauncherStore.getState().agentActivationId;
+      if (id && !state.draft.trim()) useLauncherStore.getState().finishAgentActivation(id);
+    });
+    const unsubscribeLauncher = useLauncherStore.subscribe((state, previous) => {
+      if (previous.agentActivationId && !state.agentActivationId) requested = true;
+      if (state.agentActivationId && state.intent !== 'computer') {
+        state.finishAgentActivation(state.agentActivationId);
+        return;
+      }
+      if (requested && !state.agentActivationPending && !state.agentActivationId) void consume();
+    });
+    if (useLauncherStore.getState().agentActivationId) void requestWindowShow(windowService, 'expanded');
+    void consume();
+    return () => { active = false; unsubscribe(); unsubscribeQuery(); unsubscribeLauncher(); };
+  }, [foundationPreview, galleryPreview, settingsHydrated, windowService]);
 
   useEffect(() => {
     if (!developmentComputerUse || !settingsHydrated) return;

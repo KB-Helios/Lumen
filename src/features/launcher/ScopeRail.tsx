@@ -8,6 +8,7 @@ import {cn} from '../../lib/cn';
 import type {SearchScope} from '../../services/search/search.types';
 import {semanticSearchService} from '../../services/search/semantic-search-service';
 import {useSettingsStore} from '../settings/settings.store';
+import {useWindowsAiStore} from '../windows-ai/windows-ai.store';
 import {useScopeStore} from './scope.store';
 
 export const searchScopes: ReadonlyArray<{id: SearchScope; label: string}> = [
@@ -19,6 +20,7 @@ export const searchScopes: ReadonlyArray<{id: SearchScope; label: string}> = [
   {id: 'images', label: 'Images'},
   {id: 'recent', label: 'Recent'},
   {id: 'related', label: 'Related'},
+  {id: 'app-content', label: 'App content'},
 ];
 
 export function ScopeRail() {
@@ -27,6 +29,7 @@ export function ScopeRail() {
   const setScope = useScopeStore((state) => state.setScope);
   const enabledScopeIds = useSettingsStore((state) => state.search.enabledScopes);
   const historyEnabled = useSettingsStore((state) => state.general.historyEnabled);
+  const appContentEnabled = useWindowsAiStore((state) => state.snapshot?.preferences.appContentEnabled === true);
   const [relatedAvailable, setRelatedAvailable] = useState(false);
   useEffect(() => {
     let current = true;
@@ -37,10 +40,10 @@ export function ScopeRail() {
   }, []);
   const enabledScopes = useMemo(
     () => searchScopes.filter((scope) =>
-      enabledScopeIds.includes(scope.id) &&
+      (scope.id === 'app-content' ? appContentEnabled : enabledScopeIds.includes(scope.id)) &&
       (scope.id !== 'recent' || historyEnabled) &&
       (scope.id !== 'related' || relatedAvailable)),
-    [enabledScopeIds, historyEnabled, relatedAvailable],
+    [appContentEnabled, enabledScopeIds, historyEnabled, relatedAvailable],
   );
 
   useEffect(() => {

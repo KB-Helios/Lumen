@@ -14,7 +14,8 @@ Lumen is a keyboard-first Windows 11 search and browser-agent experience built w
 - Light, dark, opaque, reduced-effects, reduced-motion, and forced-colors/high-contrast presentation.
 - Typed local-file search, metadata, preview, and opener commands confined to user-selected roots.
 - A supervised Gemini Computer Use sidecar that controls a fresh Microsoft Edge context, pauses model-requested sensitive actions for approval, and stops with Lumen.
-- Development-only 53-scenario visual gallery, screenshot set, contact sheet, six interaction recordings, accessibility/DPI suites, and a strict high-refresh profiler.
+- Availability-checked Windows AI, App Content Search, Agent Launchers and current-host Edge AI integrations, with controls in the existing settings pages.
+- Development-only 57-scenario visual gallery, screenshot set, contact sheet, six interaction recordings, accessibility/DPI suites, and a strict high-refresh profiler.
 
 The normal Tauri application always uses the real local-file adapter. Deterministic memory data is available only to development tests, recordings, and gallery routes.
 
@@ -27,6 +28,7 @@ The shipped answer path is provider-neutral at the React boundary and routes typ
 - Rust stable with the MSVC target.
 - Visual Studio 2022 or Build Tools with Desktop development with C++ and the Windows SDK.
 - Python 3.11 (directly or through `uv`) when staging the Computer Use sidecar from source; installed applications include the compiled worker.
+- .NET 10 SDK when building the Windows AI helper from source; staged helpers include their .NET runtime.
 
 Install dependencies and start the native development app:
 
@@ -37,6 +39,18 @@ bun run tauri dev
 ```
 
 The first run asks for one development search root. Press `Alt+Space` from another application to reopen the warm launcher.
+
+## Windows integrations
+
+Open Settings with `Ctrl+,`. Local AI contains the Windows/Edge enable switches, local answer engine, capability status, explicit preparation, engine test and native access-token setup. Privacy contains separate permissions for downloads, selected-preview text tools, OCR, image descriptions and local microphone dictation, plus language settings. Search controls Lumen's public help catalogue and its optional Windows semantic index. AgentGateway controls installed Windows agents and Lumen's opt-in agent registration. Diagnostics reports the current host, runtime, provider and per-feature availability.
+
+The launcher uses only ready, enabled engines. Automatic local answers prefer a ready Windows model and otherwise use the existing local runtime. An explicitly selected unsupported engine shows an error; cloud answers retain their separate consent. Preview tools run on an explicit press. Local dictation updates the draft and exposes Stop. Windows agent activations fill a browser-task draft that still needs the user's Run action and cloud consent.
+
+The Windows helper is built and verified by `bun run stage:windows-ai`, also included in `stage:sidecars` and release builds. Preview features require their actual Windows runtime, hardware and access prerequisites. Identity-dependent APIs additionally need [the optional signed identity package](packaging/windows/README.md). Aion native preview is ARM64 Snapdragon/QNN only. Edge APIs are detected in the executing browser/WebView2 realm; an installed Edge version does not establish their availability. Availability refresh never downloads models or starts microphone capture.
+
+App Content Search indexes only the shipped public help/action catalogue. Personal file content stays in the confined SQLite index. Preview SDK provenance and distribution terms are recorded in [the helper notices](workers/windows-ai/THIRD_PARTY.md); local preview build evidence does not establish production redistribution rights.
+
+The [Windows and Edge verification report](docs/reports/2026-10-04-windows-ai-integrations.md) records the implemented controls, current host availability, local quality gates and remaining checks on eligible preview hardware.
 
 ## Verification and evidence
 
@@ -61,7 +75,7 @@ cargo test --all-features
 
 Generated evidence is checked in under `artifacts`:
 
-- `artifacts/screenshots/contact-sheet.png` and `manifest.json`: all 53 deterministic states.
+- `artifacts/screenshots/contact-sheet.png` and `manifest.json`: all 57 deterministic states.
 - `artifacts/recordings/manifest.json`: six silent WebM interaction studies.
 - `artifacts/performance/profile-summary.json`: machine-readable budgets, measurements, burst guards, browser version, and source SHA.
 - `artifacts/performance/interaction-trace.zip`: Playwright trace for the measured interaction run.
@@ -73,7 +87,7 @@ The NSIS installer is generated under `src-tauri/target/release/bundle/nsis`. Bu
 - `src/app`: composition, startup, route boundaries, and providers.
 - `src/design-system`: semantic tokens, themes, material, icons, type, primitives, and motion.
 - `src/features`: launcher, results, preview, onboarding, settings, activity, gateway, local-AI, diagnostics, and gallery surfaces.
-- `src/services`: search, answer, Computer Use, and settings contracts plus native, browser, deterministic, and unavailable adapters.
+- `src/services`: search, answer, Computer Use, Windows AI, Edge AI and settings contracts plus native, browser, deterministic, and unavailable adapters.
 - `src/platform`: Tauri/window abstractions.
 - `src-tauri/src`: native window lifecycle and confined local-file commands.
 - `tests/e2e`: keyboard, accessibility, DPI, visual, responsive, and performance acceptance.

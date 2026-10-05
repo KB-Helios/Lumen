@@ -51,7 +51,9 @@
       "binaries/libstdc++-6.dll": "libstdc++-6.dll",
       "binaries/libgcc_s_seh-1.dll": "libgcc_s_seh-1.dll",
       "binaries/libwinpthread-1.dll": "libwinpthread-1.dll",
-      "binaries/vector.dll": "vector.dll"
+      "binaries/vector.dll": "vector.dll",
+      "binaries/windows-ai/": "windows-ai/",
+      "../packaging/windows/Assets/": "Assets/"
     },
     "icon": [
       "icons/32x32.png",

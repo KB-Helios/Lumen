@@ -8,6 +8,7 @@ import type {SearchService} from '../../services/search/search-service';
 import type {SearchError} from '../../services/search/search.types';
 import {PreviewContent} from './PreviewContent';
 import {PreviewSkeleton} from './PreviewSkeleton';
+import {PreviewAiTools} from '../windows-ai/PreviewAiTools';
 import {usePreviewController, type PreviewController} from './usePreviewController';
 
 export type PreviewPresentation = 'pane' | 'dialog';
@@ -79,6 +80,7 @@ function PreviewFrame({
             transition={{duration: reducedMotion ? 0 : motionTokens.duration.preview}}
           >
             <PreviewState controller={controller} reducedMotion={reducedMotion} />
+            {controller.preview ? <PreviewAiTools preview={controller.preview} /> : null}
           </motion.div>
         </AnimatePresence>
       </div>

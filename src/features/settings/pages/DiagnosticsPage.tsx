@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {WindowsAiDiagnostics} from '../../windows-ai/WindowsAiControls';
 
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../../design-system/primitives/LumenButton';
@@ -110,6 +111,7 @@ export function DiagnosticsPage({
         <LumenButton aria-label="Export diagnostics" isDisabled={busy} size="small" variant="quiet" onPress={() => void exportAll()}><LumenUiIcon name="download" size="small" /> Export</LumenButton>
       </div>
       {message ? <SettingsCallout>{message}</SettingsCallout> : lastExport ? <SettingsCallout>{lastExport.filename} is prepared for review.</SettingsCallout> : null}
+      <WindowsAiDiagnostics />
     </SettingsPage>
   );
 }

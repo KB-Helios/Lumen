@@ -31,6 +31,7 @@ function glyphFor(kind: FileKind) {
         </Sheet>
       );
     case 'document':
+    case 'app-content':
       return (
         <Sheet>
           <path d="M8.5 11h7M8.5 14h7M8.5 17h5" />

@@ -15,8 +15,9 @@
     "profile": "node scripts/performance-profile.mjs",
     "capture:gallery": "node scripts/capture-gallery.mjs",
     "record:interactions": "node scripts/record-interactions.mjs",
-    "stage:sidecars": "bun scripts/stage-sidecars.ts",
+    "stage:sidecars": "bun scripts/stage-sidecars.ts && bun run stage:windows-ai",
     "stage:computer-use": "bun scripts/stage-computer-use.ts",
+    "stage:windows-ai": "bun scripts/stage-windows-ai.ts",
     "preview": "vite preview",
     "tauri": "tauri"
   },
