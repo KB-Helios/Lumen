@@ -14,6 +14,7 @@ pub struct CliproxyClient {
 }
 
 impl CliproxyClient {
+    /// Create an authenticated client using the fixed loopback management URL.
     pub fn new(mgmt_key: String) -> Self {
         Self {
             base: MANAGEMENT_BASE.to_owned(),
@@ -32,10 +33,12 @@ impl CliproxyClient {
         }
     }
 
+    /// Return the configured management API base URL.
     pub fn base(&self) -> &str {
         &self.base
     }
 
+    /// Send an authenticated GET and decode a successful JSON response.
     async fn get(&self, path: &str) -> Result<Value, String> {
         let response = self
             .client
@@ -177,6 +180,8 @@ pub struct OAuthStart {
 }
 
 impl OAuthStart {
+    /// Parse OAuth URL and state, rejecting missing or blank required fields.
+    /// Trim the optional user code and omit it when empty.
     fn from_sidecar(value: &Value) -> Result<Self, String> {
         let url = value
             .get("url")
@@ -254,6 +259,7 @@ fn provider_aliases(provider: &str) -> Vec<String> {
     }
 }
 
+/// Match an enabled credential entry against normalized provider aliases.
 fn entry_matches_provider(entry: &Value, aliases: &[String]) -> bool {
     if entry
         .get("disabled")
@@ -294,6 +300,7 @@ fn credentials_linked(payload: &Value, provider: &str) -> bool {
         .any(|entry| entry_matches_provider(entry, &aliases))
 }
 
+/// Reject unsuccessful HTTP status codes, then decode the response as JSON.
 async fn check_status(response: reqwest::Response) -> Result<Value, String> {
     let status = response.status();
     if !status.is_success() {
@@ -327,20 +334,24 @@ pub fn resolve_mgmt_key(app: &tauri::AppHandle) -> Result<String, String> {
     Ok(key)
 }
 
+/// Create a loopback client using the management key resolved for this app.
 fn client_for(app: &tauri::AppHandle) -> Result<CliproxyClient, String> {
     Ok(CliproxyClient::new(resolve_mgmt_key(app)?))
 }
 
+/// Fetch the sidecar configuration using the app's management credentials.
 #[tauri::command]
 pub async fn cliproxy_get_config(app: tauri::AppHandle) -> Result<Value, String> {
     client_for(&app)?.get_config().await
 }
 
+/// Forward a configuration patch to the authenticated sidecar API.
 #[tauri::command]
 pub async fn cliproxy_patch_config(app: tauri::AppHandle, patch: Value) -> Result<Value, String> {
     client_for(&app)?.patch_config(patch).await
 }
 
+/// Fetch the sidecar credential metadata through the native command boundary.
 #[tauri::command]
 pub async fn cliproxy_list_credentials(app: tauri::AppHandle) -> Result<Value, String> {
     client_for(&app)?.list_credentials().await

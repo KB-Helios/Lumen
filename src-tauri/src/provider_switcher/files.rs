@@ -176,6 +176,7 @@ fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>, String> {
     }
 }
 
+/// Reject an existing symlink at the given path; allow missing paths.
 fn reject_symlink(path: &Path) -> Result<(), String> {
     match std::fs::symlink_metadata(path) {
         Ok(meta) if meta.file_type().is_symlink() => Err(format!(
@@ -188,6 +189,8 @@ fn reject_symlink(path: &Path) -> Result<(), String> {
     }
 }
 
+/// Normalize path components lexically for containment comparisons.
+/// ASCII case is folded on Windows; no filesystem lookup is performed.
 fn comparable_key(path: &Path) -> String {
     let mut parts: Vec<String> = Vec::new();
     for component in path.components() {
@@ -344,16 +347,19 @@ pub struct DeviceStore {
 }
 
 impl DeviceStore {
+    /// Create a journal store rooted at the supplied directory without writing files.
     pub fn new(root: PathBuf) -> Self {
         Self { root }
     }
 
+    /// Locate the device journal under the supplied home directory.
     pub fn for_home(home: &Path) -> Self {
         Self {
             root: paths::device_dir(home),
         }
     }
 
+    /// Return the path to this store's live-state journal.
     pub fn state_path(&self) -> PathBuf {
         self.root.join("live-state.json")
     }
@@ -387,6 +393,7 @@ pub struct Pending {
     pub published: bool,
 }
 
+/// Omit a false publish marker when serializing a pending operation.
 fn is_false(value: &bool) -> bool {
     !*value
 }
@@ -402,6 +409,7 @@ struct AppLiveState {
 }
 
 impl AppLiveState {
+    /// Report whether an app has no pending intent, current provider, or extra fields.
     fn is_empty(&self) -> bool {
         self.pending.is_none() && self.current.is_none() && self.extra.is_empty()
     }
@@ -417,12 +425,15 @@ struct LiveState {
     extra: Map<String, Value>,
 }
 
+/// Supply the current journal version when deserializing a missing version field.
 fn state_version() -> u32 {
     STATE_VERSION
 }
 
 static STATE_LOCK: Mutex<()> = Mutex::new(());
 
+/// Read the journal, defaulting when absent or malformed.
+/// Attempt to move malformed JSON aside before returning an empty state.
 fn load_state(store: &DeviceStore) -> Result<LiveState, String> {
     let path = store.state_path();
     let bytes = match std::fs::read(&path) {
@@ -447,12 +458,15 @@ fn load_state(store: &DeviceStore) -> Result<LiveState, String> {
     }
 }
 
+/// Serialize and atomically replace the journal with private file permissions.
 fn save_state(store: &DeviceStore, state: &LiveState) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(state)
         .map_err(|error| format!("cannot serialize live state: {error}"))?;
     atomic_write(&store.state_path(), &bytes, true)
 }
 
+/// Serialize access to a journal mutation, prune empty app entries, and save it.
+/// Return the mutation result after the updated state has been persisted.
 fn update_state<R>(
     store: &DeviceStore,
     change: impl FnOnce(&mut LiveState) -> R,
@@ -474,6 +488,7 @@ pub fn pending(store: &DeviceStore, app: &str) -> Result<Option<Pending>, String
         .and_then(|state| state.pending.clone()))
 }
 
+/// Persist or clear the pending write intent for an app.
 fn set_pending(store: &DeviceStore, app: &str, intent: Option<Pending>) -> Result<(), String> {
     update_state(store, |state| {
         state.apps.entry(app.to_string()).or_default().pending = intent;
@@ -489,6 +504,7 @@ pub fn current(store: &DeviceStore, app: &str) -> Result<Option<String>, String>
         .and_then(|state| state.current.clone()))
 }
 
+/// Persist or clear the current provider id for an app.
 fn set_current(store: &DeviceStore, app: &str, id: Option<String>) -> Result<(), String> {
     update_state(store, |state| {
         state.apps.entry(app.to_string()).or_default().current = id;
@@ -507,6 +523,7 @@ pub struct LiveFile {
 }
 
 impl LiveFile {
+    /// Describe a live file whose staged replacement requires mode `0600` on Unix.
     pub fn private(path: PathBuf) -> Self {
         Self {
             path,
@@ -514,6 +531,7 @@ impl LiveFile {
         }
     }
 
+    /// Describe a live file without requesting private Unix permissions.
     pub fn shared(path: PathBuf) -> Self {
         Self {
             path,
@@ -532,6 +550,7 @@ pub struct Planned {
 }
 
 impl Planned {
+    /// Compare the original and planned digests, including absent-file states.
     pub fn is_noop(&self) -> bool {
         self.pre == self.planned
     }
@@ -585,12 +604,14 @@ fn publish(file: &PendingFile) -> Result<(), String> {
     }
 }
 
+/// Attempt to delete every staged temporary file, ignoring cleanup errors.
 fn discard_all(staged: &[Option<PathBuf>]) {
     for path in staged.iter().flatten() {
         let _ = std::fs::remove_file(path);
     }
 }
 
+/// Attempt to delete the temporary files referenced by an intent.
 fn discard_pending_files(intent: &Pending) {
     for file in &intent.files {
         if let Some(staged) = &file.staged {
@@ -599,6 +620,7 @@ fn discard_pending_files(intent: &Pending) {
     }
 }
 
+/// Build a journal entry from the planned digests and optional staged path.
 fn pending_file(planned: &Planned, staged: Option<PathBuf>) -> PendingFile {
     PendingFile {
         path: planned.file.path.clone(),
@@ -814,6 +836,7 @@ pub struct ProviderTarget {
 }
 
 impl ProviderTarget {
+    /// Validate nonblank, single-line target fields and retain their original values.
     pub fn new(id: &str, base_url: &str, api_key: &str, model: &str) -> Result<Self, String> {
         for (label, value) in [
             ("id", id),
@@ -837,12 +860,14 @@ impl ProviderTarget {
     }
 }
 
+/// Parse UTF-8 JSON with path-specific errors; callers validate the root shape.
 fn parse_json_object(path: &Path, bytes: &[u8]) -> Result<Value, String> {
     let text =
         std::str::from_utf8(bytes).map_err(|_| format!("{} is not UTF-8 text", path.display()))?;
     serde_json::from_str(text).map_err(|error| format!("cannot parse {}: {error}", path.display()))
 }
 
+/// Serialize JSON as indented UTF-8 bytes with a trailing newline.
 fn pretty(value: &Value) -> Result<Vec<u8>, String> {
     serde_json::to_string_pretty(value)
         .map(|mut text| {
@@ -852,6 +877,7 @@ fn pretty(value: &Value) -> Result<Vec<u8>, String> {
         .map_err(|error| format!("cannot serialize config: {error}"))
 }
 
+/// Reject blank ids, path separators, traversal markers, and control characters.
 fn validate_provider_id(id: &str) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err("provider id cannot be empty".to_owned());
@@ -869,6 +895,8 @@ fn validate_provider_id(id: &str) -> Result<(), String> {
 // Claude Code (`settings.json`)
 // ---------------------------------------------------------------------------
 
+/// Replace or clear Claude connection fields in memory, preserving other keys.
+/// Reject invalid JSON shapes; clearing an absent file returns `None`.
 fn apply_claude_bytes(
     pre: Option<&[u8]>,
     path: &Path,
@@ -976,6 +1004,7 @@ fn toml_key(line: &str) -> Option<String> {
     }
 }
 
+/// Match a section and key against the nested Codex fields owned by switching.
 fn is_codex_nested_floor(section: &[String], key: &str) -> bool {
     CODEX_FLOOR_NESTED.iter().any(|path| {
         path.len() >= 2
@@ -1009,6 +1038,8 @@ fn toml_string(value: &str) -> String {
     out
 }
 
+/// Replace or clear owned Codex fields and the custom provider table in memory.
+/// Preserve other lines and the input newline style; reject non-UTF-8 bytes.
 fn apply_codex_toml(
     pre: Option<&[u8]>,
     path: &Path,
@@ -1161,6 +1192,8 @@ fn dotenv_key(line: &str) -> Option<&str> {
     }
 }
 
+/// Replace or clear Gemini connection variables in memory, removing duplicates.
+/// Preserve unrelated rows and newline style; reject non-UTF-8 bytes.
 fn apply_gemini_env(
     pre: Option<&[u8]>,
     path: &Path,
@@ -1377,6 +1410,7 @@ pub fn upsert_openclaw(home: &Path, id: &str, config: Value) -> Result<PathBuf, 
     Ok(path)
 }
 
+/// Journal removal of an OpenCode provider node; return false if it is absent.
 fn remove_opencode_provider(home: &Path, id: &str) -> Result<bool, String> {
     validate_provider_id(id)?;
     let path = paths::opencode_config(home);
@@ -1405,6 +1439,7 @@ fn remove_opencode_provider(home: &Path, id: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Journal removal of an OpenClaw provider node; return false if it is absent.
 fn remove_openclaw_provider(home: &Path, id: &str) -> Result<bool, String> {
     validate_provider_id(id)?;
     let path = paths::openclaw_config(home);
@@ -1434,6 +1469,8 @@ fn remove_openclaw_provider(home: &Path, id: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Publish planned removal bytes and clear a matching current provider id.
+/// Return false when the planned file contents are unchanged.
 fn clear_live_file(
     home: &Path,
     app: &str,

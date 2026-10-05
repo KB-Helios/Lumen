@@ -18,6 +18,7 @@ struct RunningChild {
 }
 
 impl Drop for RunningChild {
+    /// Kill and reap the child, then close its Windows Job handle when present.
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -42,6 +43,8 @@ pub struct ProviderSwitcherSupervisor {
 }
 
 impl ProviderSwitcherSupervisor {
+    /// Select the packaged binary when present, otherwise the staged binary.
+    /// Record the runtime config path without creating files or starting the process.
     pub fn new(packaged: &Path, staged: &Path, runtime_dir: &Path) -> Self {
         let binary = if packaged.is_file() {
             packaged.to_path_buf()
@@ -56,6 +59,8 @@ impl ProviderSwitcherSupervisor {
         }
     }
 
+    /// Start the selected binary with the runtime config unless its child is running.
+    /// Report a missing binary, process error, or Windows Job assignment failure.
     pub fn start(&mut self) -> Result<(), String> {
         if let Some(running) = self.child.as_mut() {
             let still_running = running
@@ -99,11 +104,13 @@ impl ProviderSwitcherSupervisor {
         Ok(())
     }
 
+    /// Drop the current child and start a new sidecar process.
     pub fn restart(&mut self) -> Result<(), String> {
         self.child = None;
         self.start()
     }
 
+    /// Return whether the loopback health endpoint responds with a successful status.
     pub async fn health(&self) -> bool {
         reqwest::get(health_url(CLIPROXY_PORT))
             .await
@@ -111,6 +118,7 @@ impl ProviderSwitcherSupervisor {
     }
 }
 
+/// Check sidecar health while holding the managed supervisor lock.
 #[tauri::command]
 pub async fn cliproxy_health(
     state: tauri::State<'_, tokio::sync::Mutex<ProviderSwitcherSupervisor>>,
@@ -118,6 +126,7 @@ pub async fn cliproxy_health(
     Ok(state.lock().await.health().await)
 }
 
+/// Restart the sidecar while holding the managed supervisor lock.
 #[tauri::command]
 pub async fn cliproxy_restart(
     state: tauri::State<'_, tokio::sync::Mutex<ProviderSwitcherSupervisor>>,

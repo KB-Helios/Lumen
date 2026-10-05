@@ -6,6 +6,7 @@ export interface ProvidersOverview {
   error: string | null;
 }
 
+/** Load health and config concurrently, converting failures into an error overview. */
 export async function loadProvidersOverview(service: ProvidersService): Promise<ProvidersOverview> {
   try {
     const [healthy, config] = await Promise.all([service.health(), service.getConfig()]);

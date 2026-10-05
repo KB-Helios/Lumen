@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+/// Reject blank or placeholder keys and characters unsafe for this YAML template.
 fn reject_bad_key(label: &str, key: &str) -> Result<(), String> {
     if key.trim().is_empty() {
         return Err(format!("{label} cannot be empty"));
@@ -73,10 +74,13 @@ pub fn write_minimal_config(
     Ok(config_path)
 }
 
+/// Detect the placeholder key marker in the proposed config directory.
 fn auth_dir_placeholder(dir: &Path) -> bool {
     dir.as_os_str().to_string_lossy().contains("your-api-key")
 }
 
+/// Write and sync a sibling temporary file, then rename it over the destination.
+/// Return an error if creation, writing, syncing, or replacement fails.
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::io::Write;
     let tmp = path.with_extension(format!("tmp.{}", std::process::id()));

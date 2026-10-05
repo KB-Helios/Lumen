@@ -42,6 +42,7 @@ export interface OAuthPoll {
  * is never returned to the webview.
  */
 export const providersApi = {
+  /** Submit a provider to the native add command and return changed file paths. */
   add(input: AddProviderInput): Promise<string[]> {
     return invoke<string[]>('add_provider', {
       app: input.app,
@@ -51,6 +52,7 @@ export const providersApi = {
       model: input.model,
     });
   },
+  /** Submit provider edits, sending an empty key when the stored key should be retained. */
   update(input: UpdateProviderInput): Promise<void> {
     return invoke<void>('update_provider', {
       app: input.app,
