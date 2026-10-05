@@ -344,6 +344,8 @@ pub fn run() {
             provider_switcher::client::cliproxy_get_config,
             provider_switcher::client::cliproxy_patch_config,
             provider_switcher::client::cliproxy_list_credentials,
+            provider_switcher::files::switch_provider,
+            provider_switcher::files::remove_from_live,
             windows_ai::windows_ai_status,
             windows_ai::windows_ai_update_preferences,
             windows_ai::windows_ai_prepare,
