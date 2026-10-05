@@ -8,7 +8,7 @@ export function PreviewSkeleton({reducedMotion = false}: {reducedMotion?: boolea
       <div className="h-3 w-[78%] rounded-pill bg-[var(--einui-command-row)]" />
       <div className="h-3 w-full rounded-pill bg-[var(--einui-command-row)]" />
       <div className="h-3 w-[42%] rounded-pill bg-[var(--einui-command-row)]" />
-      {reducedMotion ? null : <motion.span aria-hidden="true" animate={{x: ['-110%', '310%']}} className="pointer-events-none absolute inset-y-0 left-0 w-[35%] bg-[linear-gradient(100deg,transparent_0%,var(--einui-command-row-selected)_50%,transparent_100%)]" transition={{duration: 1.4, ease: 'easeInOut', repeat: Infinity}} />}
+      {reducedMotion ? null : <motion.span aria-hidden="true" animate={{transform: ['translateX(-110%)', 'translateX(310%)']}} className="pointer-events-none absolute inset-y-0 left-0 w-[35%] bg-[linear-gradient(100deg,transparent_0%,var(--einui-command-row-selected)_50%,transparent_100%)]" transition={{duration: 1.4, ease: 'easeInOut', repeat: Infinity}} />}
     </div>
   );
 }

@@ -83,7 +83,8 @@ export function ActivityIndicator({
               progressiveLoad: false,
             },
           });
-          instance.setSubframe(false);
+          // Interpolate the 60 fps artwork at the display's rAF cadence.
+          instance.setSubframe(true);
         } catch {
           instance?.destroy();
           instance = undefined;

@@ -79,7 +79,7 @@ export function DiagnosticsPage({
         <DiagnosticItem label="Tauri">{snapshot.tauriVersion}</DiagnosticItem>
         <DiagnosticItem label="Monitor">{snapshot.monitor}</DiagnosticItem>
         <DiagnosticItem label="DPI scale">{Math.round(snapshot.dpiScale * 100)}%</DiagnosticItem>
-        <DiagnosticItem label="Refresh estimate">{snapshot.refreshRateHz} Hz</DiagnosticItem>
+        <DiagnosticItem label="Refresh estimate">{snapshot.refreshRateHz === null ? 'Not measured' : `${snapshot.refreshRateHz} Hz`}</DiagnosticItem>
       </SettingSection>
       <SettingSection title="Rendering and activity">
         <DiagnosticItem label="Active animations">{snapshot.activeAnimations}</DiagnosticItem>

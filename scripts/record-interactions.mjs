@@ -73,6 +73,16 @@ async function record(baseUrl) {
   };
 
   try {
+    // Compile the development route before video capture starts; a cold Vite
+    // module graph otherwise leaves a long blank lead-in in the first study.
+    const warmup = await browser.newPage();
+    try {
+      await warmup.goto(`${baseUrl}/?onboarded=1&service=memory`);
+      await warmup.getByRole('searchbox', {name: 'Search files'}).waitFor();
+      await warmup.evaluate(() => document.fonts.ready);
+    } finally {
+      await warmup.close();
+    }
     await add({
       id: 'launcher-search',
       file: 'launcher-search.webm',

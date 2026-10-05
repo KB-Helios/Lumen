@@ -42,11 +42,11 @@ export function DiagnosticsOverlay() {
           </LumenIconButton>
         </div>
       </div>
-      <DiagnosticItem label="Refresh estimate">{snapshot.refreshRateHz} Hz</DiagnosticItem>
+      <DiagnosticItem label="Refresh estimate">{snapshot.refreshRateHz === null ? 'Not measured' : `${snapshot.refreshRateHz} Hz`}</DiagnosticItem>
       <DiagnosticItem label="DPI scale">{Math.round(snapshot.dpiScale * 100)}%</DiagnosticItem>
       <DiagnosticItem label="React commit">{snapshot.reactCommitMs.toFixed(2)} ms</DiagnosticItem>
-      <DiagnosticItem label="Input to paint">{latestInput ? `${latestInput.durationMs.toFixed(2)} ms` : 'Awaiting sample'}</DiagnosticItem>
-      <DiagnosticItem label="Selection to paint">{latestSelection ? `${latestSelection.durationMs.toFixed(2)} ms` : 'Awaiting sample'}</DiagnosticItem>
+      <DiagnosticItem label="Input handler">{latestInput ? `${latestInput.durationMs.toFixed(2)} ms` : 'Awaiting sample'}</DiagnosticItem>
+      <DiagnosticItem label="Selection to next frame">{latestSelection ? `${latestSelection.durationMs.toFixed(2)} ms` : 'Awaiting sample'}</DiagnosticItem>
       <DiagnosticItem label="Browser long tasks (50 ms+)">{snapshot.browserLongTasks.length}</DiagnosticItem>
       <DiagnosticItem label="Active animations">{snapshot.activeAnimations}</DiagnosticItem>
     </aside>

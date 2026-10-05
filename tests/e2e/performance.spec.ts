@@ -100,10 +100,10 @@ async function hideAndReshowLauncher(page: Page, search: ReturnType<Page['getByR
 async function measureFrameCadence(page: Page, sampleCount = 60) {
   return page.evaluate(async (count) => {
     const intervals: number[] = [];
-    let previous = performance.now();
+    let previous: number | undefined;
     await new Promise<void>((resolve) => {
       const sample = (now: number) => {
-        intervals.push(now - previous);
+        if (previous !== undefined && now > previous) intervals.push(now - previous);
         previous = now;
         if (intervals.length >= count) resolve();
         else requestAnimationFrame(sample);
@@ -146,12 +146,13 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
   for (let index = 1; index <= 30; index += 1) {
     await search.fill(`report-${index}`);
     await waitForSamples(page, 'input-response', index);
+    await waitForSamples(page, 'input-next-frame', index);
     await page.waitForTimeout(40);
   }
+  const inputMetrics = await readMetrics(page);
   await search.fill('report');
   await expect(page.getByRole('grid', {name: 'Search results'})).toBeVisible();
   const frameCadence = await measureFrameCadence(page);
-  const inputMetrics = await readMetrics(page);
   const observedFrameBudget = Math.max(frameCadence.p95Ms, 1000 / 240) +
     frameSchedulingToleranceMs;
   const inputP95 = percentile(
@@ -159,6 +160,10 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
     0.95,
   );
   expect(inputP95).toBeLessThan(observedFrameBudget);
+  const inputFrameSamples = inputMetrics.timings
+    .filter((sample) => sample.name === 'input-next-frame').map((sample) => sample.durationMs);
+  expect(inputFrameSamples).toHaveLength(30);
+  expect(percentile(inputFrameSamples, 0.95)).toBeLessThan(observedFrameBudget);
 
   await resetMetrics(page);
   const rapidBurst = await dispatchRapidInputBurst(search);

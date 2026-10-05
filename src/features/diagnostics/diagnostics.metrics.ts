@@ -27,6 +27,7 @@ export function captureLog(message: string) {
   trim(logs);
 }
 
+// Historical name: the endpoint is the next rAF callback, before presentation.
 export function measureAfterPaint(name: TimingSample['name'], startedAt: number) {
   let cancelled = false;
   const finish = () => {

@@ -72,7 +72,7 @@ describe('ActivityIndicator', () => {
         loop: true,
         renderer: 'svg',
       }));
-      expect(animation.setSubframe).toHaveBeenCalledWith(false);
+      expect(animation.setSubframe).toHaveBeenCalledWith(true);
     });
 
     rerender(<ActivityIndicator active={false} reducedMotion={false} tone="success" />);
