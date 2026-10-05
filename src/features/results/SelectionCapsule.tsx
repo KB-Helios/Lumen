@@ -25,15 +25,18 @@ export function SelectionCapsule({
   const hasPositioned = useRef(false);
 
   useLayoutEffect(() => {
-    let observer: ResizeObserver | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+    let styleObserver: MutationObserver | undefined;
     let collectionObserver: MutationObserver | undefined;
     let selectionFrame: number | undefined;
     let pendingSelectedId = selectedId;
     let active = true;
     const updateSelection = (fileId: string | null) => {
       const container = containerRef.current;
-      observer?.disconnect();
-      observer = undefined;
+      resizeObserver?.disconnect();
+      resizeObserver = undefined;
+      styleObserver?.disconnect();
+      styleObserver = undefined;
       collectionObserver?.disconnect();
       collectionObserver = undefined;
       const selected = fileId
@@ -70,8 +73,13 @@ export function SelectionCapsule({
       };
       measure();
       if (typeof ResizeObserver === 'function') {
-        observer = new ResizeObserver(measure);
-        observer.observe(selected);
+        resizeObserver = new ResizeObserver(measure);
+        resizeObserver.observe(selected);
+      }
+      // Observe inline style changes (transform) for virtualized row position updates.
+      if (typeof MutationObserver === 'function') {
+        styleObserver = new MutationObserver(measure);
+        styleObserver.observe(selected, {attributes: true, attributeFilter: ['style']});
       }
     };
     // Child layout effects run before the containing viewport's ref is attached.
@@ -92,7 +100,8 @@ export function SelectionCapsule({
     return () => {
       active = false;
       if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
-      observer?.disconnect();
+      resizeObserver?.disconnect();
+      styleObserver?.disconnect();
       collectionObserver?.disconnect();
       unsubscribe();
     };
