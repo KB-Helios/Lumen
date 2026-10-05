@@ -1,8 +1,8 @@
 ﻿{
-    "recordedAt":  "2026-10-04T17:29:30.1368874Z",
+    "recordedAt":  "2026-10-05T08:59:40.7281234Z",
     "installer":  "Lumen_0.1.0_x64-setup.exe",
-    "installerBytes":  195632869,
-    "installerSha256":  "79106979c47094f4b16721a72d8c0f39fd4aaa2f6bef3e090b182915d841c36c",
+    "installerBytes":  195610620,
+    "installerSha256":  "4b06cb652e05e10c9958a754abbbf89672dd568ae1f5ff3bebd5908c9ed53671",
     "signatureStatus":  "NotSigned",
     "cleanProfilePreflight":  true,
     "exactVector":  true,

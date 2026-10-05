@@ -59,7 +59,7 @@ try {
     Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stage "AppxManifest.xml")
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Assets") -Destination (Join-Path $stage "Assets") -Recurse
     # Sparse packages reference external executables; /nv is required by Microsoft.
-    rtk proxy $MakeAppxPath pack /o /nv /d $stage /p $output
+    & $MakeAppxPath pack /o /nv /d $stage /p $output
     if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed to build the sparse identity package." }
     Write-Output "Built unsigned identity package: $output"
 } finally {

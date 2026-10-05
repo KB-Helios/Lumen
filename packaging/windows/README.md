@@ -7,10 +7,10 @@ Package identity is `Bridgehammer.Lumen`, publisher `CN=Bridgehammer`. Applicati
 From a developer PowerShell at the repository root:
 
 ```powershell
-rtk proxy powershell -NoProfile -File packaging/windows/Build-Identity.ps1 -ValidateOnly
-rtk proxy powershell -NoProfile -File packaging/windows/Build-Identity.ps1
-rtk proxy powershell -NoProfile -File packaging/windows/Sign-Identity.ps1 -PackagePath packaging/windows/output/Lumen.Identity.msix -CertificateThumbprint <existing-certificate-thumbprint>
-rtk proxy powershell -NoProfile -File packaging/windows/Register-Identity.ps1 -PackagePath packaging/windows/output/Lumen.Identity.msix -InstallDirectory <actual-Lumen-install-directory>
+powershell -NoProfile -File packaging/windows/Build-Identity.ps1 -ValidateOnly
+powershell -NoProfile -File packaging/windows/Build-Identity.ps1
+powershell -NoProfile -File packaging/windows/Sign-Identity.ps1 -PackagePath packaging/windows/output/Lumen.Identity.msix -CertificateThumbprint <existing-certificate-thumbprint>
+powershell -NoProfile -File packaging/windows/Register-Identity.ps1 -PackagePath packaging/windows/output/Lumen.Identity.msix -InstallDirectory <actual-Lumen-install-directory>
 ```
 
 The build uses the installed Windows SDK MakeAppx tool and the documented `/nv` switch because executable locations are external. Signing uses an existing CurrentUser/My certificate; registration requires a signature already trusted by Windows. Assets are included inside the identity package and also bundled with NSIS. Restart Lumen and refresh Diagnostics after registration. Verify package identity for both main and helper processes before interpreting a Windows API as usable.
@@ -22,7 +22,7 @@ App Actions declares a URI action with `agentName` and `prompt` Text entities. I
 To remove the optional identity for the current user, first unregister Lumen's agent in the app, close Lumen, then run:
 
 ```powershell
-rtk proxy powershell -NoProfile -File packaging/windows/Unregister-Identity.ps1
+powershell -NoProfile -File packaging/windows/Unregister-Identity.ps1
 ```
 
 References: [external-location identity](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps), [fusion manifests](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests), [App Action package declarations](https://learn.microsoft.com/en-us/windows/ai/app-actions/actions-provider-manifest), [Agent Launchers](https://learn.microsoft.com/en-us/windows/ai/agent-launchers/agents-get-started).

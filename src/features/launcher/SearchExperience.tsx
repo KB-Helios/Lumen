@@ -124,7 +124,10 @@ export function SearchExperience({
   const [actionMessage, setActionMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const windowsSnapshot = useWindowsAiStore((state) => state.snapshot);
-  const [externalAgentId, setExternalAgentId] = useState('');
+  const externalAgentId = useLauncherStore((state) => state.externalAgentId);
+  const setExternalAgentId = useLauncherStore((state) => state.setExternalAgentId);
+  const agentActivationId = useLauncherStore((state) => state.agentActivationId);
+  const browserRunPending = useRef(false);
   const [externalAgentBusy, setExternalAgentBusy] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
   const voice = useRef<DictationSession | null>(null);
@@ -137,10 +140,10 @@ export function SearchExperience({
   useEffect(() => {
     if (!visible || !voiceReady) stopVoice();
     return stopVoice;
-  }, [intent, stopVoice, visible, voiceReady]);
+  }, [agentActivationId, intent, stopVoice, visible, voiceReady]);
   useEffect(() => {
     if (!windowsSnapshot?.preferences.agentsEnabled || !windowsSnapshot.agents.some((agent) => agent.id === externalAgentId)) setExternalAgentId('');
-  }, [externalAgentId, windowsSnapshot]);
+  }, [externalAgentId, setExternalAgentId, windowsSnapshot]);
   const toggleVoice = async () => {
     if (voiceActive) { stopVoice(); return; }
     const generation = ++voiceGeneration.current;
@@ -286,22 +289,38 @@ export function SearchExperience({
     await presentation;
   }, [onOpenSettings, setActiveSettingsPage, windowService]);
 
+  const runLumenTask = useCallback(async (task: string) => {
+    if (!task.trim() || browserRunPending.current || ['starting', 'running', 'approval'].includes(computerUse.phase)) return;
+    browserRunPending.current = true;
+    const activationId = useLauncherStore.getState().agentActivationId;
+    try { await computerUse.start(task); }
+    finally {
+      browserRunPending.current = false;
+      if (activationId) useLauncherStore.getState().finishAgentActivation(activationId);
+    }
+  }, [computerUse.phase, computerUse.start]);
+
   const handleStartComputerUse = useCallback(() => {
-    void computerUse.start(inputRef.current?.value ?? useQueryStore.getState().committed);
-  }, [computerUse.start]);
+    void runLumenTask(inputRef.current?.value ?? useQueryStore.getState().committed);
+  }, [runLumenTask]);
 
   const handleRunExternalAgent = useCallback(async (task: string) => {
-    if (!externalAgentId || externalAgentBusy) return;
+    const {externalAgentId: recipient, agentActivationId: activationId} = useLauncherStore.getState();
+    if (!recipient || externalAgentBusy) return;
     setExternalAgentBusy(true); setActionMessage('');
-    try { const result = await windowsAiService.invokeAgent(externalAgentId, task); setActionMessage(result.message); }
+    try {
+      const result = await windowsAiService.invokeAgent(recipient, task);
+      setActionMessage(result.message);
+      if (result.ok && activationId) useLauncherStore.getState().finishAgentActivation(activationId);
+    }
     catch { setActionMessage('The selected Windows agent could not accept the prompt. Refresh its availability in settings.'); }
     finally { setExternalAgentBusy(false); }
-  }, [externalAgentBusy, externalAgentId]);
+  }, [externalAgentBusy]);
 
   const handleSubmitComputerUse = useCallback((task: string) => {
-    if (externalAgentId) void handleRunExternalAgent(task);
-    else void computerUse.start(task);
-  }, [computerUse.start, externalAgentId, handleRunExternalAgent]);
+    if (useLauncherStore.getState().externalAgentId) void handleRunExternalAgent(task);
+    else void runLumenTask(task);
+  }, [handleRunExternalAgent, runLumenTask]);
 
   const handleRemoveFilter = useCallback((filter: SearchFilter) => {
     toggleFilter(filter);

@@ -15,7 +15,7 @@ const publish = join(worker, '.build', runtime);
 const destination = join(workspace, 'src-tauri', 'binaries', 'windows-ai');
 
 async function run(args: string[], env?: Record<string, string>) {
-  const child = Bun.spawn(['rtk', 'proxy', ...args], {cwd: workspace, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', env: {...process.env, DOTNET_NOLOGO: '1', DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', ...env}});
+  const child = Bun.spawn(args, {cwd: workspace, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', env: {...process.env, DOTNET_NOLOGO: '1', DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', ...env}});
   if (await child.exited !== 0) throw new Error(`Windows AI build failed: ${args[0]}`);
 }
 if (arch === 'arm64') {

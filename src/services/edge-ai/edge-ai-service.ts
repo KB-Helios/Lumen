@@ -374,7 +374,9 @@ export class EdgeAiService {
     return boundedProbe(id === 'edgeSpeech' ? this.speechApi().available(opts) : this.modelApi(id).availability(opts), signal);
   }
 
-  private revoke(prefs: WindowsAiPreferences): void {
+  /** Revoke active work synchronously, without waiting for capability probes. */
+  revoke(value: WindowsAiPreferences): void {
+    const prefs = preferences(value);
     for (const operation of this.operations.values()) if (!enabled(operation.featureId, prefs) || (operation.preparing && !prefs.modelDownloadsAllowed)) operation.controller.abort(abortError());
     if (!enabled('edgeSpeech', prefs)) this.dictation?.controller.abort(abortError());
   }

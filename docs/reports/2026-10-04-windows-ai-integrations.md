@@ -2,6 +2,8 @@
 
 Implemented and verified locally on 2026-10-04 in `codex/windows-ai-integrations`, under the approved native bridge plus detected Edge API design. Preview capabilities are included with actual availability checks. The existing Tauri application and NSIS installer remain the distribution path; identity-dependent integrations have an optional sparse package.
 
+The results below describe the initial 2026-10-04 verification. The checked-in smoke, gallery, recordings and profile were subsequently refreshed for the [2026-10-05 PR review fixes](2026-10-05-windows-ai-review-fixes.md); that report records their current measurements and installer hash.
+
 ## Feature coverage and controls
 
 | Integration | Implemented behavior | User controls |

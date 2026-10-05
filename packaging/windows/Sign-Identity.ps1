@@ -20,7 +20,7 @@ if (-not $SignToolPath) {
 if (-not $SignToolPath -or -not (Test-Path -LiteralPath $SignToolPath -PathType Leaf)) {
     throw "Windows SDK SignTool.exe is unavailable. Supply -SignToolPath from an installed SDK."
 }
-rtk proxy $SignToolPath sign /fd SHA256 /sha1 $CertificateThumbprint $package
+& $SignToolPath sign /fd SHA256 /sha1 $CertificateThumbprint $package
 if ($LASTEXITCODE -ne 0) { throw "SignTool did not sign the identity package." }
-rtk proxy $SignToolPath verify /pa $package
+& $SignToolPath verify /pa $package
 if ($LASTEXITCODE -ne 0) { throw "The identity signature did not verify against the existing trust store." }

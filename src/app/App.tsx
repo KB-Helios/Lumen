@@ -249,19 +249,41 @@ export function App({
   useEffect(() => {
     if (foundationPreview || galleryPreview || !settingsHydrated) return;
     let active = true;
+    let requested = true;
     const consume = async () => {
+      const launcher = useLauncherStore.getState();
+      if (!active || !requested || launcher.agentActivationPending || launcher.agentActivationId) return;
+      requested = false;
+      useLauncherStore.setState({agentActivationPending: true});
       try {
         const activation = await windowsAiService.consumeActivation();
-        if (!active || !activation) return;
+        if (!activation) return;
         useQueryStore.getState().clear();
-        useLauncherStore.getState().setIntent('computer');
         useQueryStore.getState().setDraft(activation.prompt);
-        await requestWindowShow(windowService, 'expanded');
+        // Preserve a popped draft even if this subscription was disposed while
+        // native IPC was pending. A later mount can present the held draft.
+        useLauncherStore.setState({intent: 'computer', focusRegion: 'search', externalAgentId: '', agentActivationId: activation.activationId});
+        if (active) await requestWindowShow(windowService, 'expanded');
       } catch { /* Malformed or unavailable activations cannot execute a task. */ }
+      finally { useLauncherStore.setState({agentActivationPending: false}); }
     };
-    const unsubscribe = windowsAiService.subscribeActivation(() => void consume());
+    const request = () => { requested = true; void consume(); };
+    const unsubscribe = windowsAiService.subscribeActivation(request);
+    const unsubscribeQuery = useQueryStore.subscribe((state) => {
+      const id = useLauncherStore.getState().agentActivationId;
+      if (id && !state.draft.trim()) useLauncherStore.getState().finishAgentActivation(id);
+    });
+    const unsubscribeLauncher = useLauncherStore.subscribe((state, previous) => {
+      if (previous.agentActivationId && !state.agentActivationId) requested = true;
+      if (state.agentActivationId && state.intent !== 'computer') {
+        state.finishAgentActivation(state.agentActivationId);
+        return;
+      }
+      if (requested && !state.agentActivationPending && !state.agentActivationId) void consume();
+    });
+    if (useLauncherStore.getState().agentActivationId) void requestWindowShow(windowService, 'expanded');
     void consume();
-    return () => { active = false; unsubscribe(); };
+    return () => { active = false; unsubscribe(); unsubscribeQuery(); unsubscribeLauncher(); };
   }, [foundationPreview, galleryPreview, settingsHydrated, windowService]);
 
   useEffect(() => {
