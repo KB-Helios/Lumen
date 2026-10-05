@@ -1,5 +1,33 @@
 import {expect, test} from '@playwright/test';
 
+test('primary buttons preserve readable accent foregrounds and authored type in both themes', async ({page}) => {
+  for (const theme of ['light', 'dark']) {
+    await page.goto(`/?gallery=1&scenario=onboarding-welcome&capture=1&theme=${theme}`);
+    const primary = page.getByRole('button', {name: 'Begin'});
+    await expect(primary).toBeVisible();
+    const styles = await primary.evaluate((element) => {
+      const css = getComputedStyle(element);
+      const parseColor = (color: string) => color.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+      const luminance = (color: number[]) => color
+        .map((value) => value / 255)
+        .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+        .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+      const reference = document.createElement('span');
+      reference.style.color = 'var(--lumen-text-inverse)';
+      element.append(reference);
+      const expectedForeground = getComputedStyle(reference).color;
+      reference.remove();
+      const foreground = parseColor(css.color);
+      const background = parseColor(css.backgroundColor);
+      const [light, dark] = [luminance(foreground), luminance(background)].sort((left, right) => right - left);
+      return {foreground: css.color, expectedForeground, fontSize: css.fontSize, contrast: (light + 0.05) / (dark + 0.05)};
+    });
+    expect(styles.foreground, theme).toBe(styles.expectedForeground);
+    expect(styles.fontSize, theme).toBe('14px');
+    expect(styles.contrast, theme).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test('the selection highlight follows transformed virtual rows and scrolling', async ({page}) => {
   await page.goto('/?gallery=1&scenario=large-results&capture=1&theme=reduced-motion');
   const capsule = page.locator('[data-selection-capsule]');

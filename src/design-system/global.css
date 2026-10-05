@@ -159,14 +159,6 @@
     margin: 0;
   }
 
-button,
-input,
-select,
-textarea {
-  color: inherit;
-  font: inherit;
-}
-
 input[type='search']::-webkit-search-cancel-button {
   display: none;
   appearance: none;
@@ -175,6 +167,14 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 @layer base {
+  button,
+  input,
+  select,
+  textarea {
+    color: inherit;
+    font: inherit;
+  }
+
   :root {
     color-scheme: light dark;
     font-family: "Segoe UI Variable Text", "Segoe UI Variable Display", "Segoe UI", sans-serif;

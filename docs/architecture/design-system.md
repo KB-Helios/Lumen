@@ -26,7 +26,7 @@ The launcher consumes the same graphite/off-white surface, text, and border role
 
 `LumenButton`, `LumenIconButton`, and `LumenText` carry shared focus, keyboard, type, and density rules. Icon-only buttons require an accessible name. Focus remains a visible semantic outline in every theme, including Windows forced-colors mode.
 
-Control targets use stable 32/36/44px minimum heights and pixel gutters so enlarged text expands content without inflating all chrome. CSS timing variables in `global.css` mirror the TypeScript motion tokens. Content typography continues to use rem units.
+Control targets use stable 32/36/44px minimum heights and pixel gutters so enlarged text expands content without inflating all chrome. Form-control font and color resets live in Tailwind's base layer, allowing semantic text and typography utilities to override them. CSS timing variables in `global.css` mirror the TypeScript motion tokens. Content typography continues to use rem units.
 
 ## Responsive content
 
