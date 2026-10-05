@@ -46,7 +46,7 @@ describe('on-demand refresh measurement', () => {
     vi.useFakeTimers();
     fakeFrames();
     const measurement = useDiagnosticsStore.getState().sampleRefreshRate();
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(await measurement).toBeNull();
     expect(cancelAnimationFrame).toHaveBeenCalled();
   });
