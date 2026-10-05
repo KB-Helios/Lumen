@@ -120,8 +120,9 @@ async function profile(baseUrl) {
       visibility: document.visibilityState,
     }));
     let graphics = {available: false};
-    const browserSession = await browser.newBrowserCDPSession();
+    let browserSession;
     try {
+      browserSession = await browser.newBrowserCDPSession();
       const {gpu} = await browserSession.send('SystemInfo.getInfo');
       graphics = {
         available: true,
@@ -135,7 +136,7 @@ async function profile(baseUrl) {
     } catch {
       // GPU evidence is unavailable rather than inferred from installed hardware.
     } finally {
-      await browserSession.detach();
+      if (browserSession) await browserSession.detach();
     }
     const search = page.getByRole('searchbox', {name: 'Search files'});
     await search.waitFor({state: 'visible'});
