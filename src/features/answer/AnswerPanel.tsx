@@ -24,7 +24,7 @@ function citationLabel(label: string, page?: number, timestampSeconds?: number) 
   return label;
 }
 
-const quietButtonClass = 'inline-flex min-h-8 items-center justify-center gap-1.5 rounded-control px-2.5 font-sans text-xs text-[color:var(--einui-command-muted-text)] outline-none transition-colors duration-[90ms] hover:bg-[var(--einui-command-row-hover)] hover:text-[color:var(--einui-command-text)] focus-visible:ring-2 focus-visible:ring-[var(--lumen-focus)] disabled:cursor-not-allowed disabled:opacity-55';
+const quietButtonClass = 'inline-flex min-h-[32px] min-w-[32px] items-center justify-center gap-[6px] rounded-control px-[8px] font-sans text-xs text-[color:var(--einui-command-muted-text)] outline-none transition-colors duration-[var(--lumen-duration-hover)] hover:bg-[var(--einui-command-row-hover)] hover:text-[color:var(--einui-command-text)] focus-visible:ring-2 focus-visible:ring-[var(--lumen-focus)] disabled:cursor-not-allowed disabled:opacity-55';
 
 export interface AnswerPanelProps {
   answer: AnswerState;
@@ -59,17 +59,27 @@ export function AnswerPanel({
   }, [answer.text]);
 
   return (
-    <section aria-label="AI answer" className="grid min-h-[150px] gap-3 border-b border-[color:var(--einui-command-divider)] px-4 py-3">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="font-sans text-xs font-medium text-[color:var(--einui-command-text)]">AI answer</span>
-          <span className="truncate font-sans text-[0.6875rem] text-[color:var(--einui-command-muted-text)]">{statusLabel(answer)}</span>
+    <section aria-label="AI answer" className="lumen-answer-panel @container/answer min-w-0 border-b border-[color:var(--einui-command-divider)]">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-[8px]">
+        <div className="flex min-w-0 items-baseline gap-[8px]">
+          <span className="whitespace-nowrap font-sans text-xs font-medium text-[color:var(--einui-command-text)]">AI answer</span>
+          <span className="truncate font-sans text-[0.6875rem] text-[color:var(--einui-command-muted-text)] @max-[560px]/answer:sr-only">{statusLabel(answer)}</span>
         </div>
-        <RuntimeModeSwitch mode={mode} onChange={onModeChange} />
+        <div className="flex min-w-0 items-center gap-[4px]">
+          <RuntimeModeSwitch mode={mode} onChange={onModeChange} />
+          {canStop ? (
+            <button aria-label="Stop answer" className={quietButtonClass} type="button" onClick={onStop}><LumenUiIcon name="stop" size="small" /><span className="hidden @min-[560px]/answer:inline">Stop</span></button>
+          ) : canRetry ? (
+            <button aria-label="Retry answer" className={quietButtonClass} type="button" onClick={onRetry}><LumenUiIcon name="retry" size="small" /><span className="hidden @min-[560px]/answer:inline">Retry</span></button>
+          ) : null}
+          {hasAnswer ? (
+            <button aria-label={copied ? 'Answer copied' : 'Copy answer'} className={quietButtonClass} type="button" onClick={() => void copyAnswer()}><LumenUiIcon name={copied ? 'approval' : 'copy'} size="small" /><span className="hidden @min-[560px]/answer:inline">{copied ? 'Copied' : 'Copy'}</span></button>
+          ) : null}
+        </div>
       </header>
       <div
         aria-live="polite"
-        className="min-h-12 max-h-28 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-[color:var(--einui-command-text)]"
+        className="lumen-answer-text overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-[color:var(--einui-command-text)]"
         data-testid="answer-region"
       >
         {answer.phase === 'idle' ? null : hasAnswer
@@ -80,15 +90,15 @@ export function AnswerPanel({
               ? answer.error ?? 'The answer could not be completed. You can retry without interrupting local search.'
               : 'Preparing an answer…'}
       </div>
-      <footer className="flex items-center justify-between gap-3">
-        <div aria-label="Answer sources" className="flex min-w-0 flex-wrap gap-1.5">
+      {answer.citations.length > 0 || runtimeDetail ? <footer className="flex min-w-0 flex-wrap items-center justify-between gap-[8px]">
+        <div aria-label="Answer sources" className="flex min-w-0 flex-wrap gap-[6px]">
           {answer.citations.map((citation) => {
             const label = citationLabel(citation.label, citation.page, citation.timestampSeconds);
             return (
               <button
                 key={`${citation.fileId}-${citation.page ?? citation.timestampSeconds ?? 'file'}`}
                 aria-label={`Open ${label}`}
-                className="min-h-7 rounded-pill border border-[color:var(--einui-command-divider)] bg-[var(--einui-command-row)] px-2 font-sans text-[0.6875rem] text-accent outline-none transition-colors duration-[90ms] hover:bg-[var(--einui-command-row-hover)] focus-visible:ring-2 focus-visible:ring-focus"
+                className="min-h-[32px] max-w-full rounded-pill border border-[color:var(--einui-command-divider)] bg-[var(--einui-command-row)] px-[8px] font-sans text-[0.6875rem] text-accent outline-none transition-colors duration-[var(--lumen-duration-hover)] hover:bg-[var(--einui-command-row-hover)] focus-visible:ring-2 focus-visible:ring-focus"
                 type="button"
                 onClick={() => onOpenCitation(citation.fileId)}
               >
@@ -97,25 +107,15 @@ export function AnswerPanel({
             );
           })}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
           {runtimeDetail ? (
-            <details className="relative">
+            <details className="lumen-runtime-details relative">
               <summary className={`${quietButtonClass} cursor-default list-none [&::-webkit-details-marker]:hidden`}>Runtime details</summary>
-              <div className="absolute bottom-full right-0 z-30 mb-1 w-max max-w-64 rounded-control border border-[color:var(--einui-command-divider)] bg-[var(--lumen-surface-raised)] px-2 py-1.5 font-sans text-[0.6875rem] text-text-secondary shadow-control">
+              <div className="lumen-runtime-popover absolute bottom-full right-0 z-30 mb-[4px] w-max max-w-[min(320px,80cqw)] break-words rounded-control border border-[color:var(--einui-command-divider)] bg-[var(--lumen-surface-raised)] px-[8px] py-[6px] font-sans text-[0.6875rem] text-text-secondary shadow-control">
                 {runtimeDetail}
               </div>
             </details>
           ) : null}
-          {canStop ? (
-            <button aria-label="Stop answer" className={quietButtonClass} type="button" onClick={onStop}><LumenUiIcon name="stop" size="small" /> Stop</button>
-          ) : canRetry ? (
-            <button aria-label="Retry answer" className={quietButtonClass} type="button" onClick={onRetry}><LumenUiIcon name="retry" size="small" /> Retry</button>
-          ) : null}
-          {hasAnswer ? (
-            <button aria-label="Copy answer" className={quietButtonClass} type="button" onClick={() => void copyAnswer()}><LumenUiIcon name="copy" size="small" /> {copied ? 'Copied' : 'Copy'}</button>
-          ) : null}
-        </div>
-      </footer>
+      </footer> : null}
     </section>
   );
 }

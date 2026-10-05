@@ -13,11 +13,11 @@ describe('Lumen CSS appearance contract', () => {
   --einui-command-muted-text: var(--lumen-text-secondary);
   --einui-command-border: var(--lumen-border-strong);
   --einui-command-divider: var(--lumen-border-subtle);
-  --einui-command-row: var(--lumen-surface-inset);
-  --einui-command-row-hover: var(--lumen-surface-inset);
-  --einui-command-row-selected: var(--lumen-surface-inset);
+  --einui-command-row: color-mix(in srgb, var(--lumen-text-primary) 3%, transparent);
+  --einui-command-row-hover: color-mix(in srgb, var(--lumen-text-primary) 6%, transparent);
+  --einui-command-row-selected: color-mix(in srgb, var(--lumen-text-primary) 10%, transparent);
   --einui-command-shortcut: var(--lumen-surface-raised);
-  --einui-command-shadow: var(--lumen-shadow-control);
+  --einui-command-shadow: var(--lumen-shadow-surface);
 }`);
   });
 

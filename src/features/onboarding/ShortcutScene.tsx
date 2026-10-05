@@ -10,7 +10,7 @@ export function ShortcutScene({shortcut}: {shortcut: string}) {
       support="You can record a different global shortcut in General settings."
       title="Make search a reflex"
     >
-      <kbd aria-label={shortcut.replace(' + ', ' plus ')} className="rounded-control border border-border-strong bg-surface-inset px-6 py-3 text-text-primary shadow-control">
+      <kbd aria-label={shortcut.replace(' + ', ' plus ')} className="min-w-0 max-w-full rounded-control border border-border-strong bg-surface-inset px-[24px] py-[12px] text-text-primary">
         <LumenText variant="bodyLarge" weight="semibold">{shortcut}</LumenText>
       </kbd>
     </OnboardingScene>

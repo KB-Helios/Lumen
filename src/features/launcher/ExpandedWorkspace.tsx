@@ -1,9 +1,6 @@
 import type {ReactNode} from 'react';
 import {Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
 
-import {motion} from 'motion/react';
-
-import {useMediaPreference} from '../../app/AppProviders';
 import {useLumenMotion} from '../../design-system/MotionProvider';
 import type {SearchService} from '../../services/search/search-service';
 import {useAppearanceStore} from '../../state/appearance.store';
@@ -226,6 +223,30 @@ function emptyLabel(lifecycle: SearchLifecycle, error: SearchError | null) {
   return 'No files found';
 }
 
+function useInlinePreview(preview: 'automatic' | 'always' | 'never', allowed: boolean) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [hasRoom, setHasRoom] = useState(false);
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element || !allowed || preview === 'never') {
+      setHasRoom(false);
+      return;
+    }
+    const measure = () => {
+      const {width, height} = element.getBoundingClientRect();
+      // Allow for the launcher's two border pixels at the native 800/760 px sizes.
+      const minimumWidth = preview === 'always' ? 760 : 800;
+      setHasRoom(width + 2 >= minimumWidth && height >= 220);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [allowed, preview]);
+  return {contentRef, showInlinePreview: allowed && preview !== 'never' && hasRoom};
+}
+
 export function ExpandedWorkspace({
   activeFilters,
   announcement,
@@ -245,50 +266,45 @@ export function ExpandedWorkspace({
   onRemoveFilter,
   onSelectionChange,
 }: ExpandedWorkspaceProps) {
-  const {opacityDuration, reducedMotion} = useLumenMotion();
+  const {reducedMotion} = useLumenMotion();
   const preview = useAppearanceStore((state) => state.preview);
-  const atMinimumPreviewWidth = useMediaPreference('(min-width: 760px)');
-  const atAutomaticPreviewWidth = useMediaPreference('(min-width: 900px)');
-  const showInlinePreview = previewAllowed && (preview === 'always'
-    ? atMinimumPreviewWidth
-    : preview === 'automatic' && atAutomaticPreviewWidth);
+  const {contentRef, showInlinePreview} = useInlinePreview(preview, previewAllowed);
   const countLabel = lifecycle === 'searching'
     ? 'Searching'
     : `${results.length} ${results.length === 1 ? 'result' : 'results'}`;
 
   return (
-    <motion.section
+    <section
       aria-label="Search workspace"
-      animate={{opacity: 1, y: 0}}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-[color:var(--einui-command-divider)]"
-      initial={reducedMotion ? {opacity: 0} : {opacity: 0, y: -6}}
-      transition={{duration: opacityDuration}}
     >
       <FilterChips filters={activeFilters} onClear={onClearFilters} onRemove={onRemoveFilter} />
-      {answerPanel}
-      <div className={showInlinePreview
-        ? 'grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(280px,38%)] overflow-hidden'
-        : 'grid min-h-0 min-w-0 flex-1 grid-cols-1 overflow-hidden'}>
-        <section aria-label="Search result list" className="flex min-h-0 min-w-0 flex-col">
-          <header className="flex min-h-[34px] items-center justify-between gap-3 px-4">
-            <span className="font-sans text-xs font-medium text-[color:var(--einui-command-text)]">Local results</span>
-            <span className="font-sans text-[0.6875rem] text-[color:var(--einui-command-muted-text)]">{countLabel}</span>
-          </header>
-          <SelectionBoundResults
-            emptyState={emptyLabel(lifecycle, error)}
-            openingId={openingId}
-            reducedMotion={reducedMotion}
-            results={results}
-            selectedId={selectedId}
-            onOpen={onOpen}
-            onSelectionChange={onSelectionChange}
-          />
-        </section>
-        {showInlinePreview ? <div className="min-h-0 min-w-0">
-          <Suspense fallback={<div aria-label="File preview" className="grid min-h-[320px] place-items-center font-sans text-xs text-[color:var(--einui-command-muted-text)]">Preparing preview…</div>}>
-            <SelectionBoundPreview reducedMotion={reducedMotion} selectedId={selectedId} service={service} />
-          </Suspense>
-        </div> : null}
+      <div className="lumen-workspace-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {answerPanel}
+        <div ref={contentRef} data-workspace-content className={showInlinePreview
+          ? 'grid min-h-[94px] min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(280px,38%)] overflow-hidden'
+          : 'grid min-h-[94px] min-w-0 flex-1 grid-cols-1 overflow-hidden'}>
+          <section aria-label="Search result list" className="flex min-h-0 min-w-0 flex-col">
+            <header className="flex min-h-[24px] shrink-0 items-center justify-between gap-[8px] px-[16px]">
+              <span className="font-sans text-xs font-medium text-[color:var(--einui-command-text)]">Local results</span>
+              <span className="font-sans text-[0.6875rem] text-[color:var(--einui-command-muted-text)]">{countLabel}</span>
+            </header>
+            <SelectionBoundResults
+              emptyState={emptyLabel(lifecycle, error)}
+              openingId={openingId}
+              reducedMotion={reducedMotion}
+              results={results}
+              selectedId={selectedId}
+              onOpen={onOpen}
+              onSelectionChange={onSelectionChange}
+            />
+          </section>
+          {showInlinePreview ? <div className="min-h-0 min-w-0">
+            <Suspense fallback={<div aria-label="File preview" className="grid h-full min-h-0 place-items-center font-sans text-xs text-[color:var(--einui-command-muted-text)]">Preparing preview…</div>}>
+              <SelectionBoundPreview reducedMotion={reducedMotion} selectedId={selectedId} service={service} />
+            </Suspense>
+          </div> : null}
+        </div>
       </div>
       <SelectionBoundActions
         isOpening={openingId !== null}
@@ -300,6 +316,6 @@ export function ExpandedWorkspace({
         onPin={onPin}
       />
       <SelectionAnnouncement announcement={announcement} results={results} selectedId={selectedId} />
-    </motion.section>
+    </section>
   );
 }

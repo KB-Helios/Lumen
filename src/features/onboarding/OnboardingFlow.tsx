@@ -54,8 +54,8 @@ function ChoicesScene() {
       support="Cloud answers can send the query and relevant local excerpts to your configured provider. Leave this off to keep answers local."
       title="Choose how answers run"
     >
-      <div className="grid min-w-[360px] gap-4 rounded-surface border border-border-subtle bg-surface-inset p-5 text-left">
-        <div className="flex items-center justify-between gap-6">
+      <div className="@container/choices grid min-w-0 w-full max-w-[560px] gap-[16px] rounded-surface border border-border-subtle bg-surface-inset p-[16px] text-left">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-[12px] @min-[26rem]/choices:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <LumenText>Answer mode</LumenText>
           <LumenSelect
             aria-label="Answer mode"
@@ -64,7 +64,7 @@ function ChoicesScene() {
             onChange={(runtimeMode) => void updateAi({runtimeMode})}
           />
         </div>
-        <div className="flex items-center justify-between gap-6">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-[12px]">
           <LumenText>Allow cloud answers</LumenText>
           <LumenSwitch aria-label="Allow cloud answers" isSelected={ai.cloudAnswerConsent} onChange={(granted) => void setCloudAnswerConsent(granted)} />
         </div>
@@ -99,6 +99,7 @@ export function OnboardingFlow({
   const next = useOnboardingStore((state) => state.next);
   const setRoot = useOnboardingStore((state) => state.setRoot);
   const shellRef = useRef<HTMLDivElement>(null);
+  const sceneViewportRef = useRef<HTMLDivElement>(null);
   const directionRef = useRef<'forward' | 'backward'>('forward');
   const [completionError, setCompletionError] = useState('');
   const [completing, setCompleting] = useState(false);
@@ -110,6 +111,7 @@ export function OnboardingFlow({
   }, [windowService]);
 
   useEffect(() => {
+    if (sceneViewportRef.current) sceneViewportRef.current.scrollTop = 0;
     shellRef.current
       ?.querySelector<HTMLElement>('[data-onboarding-primary="true"]')
       ?.focus();
@@ -168,13 +170,13 @@ export function OnboardingFlow({
     <LumenSurface
       ref={shellRef}
       aria-label="Welcome to Lumen"
-      className="grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-surface"
+      className="grid h-full min-h-0 min-w-0 w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-surface"
       material="mica"
       onKeyDown={handleKeyDown}
     >
-      <header data-tauri-drag-region className="flex min-h-[54px] items-center justify-between gap-6 border-b border-border-subtle px-8">
+      <header data-tauri-drag-region className="flex min-h-[54px] min-w-0 items-center justify-between gap-[12px] border-b border-border-subtle px-[20px]">
         <LumenText weight="semibold">Lumen</LumenText>
-        <div aria-label={`Step ${currentIndex + 1} of ${onboardingSteps.length}`} className="flex items-center gap-2">
+        <div aria-label={`Step ${currentIndex + 1} of ${onboardingSteps.length}`} className="flex shrink-0 items-center gap-[8px]">
           {onboardingSteps.map((item, index) => (
             <span
               key={item}
@@ -184,13 +186,13 @@ export function OnboardingFlow({
           ))}
         </div>
       </header>
-      <div className="grid min-h-0 min-w-0 place-items-center overflow-hidden py-12">
+      <div ref={sceneViewportRef} className="flex min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto py-[24px]">
         <AnimatePresence custom={directionRef.current} initial={false} mode="wait">
           <motion.div
             key={step}
             data-motion-direction={reducedMotion ? 'fade' : 'spatial'}
             data-testid="onboarding-scene"
-            className="w-full"
+            className="my-auto min-w-0 w-full shrink-0"
             animate="center"
             custom={directionRef.current}
             exit="exit"
@@ -220,11 +222,11 @@ export function OnboardingFlow({
           </motion.div>
         </AnimatePresence>
       </div>
-      <footer className="flex min-h-16 items-center justify-between gap-6 border-t border-border-subtle px-8">
-        {completionError ? <span className="text-xs text-danger" role="alert">{completionError}</span> : null}
+      <footer className="flex min-h-[64px] min-w-0 flex-wrap items-center justify-between gap-[12px] border-t border-border-subtle px-[20px] py-[12px]">
+        {completionError ? <span className="min-w-0 flex-1 text-xs text-danger [overflow-wrap:anywhere]" role="alert">{completionError}</span> : null}
         {currentIndex > 0 && !completionError ? (
           <LumenButton data-testid="onboarding-back-action" size="medium" variant="quiet" onPress={goBack}>Back</LumenButton>
-        ) : <span aria-hidden="true" className="w-9" />}
+        ) : <span aria-hidden="true" className="w-[36px]" />}
         <LumenButton
           data-onboarding-primary="true"
           data-testid="onboarding-primary-action"

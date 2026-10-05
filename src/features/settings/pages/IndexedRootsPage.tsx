@@ -122,9 +122,9 @@ export function IndexedRootsPage({rootService = defaultRootService}: {rootServic
 
   return (
     <SettingsPage>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-[12px]">
         <LumenText tone="secondary">{roots.length} {roots.length === 1 ? 'root' : 'roots'}</LumenText>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
           <LumenButton isDisabled={indexBusy || roots.length === 0} size="small" onPress={rebuildIndex}>
             {indexBusy ? 'Working…' : 'Rebuild index'}
           </LumenButton>
@@ -137,8 +137,8 @@ export function IndexedRootsPage({rootService = defaultRootService}: {rootServic
       {notice ? <SettingsCallout tone={notice.tone}>{notice.text}</SettingsCallout> : null}
       <SettingSection title="Indexed search directories" description="Content stays local unless cloud enrichment is enabled explicitly for that root.">
         {roots.length === 0 ? (
-          <div className="grid min-h-[190px] place-items-center gap-3 p-8 text-center">
-            <span aria-hidden="true" className="grid size-14 place-items-center rounded-surface bg-accent/10 text-accent"><LumenUiIcon name="folderOpen" size="large" /></span>
+          <div className="grid min-h-[190px] min-w-0 place-items-center gap-[12px] p-[20px] text-center">
+            <span aria-hidden="true" className="grid size-[56px] place-items-center rounded-surface bg-surface-inset text-text-secondary"><LumenUiIcon name="folderOpen" size="large" /></span>
             <div>
               <LumenText as="p" weight="semibold">Choose a focused folder to begin</LumenText>
               <LumenText as="p" tone="tertiary" variant="meta">Project folders keep the development adapter quick and predictable.</LumenText>

@@ -164,12 +164,12 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
       <SettingSection title="Virtual model routes" description="Stable aliases keep callers unchanged while providers change underneath.">
         {native ? registry ? (
           <ProviderRegistryList registry={registry} cloudConsent={cloudConsent} onSet={setNativeRoute} onTest={testNativeRoute} />
-        ) : <div className="p-5"><LumenText tone="tertiary" variant="meta">Loading provider registry…</LumenText></div>
+        ) : <div className="p-[16px]"><LumenText tone="tertiary" variant="meta">Loading provider registry…</LumenText></div>
           : <ProviderRouteList routes={routes} onChange={setRouteProvider} onTest={(id) => void testProvider(id)} />}
       </SettingSection>
       {native && registry ? (
         <SettingSection title="Provider credential" description="The value is written directly to Windows Credential Manager and never returned to React.">
-          <div className="grid min-h-16 grid-cols-[minmax(150px,.55fr)_minmax(0,1fr)_auto] items-center gap-4 border-b border-border-subtle p-5 last:border-b-0">
+          <div className="grid min-h-[64px] min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[36rem]/settings:grid-cols-[minmax(0,.55fr)_minmax(0,1fr)_auto]">
             <LumenSelect<ProviderId>
               aria-label="Credential provider"
               options={registry.providers.filter((provider) => provider.cloud).map((provider) => ({id: provider.id, label: provider.label}))}
@@ -177,7 +177,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
               onChange={setCredentialProvider}
             />
             <LumenTextField aria-label="Provider API key" type="password" placeholder="API key" value={credential} onChange={setCredential} />
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
               <LumenButton size="small" variant="primary" onPress={() => void saveCredential()}>Save</LumenButton>
               <LumenButton size="small" variant="quiet" onPress={() => void deleteCredential()}>Delete</LumenButton>
             </div>
@@ -185,14 +185,14 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
         </SettingSection>
       ) : null}
       <SettingSection title="Cloud consent" description="Cloud routes stay unavailable until this device records explicit consent.">
-        <div className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-border-subtle p-5 last:border-b-0">
+        <div className="grid min-h-[64px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[36rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
           <LumenUiIcon className="text-accent" name="success" size="medium" />
-          <div className="grid gap-1">
+          <div className="grid min-w-0 gap-[4px]">
             <LumenText weight="medium">Provider requests</LumenText>
             <LumenText tone="tertiary" variant="meta">Search queries, filenames, and relevant indexed excerpts may leave this device after consent.</LumenText>
           </div>
           {cloudConsent ? (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="col-span-full flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:col-auto">
               <StatusBadge tone="success">Cloud consent granted</StatusBadge>
               <LumenButton size="small" variant="quiet" onPress={() => void revokeCloudConsent()}>Revoke</LumenButton>
             </div>
@@ -204,7 +204,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
               title="Allow cloud provider requests?"
               onConfirm={grantCloudConsent}
             >
-              <LumenButton aria-label="Review cloud consent" size="small">Review consent</LumenButton>
+              <LumenButton aria-label="Review cloud consent" className="col-span-full justify-self-start @min-[36rem]/settings:col-auto" size="small">Review consent</LumenButton>
             </ConfirmationDialog>
           )}
         </div>
@@ -213,13 +213,13 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
         <>
           <SettingSection title="MCP services" description="Local services and tool counts reported by the native executor.">
             {mcpRegistry.services.map((service) => (
-              <div key={service.id} className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-border-subtle p-5 last:border-b-0">
+              <div key={service.id} className="grid min-h-[64px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[36rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
                 <McpIcon className="text-accent" size={20} />
-                <div className="grid gap-1">
+                <div className="grid min-w-0 gap-[4px]">
                   <LumenText weight="medium">{service.name}</LumenText>
                   <LumenText tone="tertiary" variant="meta">{service.tools.length} confined local tools</LumenText>
                 </div>
-                <StatusBadge tone={service.status === 'connected' ? 'success' : 'warning'}>{service.status === 'connected' ? 'Connected' : 'Unavailable'}</StatusBadge>
+                <div className="col-span-full @min-[36rem]/settings:col-auto"><StatusBadge tone={service.status === 'connected' ? 'success' : 'warning'}>{service.status === 'connected' ? 'Connected' : 'Unavailable'}</StatusBadge></div>
               </div>
             ))}
           </SettingSection>
@@ -230,13 +230,13 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
       ) : null}
       {native ? (
         <SettingSection title="Durable enrichment queue" description="Rivet Actors owns idempotent OCR and transcription job leases when its Windows engine is healthy.">
-          <div className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-border-subtle p-5 last:border-b-0">
+          <div className="grid min-h-[64px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[36rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
             <LumenUiIcon className="text-accent" name="connect" size="medium" />
-            <div className="grid gap-1">
+            <div className="grid min-w-0 gap-[4px]">
               <LumenText weight="medium">Rivet worker</LumenText>
               <LumenText tone="tertiary" variant="meta">{enrichment?.detail ?? (enrichment?.paused ? 'Queue paused' : 'Loopback-only worker')}</LumenText>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="col-span-full flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:col-auto">
               <StatusBadge tone={enrichment?.state === 'ready' ? 'success' : 'warning'}>{enrichment?.state ?? 'Checking'}</StatusBadge>
               <LumenButton size="small" variant="quiet" onPress={() => void (enrichment?.paused ? nativeAiService.resumeEnrichment() : nativeAiService.pauseEnrichment()).then(refresh)}>{enrichment?.paused ? 'Resume' : 'Pause'}</LumenButton>
             </div>
@@ -247,15 +247,15 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
         <>
           <SettingSection title="MCP services" description="Development previews for service and tool-count states.">
             {services.map((service) => (
-              <div key={service.id} className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-border-subtle p-5 last:border-b-0">
+              <div key={service.id} className="grid min-h-[64px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[36rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
                 <McpIcon className="text-accent" size={20} />
-                <div className="grid gap-1">
+                <div className="grid min-w-0 gap-[4px]">
                   <LumenText weight="medium">{service.name}</LumenText>
                   <LumenText tone="tertiary" variant="meta">
                     {service.status === 'connected' ? `${service.toolCount} preview tools` : service.status === 'testing' ? 'Testing preview…' : 'Service unavailable'}
                   </LumenText>
                 </div>
-                <LumenButton aria-label={`Test ${service.name}`} size="small" variant="quiet" onPress={() => void testMcp(service.id)}>Test</LumenButton>
+                <LumenButton aria-label={`Test ${service.name}`} className="col-span-full justify-self-start @min-[36rem]/settings:col-auto" size="small" variant="quiet" onPress={() => void testMcp(service.id)}>Test</LumenButton>
               </div>
             ))}
           </SettingSection>

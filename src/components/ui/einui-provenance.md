@@ -9,12 +9,17 @@
 
 ## Retained recipe
 
-The owned visual shell retains the upstream rounded glass surface, white
-translucent border, high-blur material, cyan/blue/purple glow, inner
-specular highlights, typography colour, and the source palette's vertical
-composer/workspace/footer composition. Frozen literals are scoped to
-`--einui-command-*` variables so the normal light and dark values stay
-visually identical to the registry source.
+The owned visual shell retains the upstream rounded glass surface, ordered
+exterior/surface/specular layers, blur material, and vertical
+composer/workspace/footer composition. Topology and caller-owned slot behavior
+remain covered by the component contract tests.
+
+Lumen deliberately adapts color and luminosity through `--einui-command-*`
+variables. The user-approved 2026-10-05 design refinement binds both light and
+dark palettes to Lumen's semantic surface, border, text, and neutral interaction
+roles. It reduces additive white highlights and the existing semantic-accent
+glow. The shortcut fill follows the quiet neutral row role; the owned shell no
+longer claims color-identical output to the original registry recipe.
 
 ## Deliberate boundary
 

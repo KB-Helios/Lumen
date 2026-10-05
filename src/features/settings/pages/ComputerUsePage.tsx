@@ -114,24 +114,24 @@ export function ComputerUsePage() {
           />
         </SettingRow>
         <SettingRow label="Start page" description="Every task starts in a fresh Edge context at this HTTP or HTTPS address.">
-          <div className="flex w-[260px] flex-wrap items-center gap-2">
+          <div className="grid min-w-0 w-[300px] max-w-full grid-cols-[minmax(0,1fr)] gap-[8px] @min-[36rem]/settings:grid-cols-[minmax(0,1fr)_auto]">
             <LumenTextField aria-label="Computer Use start page" value={initialUrl} onChange={setInitialUrl} />
-            <LumenButton size="small" variant="quiet" onPress={() => void saveInitialUrl()}>Save</LumenButton>
+            <LumenButton className="justify-self-start" size="small" variant="quiet" onPress={() => void saveInitialUrl()}>Save</LumenButton>
           </div>
         </SettingRow>
       </SettingSection>
       {native ? (
         <SettingSection title="Gemini credential" description="The secret is written directly to Windows Credential Manager and never returned to React.">
-          <div className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 p-5">
+          <div className="grid min-h-[64px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[12px] p-[16px] @min-[36rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
             <LumenUiIcon className="text-accent" name="key" size="medium" />
-            <div className="grid gap-1">
+            <div className="grid min-w-0 gap-[4px]">
               <LumenText weight="medium">Gemini API key</LumenText>
               <LumenText tone="tertiary" variant="meta">
                 {health?.credentialConfigured ? 'A key is configured for this Windows account.' : 'No Gemini key is configured.'}
               </LumenText>
               <LumenTextField aria-label="Gemini API key" type="password" placeholder="Enter API key" value={credential} onChange={setCredential} />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="col-span-full flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:col-auto">
               <LumenButton size="small" variant="primary" onPress={() => void saveCredential()}>Save</LumenButton>
               <LumenButton size="small" variant="quiet" onPress={() => void deleteCredential()}>Delete</LumenButton>
             </div>
@@ -139,14 +139,14 @@ export function ComputerUsePage() {
         </SettingSection>
       ) : null}
       <SettingSection title="Cloud consent" description="Consent is device-local and can be revoked at any time.">
-        <div className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 p-5">
+        <div className="grid min-h-[64px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[12px] p-[16px] @min-[36rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
           <LumenUiIcon className="text-accent" name="success" size="medium" />
-          <div className="grid gap-1">
+          <div className="grid min-w-0 gap-[4px]">
             <LumenText weight="medium">Browser task requests</LumenText>
             <LumenText tone="tertiary" variant="meta">The task, page URL, and screenshots are sent to Gemini. Passwords and payment details may be visible if you navigate to them.</LumenText>
           </div>
           {settings.cloudConsent ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="col-span-full flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:col-auto">
               <StatusBadge tone="success">Consent granted</StatusBadge>
               <LumenButton size="small" variant="quiet" onPress={revokeConsent}>Revoke</LumenButton>
             </div>
@@ -158,7 +158,7 @@ export function ComputerUsePage() {
               title="Allow Gemini Computer Use?"
               onConfirm={grantConsent}
             >
-              <LumenButton aria-label="Review Computer Use consent" size="small">Review consent</LumenButton>
+              <LumenButton aria-label="Review Computer Use consent" className="col-span-full justify-self-start @min-[36rem]/settings:col-auto" size="small">Review consent</LumenButton>
             </ConfirmationDialog>
           )}
         </div>

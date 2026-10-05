@@ -5,8 +5,8 @@ Lumen's first-run and settings experiences are part of the same native React sur
 ## Ownership
 
 - `src/features/onboarding` owns the eight first-run scenes, folder selection, keyboard progression, and completion state.
-- `src/features/settings/SettingsShell.tsx` owns the fixed navigation rail, independently scrolling page region, page routing, and focus restoration.
-- `src/features/settings/pages` owns General, Appearance, Indexed roots, Search, Local AI, AgentGateway, Activity, Privacy, and Diagnostics.
+- `src/features/settings/SettingsShell.tsx` owns the bounded navigation rail, independently scrolling page region, page routing, and focus restoration.
+- `src/features/settings/pages` owns General, Appearance, Indexed roots, Search, Local AI, AgentGateway, Computer Use, Activity, Privacy, and Diagnostics.
 - `src/state/appearance.store.ts` owns live theme, transparency, density, preview, effects, and motion preferences.
 - `src/features/settings/settings.store.ts` owns management preferences and the last active settings page.
 - Feature stores own presentation state. Native activity, provider routes, MCP permissions, local runtime provisioning, privacy, index data, and diagnostic truth remain authoritative in Rust.
@@ -35,7 +35,11 @@ Diagnostics Refresh requests one typed native snapshot covering index/vector, ac
 
 ## Appearance and accessibility
 
-The application root selects one complete Tailwind CSS semantic color/material theme at a time: light, dark, light opaque, dark opaque, or forced high contrast. This avoids partial theme contracts resetting one another. Reduced motion is enforced by the motion provider and a CSS duration override; reduced effects remove decorative noise and lower blur. Typography uses `rem` tokens so Windows/browser text scaling reaches management content. The navigation rail remains fixed while the page panel scrolls independently, including at 200 percent text size.
+The application root selects one complete Tailwind CSS semantic color/material theme at a time: light, dark, light opaque, dark opaque, or forced high contrast. This avoids partial theme contracts resetting one another. Reduced motion is enforced by the motion provider and a CSS duration override; reduced effects remove decorative noise and lower blur. Typography uses `rem` tokens so Windows/browser text scaling reaches management content.
+
+The navigation rail wraps labels and scrolls vertically independently from the page panel, including at 200 percent text size. Named settings-content container queries stack label/control rows below 32rem. Fields, routes, credential actions, and popovers stay bounded by that content region; stable pixel gutters leave space for enlarged text. Navigation immediately exposes one accessible active panel, gives it a short entrance, and resets its scroll position while preserving navigation focus.
+
+Onboarding keeps its header and primary actions anchored around an independently scrolling scene region. Scene changes reset scrolling and retain the existing directional transition and completion behavior. Computer Use follows the same bounded content and wrapping action rules, preserving every approval, denial, and cancellation action.
 
 ## Diagnostics sampling
 

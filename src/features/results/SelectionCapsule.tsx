@@ -25,11 +25,17 @@ export function SelectionCapsule({
   const hasPositioned = useRef(false);
 
   useLayoutEffect(() => {
-    const container = containerRef.current;
     let observer: ResizeObserver | undefined;
+    let collectionObserver: MutationObserver | undefined;
+    let selectionFrame: number | undefined;
+    let pendingSelectedId = selectedId;
+    let active = true;
     const updateSelection = (fileId: string | null) => {
+      const container = containerRef.current;
       observer?.disconnect();
       observer = undefined;
+      collectionObserver?.disconnect();
+      collectionObserver = undefined;
       const selected = fileId
         ? [...(container?.querySelectorAll<HTMLElement>('[data-result-id]') ?? [])]
             .find((element) => element.dataset.resultId === fileId)
@@ -37,14 +43,28 @@ export function SelectionCapsule({
       if (!container || !selected) {
         opacity.set(0);
         hasPositioned.current = false;
+        // React Aria mounts collection rows after the parent's layout effects.
+        // Observe only until this selected row exists, then measure that row.
+        if (container && fileId && typeof MutationObserver === 'function') {
+          collectionObserver = new MutationObserver(() => updateSelection(fileId));
+          collectionObserver.observe(container, {childList: true, subtree: true});
+        }
         return;
       }
       const measure = () => {
+        if (!selected.isConnected) {
+          updateSelection(fileId);
+          return;
+        }
+        const transformY = selected.style.transform && typeof DOMMatrixReadOnly === 'function'
+          ? new DOMMatrixReadOnly(selected.style.transform).m42
+          : 0;
+        const positionY = selected.offsetTop + transformY;
         if (!hasPositioned.current) {
           hasPositioned.current = true;
-          springY.jump(selected.offsetTop);
+          springY.jump(positionY);
         }
-        targetY.set(selected.offsetTop);
+        targetY.set(positionY);
         height.set(selected.offsetHeight || rowHeight);
         opacity.set(1);
       };
@@ -54,13 +74,26 @@ export function SelectionCapsule({
         observer.observe(selected);
       }
     };
-    updateSelection(selectedId);
+    // Child layout effects run before the containing viewport's ref is attached.
+    // Measure after that commit, without waiting for the next animation frame.
+    queueMicrotask(() => { if (active) updateSelection(selectedId); });
     const unsubscribe = useSelectionStore.subscribe(
       (state) => state.selectedId,
-      updateSelection,
+      (fileId) => {
+        pendingSelectedId = fileId;
+        // Selection attributes update immediately. Read highlight geometry once
+        // before paint, even when several key events arrive in the same frame.
+        selectionFrame ??= requestAnimationFrame(() => {
+          selectionFrame = undefined;
+          if (active) updateSelection(pendingSelectedId);
+        });
+      },
     );
     return () => {
+      active = false;
+      if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
       observer?.disconnect();
+      collectionObserver?.disconnect();
       unsubscribe();
     };
   }, [containerRef, height, opacity, rowHeight, selectedId, springY, targetY]);

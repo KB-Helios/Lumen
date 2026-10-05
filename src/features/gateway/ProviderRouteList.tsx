@@ -16,9 +16,9 @@ export function ProviderRouteList({routes, onChange, onTest}: {
   onTest(id: string): void;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       {routes.map((route) => (
-        <div key={route.id} className="grid min-h-[72px] grid-cols-[minmax(108px,.7fr)_minmax(150px,1fr)_auto] items-center gap-4 border-b border-border-subtle p-5 last:border-b-0">
+        <div key={route.id} className="grid min-h-[72px] min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[36rem]/settings:grid-cols-[minmax(0,.7fr)_minmax(0,1fr)_auto]">
           <div className="grid min-w-0 gap-1">
             <LumenText weight="medium">{route.alias}</LumenText>
             <StatusBadge tone={route.status === 'ready' ? 'success' : route.status === 'degraded' ? 'warning' : 'neutral'}>
@@ -31,7 +31,7 @@ export function ProviderRouteList({routes, onChange, onTest}: {
             value={route.providerId as (typeof providers)[number]['id']}
             onChange={(providerId) => onChange(route.id, providerId)}
           />
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:justify-end">
             <LumenButton
               aria-label={route.id === 'fast' ? 'Test local provider' : `Test ${route.alias}`}
               size="small"

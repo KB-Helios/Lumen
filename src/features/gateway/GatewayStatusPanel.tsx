@@ -15,16 +15,16 @@ export function GatewayStatusPanel({state, onRestart}: {state: GatewayState; onR
   const copy = stateCopy[state];
   const stateIcon: LumenUiIconName = copy.tone === 'success' ? 'success' : copy.tone === 'warning' ? 'error' : 'refresh';
   return (
-    <section aria-label="AgentGateway status" className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-5 rounded-surface border border-border-subtle bg-surface-inset p-6" data-testid={`gateway-${state}`}>
-      <span aria-hidden="true" className="grid size-12 place-items-center rounded-control bg-accent/10 text-accent"><GatewayIcon size={26} /></span>
+    <section aria-label="AgentGateway status" className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[16px] rounded-surface border border-border-subtle bg-surface-inset p-[16px] @min-[34rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]" data-testid={`gateway-${state}`}>
+      <span aria-hidden="true" className="grid size-[48px] place-items-center rounded-control bg-surface-raised text-text-secondary"><GatewayIcon size={26} /></span>
       <div className="grid min-w-0 gap-1">
-        <div aria-label={copy.label} className="flex items-center gap-2" role="status">
+        <div aria-label={copy.label} className="flex min-w-0 items-center gap-[8px]" role="status">
           <LumenUiIcon name={stateIcon} size="small" />
           <LumenText weight="semibold">{copy.label}</LumenText>
         </div>
         <LumenText tone="tertiary" variant="meta">{copy.description}</LumenText>
       </div>
-      <LumenButton aria-label="Restart AgentGateway" size="small" onPress={onRestart}>Restart</LumenButton>
+      <LumenButton aria-label="Restart AgentGateway" className="col-span-full justify-self-start @min-[34rem]/settings:col-auto" size="small" onPress={onRestart}>Restart</LumenButton>
     </section>
   );
 }

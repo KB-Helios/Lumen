@@ -134,7 +134,7 @@ export function ResultGrid({
   return (
     <div
       ref={viewportRef}
-      className="relative min-h-0 min-w-0 overflow-y-auto [scrollbar-color:var(--einui-command-divider)_transparent] [scrollbar-width:thin]"
+      className="@container/results relative min-h-0 min-w-0 flex-1 overflow-y-auto [scrollbar-color:var(--einui-command-divider)_transparent] [scrollbar-width:thin]"
       style={{maxHeight, height: maxHeight}}
     >
       <SelectionCapsule

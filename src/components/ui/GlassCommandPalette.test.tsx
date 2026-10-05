@@ -208,8 +208,8 @@ describe('GlassCommandPalette', () => {
 }`);
   });
 
-  it('uses a dedicated upstream-faithful 10 percent shortcut fill', () => {
-    expect(paletteStyles).toContain('--einui-command-shortcut: rgba(255, 255, 255, 0.1);');
+  it('uses the shared neutral shortcut fill and system-color fallback', () => {
+    expect(paletteStyles).toContain('--einui-command-shortcut: var(--einui-command-row);');
     expect(paletteStyles).toContain('background: var(--einui-command-shortcut);');
     expect(paletteStyles).toContain("[data-contrast='high'] .einui-command-palette-wrapper {");
     expect(paletteStyles).toContain('--einui-command-shortcut: Canvas;');

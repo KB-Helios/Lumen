@@ -26,7 +26,7 @@ export function ContextActions({
   return (
     <div
       aria-label="Result actions"
-      className="flex min-h-[46px] min-w-0 items-center gap-1.5 border-t border-[color:var(--einui-command-divider)] px-4 py-2"
+      className="@container/actions flex min-h-[40px] min-w-0 shrink-0 items-center gap-[4px] border-t border-[color:var(--einui-command-divider)] px-[12px] py-[4px]"
     >
       <span
         ref={resultLabelRef}
@@ -43,7 +43,7 @@ export function ContextActions({
         onPress={onOpen}
       >
         <LumenUiIcon name="forward" size="small" />
-        <span className="hidden sm:inline">{isOpening ? 'Opening' : 'Open'}</span>
+        <span className="hidden @min-[640px]/actions:inline">{isOpening ? 'Opening' : 'Open'}</span>
         <kbd aria-hidden="true" className="ml-1 font-sans text-xs text-[color:var(--einui-command-muted-text)]">↵</kbd>
       </LumenButton>
       <LumenButton
@@ -54,7 +54,7 @@ export function ContextActions({
         onPress={onOpenContainingFolder}
       >
         <LumenUiIcon name="folderOpen" size="small" />
-        <span className="hidden sm:inline">Folder</span>
+        <span className="hidden @min-[640px]/actions:inline">Folder</span>
       </LumenButton>
       <LumenButton
         aria-label={result?.pinned ? 'Unpin selected result' : 'Pin selected result'}
@@ -64,7 +64,7 @@ export function ContextActions({
         onPress={onPin}
       >
         <LumenUiIcon name={result?.pinned ? 'pinned' : 'pin'} size="small" />
-        <span className="hidden sm:inline">{result?.pinned ? 'Unpin' : 'Pin'}</span>
+        <span className="hidden @min-[640px]/actions:inline">{result?.pinned ? 'Unpin' : 'Pin'}</span>
       </LumenButton>
       <LumenButton
         aria-label="Show file details"
@@ -74,7 +74,7 @@ export function ContextActions({
         onPress={onDetails}
       >
         <LumenUiIcon name="info" size="small" />
-        <span className="hidden sm:inline">Details</span>
+        <span className="hidden @min-[640px]/actions:inline">Details</span>
       </LumenButton>
     </div>
   );

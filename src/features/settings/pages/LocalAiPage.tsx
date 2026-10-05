@@ -40,14 +40,14 @@ const modelCopy: Record<ModelState, {label: string; description: string; tone: '
 
 function ModelProgress({label = 'Downloading', value}: {label?: string; value: number}) {
   return (
-    <ProgressBar aria-label="Model download" className="grid w-[190px] gap-1" value={value}>
+    <ProgressBar aria-label="Model download" className="grid min-w-0 w-[190px] max-w-full gap-[4px]" value={value}>
       {({percentage, valueText}) => (
         <>
-          <div className="flex justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap justify-between gap-[8px]">
             <LumenText variant="meta">{label}</LumenText>
             <LumenText tone="tertiary" variant="meta">{valueText}</LumenText>
           </div>
-          <div className="h-1 overflow-hidden rounded-pill bg-surface-raised"><div className="h-full rounded-pill bg-accent transition-[width] duration-150" style={{width: `${percentage}%`}} /></div>
+          <div className="h-[4px] overflow-hidden rounded-pill bg-surface-raised"><div className="h-full rounded-pill bg-accent transition-[width] duration-[var(--lumen-duration-selection)]" style={{width: `${percentage}%`}} /></div>
         </>
       )}
     </ProgressBar>
@@ -150,10 +150,10 @@ export function LocalAiPage({
 
   return (
     <SettingsPage>
-      <section className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-6 rounded-surface border border-border-subtle bg-surface-inset p-6" data-testid={`hardware-${view.hardware}`}>
-        <span aria-hidden="true" className="grid size-[52px] place-items-center rounded-surface bg-accent/10 text-accent">{hardware.icon}</span>
-        <div className="grid gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+      <section className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[16px] rounded-surface border border-border-subtle bg-surface-inset p-[16px]" data-testid={`hardware-${view.hardware}`}>
+        <span aria-hidden="true" className="grid size-[52px] place-items-center rounded-surface bg-surface-raised text-text-secondary">{hardware.icon}</span>
+        <div className="grid min-w-0 gap-[8px]">
+          <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
             <LumenText as="h2" variant="bodyLarge" weight="semibold">{hardware.label}</LumenText>
             <StatusBadge tone={hardware.tone}>{view.hardware.toUpperCase()}</StatusBadge>
           </div>
@@ -171,7 +171,7 @@ export function LocalAiPage({
           description={nativeHealth ? `Answers: ${nativeHealth.answerModel}; embeddings: ${nativeHealth.embeddingModel}; transcription: ${nativeHealth.transcriptionModel}.` : state.description}
           status={<StatusBadge tone={state.tone}>{state.label}</StatusBadge>}
         >
-          <div data-testid={`model-${view.state}`}>
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-[8px]" data-testid={`model-${view.state}`}>
             {view.state === 'downloading' ? <ModelProgress label={provisioning?.detail ?? 'Downloading'} value={view.progress} /> : null}
             {native && !model && provisioning?.canDownload ? (
               <LumenButton aria-label="Download local core" size="small" onPress={startProvisioning}>

@@ -61,7 +61,7 @@ describe('Lumen primitives', () => {
     expect(screen.getByRole('main').parentElement).toBe(surface);
   });
 
-  it('suppresses literal inset shadows under app-controlled high contrast', () => {
+  it('uses semantic inner edges and suppresses shadows under app-controlled high contrast', () => {
     render(
       <>
         <LumenSurface data-testid="mica-surface" material="mica">
@@ -77,13 +77,9 @@ describe('Lumen primitives', () => {
     const insetSurface = screen.getByTestId('inset-surface');
 
     expect(micaSurface).toHaveClass('high-contrast:shadow-none');
-    expect(micaSurface.className).toContain(
-      'shadow-[inset_0_1px_0_rgba(255,255,255,0.74),inset_0_-1px_0_rgba(0,0,0,0.14)]',
-    );
+    expect(micaSurface.querySelector('[aria-hidden="true"]')?.className).toContain('var(--lumen-border-specular)');
     expect(insetSurface).toHaveClass('high-contrast:shadow-none');
-    expect(insetSurface.className).toContain(
-      'shadow-[inset_0_-1px_0_rgba(0,0,0,0.14),inset_0_2px_8px_rgba(0,0,0,0.16)]',
-    );
+    expect(insetSurface).toHaveClass('shadow-none');
   });
 
   it('uses the shared 24-unit icon geometry', () => {
