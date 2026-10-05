@@ -19,6 +19,7 @@ import {GeneralPage} from './pages/GeneralPage';
 import {IndexedRootsPage} from './pages/IndexedRootsPage';
 import {LocalAiPage} from './pages/LocalAiPage';
 import {PrivacyPage} from './pages/PrivacyPage';
+import {ProvidersPage} from './pages/ProvidersPage';
 import {SearchPage} from './pages/SearchPage';
 import {settingsPageIdSchema, type SettingsPageId} from './settings.schema';
 import {useSettingsStore} from './settings.store';
@@ -36,6 +37,7 @@ function defaultPageContent(page: SettingsPageId) {
     case 'search': return <SearchPage />;
     case 'local-ai': return <LocalAiPage />;
     case 'agent-gateway': return <AgentGatewayPage />;
+    case 'providers': return <ProvidersPage />;
     case 'computer-use': return <ComputerUsePage />;
     case 'activity': return <ActivityPage />;
     case 'privacy': return <PrivacyPage />;

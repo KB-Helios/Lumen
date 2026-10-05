@@ -9,6 +9,7 @@ export const settingsPageIds = [
   'search',
   'local-ai',
   'agent-gateway',
+  'providers',
   'computer-use',
   'activity',
   'privacy',

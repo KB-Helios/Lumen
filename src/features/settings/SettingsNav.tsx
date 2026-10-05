@@ -19,6 +19,7 @@ export const settingsPages: readonly SettingsPageDefinition[] = [
   {id: 'search', label: 'Search', description: 'Scopes and ranking priorities', icon: <LumenUiIcon className="size-[18px]" name="search" />},
   {id: 'local-ai', label: 'Local AI', description: 'Hardware and model readiness', icon: <LumenUiIcon className="size-[18px]" name="hardware" />},
   {id: 'agent-gateway', label: 'AgentGateway', description: 'Providers, routes, MCP, and consent', icon: <LumenUiIcon className="size-[18px]" name="connect" />},
+  {id: 'providers', label: 'Providers', description: 'Switch model providers across local tools', icon: <LumenUiIcon className="size-[18px]" name="key" />},
   {id: 'computer-use', label: 'Computer Use', description: 'Gemini browser agent, consent, and approvals', icon: <LumenUiIcon className="size-[18px]" name="computer" />},
   {id: 'activity', label: 'Activity', description: 'Quiet modes and background work', icon: <LumenUiIcon className="size-[18px]" name="pulse" />},
   {id: 'privacy', label: 'Privacy', description: 'Local data and destructive actions', icon: <LumenUiIcon className="size-[18px]" name="privacy" />},
