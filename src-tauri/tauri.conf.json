@@ -46,7 +46,7 @@
   "bundle": {
     "active": true,
     "targets": "nsis",
-    "externalBin": ["binaries/agentgateway", "binaries/lumen-enrichment", "binaries/lumen-rivet-engine", "binaries/lumen-computer-use"],
+    "externalBin": ["binaries/agentgateway", "binaries/cliproxy-sidecar", "binaries/lumen-enrichment", "binaries/lumen-rivet-engine", "binaries/lumen-computer-use"],
     "resources": {
       "binaries/libstdc++-6.dll": "libstdc++-6.dll",
       "binaries/libgcc_s_seh-1.dll": "libgcc_s_seh-1.dll",
