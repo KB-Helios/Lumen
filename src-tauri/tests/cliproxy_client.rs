@@ -104,3 +104,77 @@ fn list_credentials_sends_bearer_to_v8_route() {
     assert!(value["files"].is_array());
     server.join().expect("mock server");
 }
+
+#[test]
+fn oauth_auth_url_sends_bearer_and_maps_start() {
+    let (base, server) = serve_once(
+        "GET",
+        "/v8/management/oauth/auth-url?provider=codex",
+        "mgmt-123",
+        r#"{"status":"ok","url":"https://example.com/auth","state":"state-123","user_code":"ABCD-1234"}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let start = tauri::async_runtime::block_on(client.oauth_auth_url("codex")).expect("auth url");
+    assert_eq!(start.url, "https://example.com/auth");
+    assert_eq!(start.state, "state-123");
+    assert_eq!(start.user_code.as_deref(), Some("ABCD-1234"));
+    server.join().expect("mock server");
+}
+
+#[test]
+fn oauth_status_poll_reports_pending() {
+    let (base, server) = serve_once(
+        "GET",
+        "/v8/management/oauth/status?state=state-123",
+        "mgmt-123",
+        r#"{"status":"wait"}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let poll = tauri::async_runtime::block_on(client.oauth_status("state-123")).expect("poll");
+    assert!(!poll.done);
+    assert_eq!(poll.error, None);
+    server.join().expect("mock server");
+}
+
+#[test]
+fn oauth_cancel_reports_sidecar_flag() {
+    let (base, server) = serve_once(
+        "DELETE",
+        "/v8/management/oauth/session?state=state-123",
+        "mgmt-123",
+        r#"{"status":"ok","cancelled":true}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let cancelled =
+        tauri::async_runtime::block_on(client.oauth_cancel("state-123")).expect("cancel");
+    assert!(cancelled);
+    server.join().expect("mock server");
+}
+
+#[test]
+fn oauth_linked_matches_credential_metadata() {
+    let (base, server) = serve_once(
+        "GET",
+        "/v8/management/credentials",
+        "mgmt-123",
+        r#"{"files":[{"name":"codex.json","type":"codex","provider":"codex","disabled":false}]}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let linked = tauri::async_runtime::block_on(client.oauth_linked("codex")).expect("linked");
+    assert!(linked);
+    server.join().expect("mock server");
+}
+
+#[test]
+fn api_key_usage_passes_counters_through() {
+    let (base, server) = serve_once(
+        "GET",
+        "/v8/management/observability/usage/api-keys",
+        "mgmt-123",
+        r#"{"codex":{"https://api.openai.com|key":{"success":3,"failed":1}}}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let value = tauri::async_runtime::block_on(client.api_key_usage()).expect("usage");
+    assert_eq!(value["codex"]["https://api.openai.com|key"]["success"], 3);
+    server.join().expect("mock server");
+}

@@ -6,7 +6,8 @@ Lumen's first-run and settings experiences are part of the same native React sur
 
 - `src/features/onboarding` owns the eight first-run scenes, folder selection, keyboard progression, and completion state.
 - `src/features/settings/SettingsShell.tsx` owns the bounded navigation rail, independently scrolling page region, page routing, and focus restoration.
-- `src/features/settings/pages` owns General, Appearance, Indexed roots, Search, Local AI, AgentGateway, Computer Use, Activity, Privacy, and Diagnostics.
+- `src/features/settings/pages` owns General, Appearance, Indexed roots, Search, Local AI, AgentGateway, Computer Use, Providers, Activity, Privacy, and Diagnostics.
+- `src/features/settings/pages/ProvidersPage.tsx` owns the Providers page: the Switch/Additive provider list, the Authorization center (OAuth sign-in through the cliproxy sidecar, boolean link status only), and the Usage panel (per-provider request counts). Provider truth stays in Rust (`src-tauri/src/provider_switcher`): the `cliproxy-sidecar` lifecycle, the loopback `/v8/management` client, and the atomic file-switch engine. Secrets never reach the webview.
 - `src/state/appearance.store.ts` owns live theme, transparency, density, preview, effects, and motion preferences.
 - `src/features/settings/settings.store.ts` owns management preferences and the last active settings page.
 - Feature stores own presentation state. Native activity, provider routes, MCP permissions, local runtime provisioning, privacy, index data, and diagnostic truth remain authoritative in Rust.
