@@ -3,7 +3,7 @@ mod computer_use;
 mod consent;
 mod gateway;
 mod privacy;
-mod provider_switcher;
+pub mod provider_switcher;
 mod search;
 mod window;
 mod windows_ai;
@@ -341,6 +341,9 @@ pub fn run() {
             computer_use::cancel_computer_use,
             provider_switcher::supervisor::cliproxy_health,
             provider_switcher::supervisor::cliproxy_restart,
+            provider_switcher::client::cliproxy_get_config,
+            provider_switcher::client::cliproxy_patch_config,
+            provider_switcher::client::cliproxy_list_credentials,
             windows_ai::windows_ai_status,
             windows_ai::windows_ai_update_preferences,
             windows_ai::windows_ai_prepare,
