@@ -53,7 +53,7 @@ export function SearchPage({semanticService = defaultSemanticSearchService}: {se
   return (
     <SettingsPage>
       <SettingSection title="Result scopes" description="Choose which scope tabs stay available in the launcher.">
-        <div className="grid grid-cols-2 gap-2 p-5">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[8px] p-[16px] @min-[24rem]/settings:grid-cols-2">
           {scopes.map(([id, label]) => (
             <LumenCheckbox
               key={id}

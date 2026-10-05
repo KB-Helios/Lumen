@@ -37,12 +37,12 @@ function LauncherComposer({
 }: LauncherComposerProps) {
   const intent = useLauncherStore((state) => state.intent);
   return (
-    <div className="flex min-w-0 items-center gap-3" data-tauri-drag-region>
+    <div className="flex w-full min-w-0 items-center gap-[10px]" data-tauri-drag-region>
       <span
         aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-[var(--lumen-radius-control)] border border-[color:var(--einui-command-divider)] bg-[var(--einui-command-row)] text-accent shadow-[var(--lumen-shadow-control)]"
+        className="grid size-[32px] shrink-0 place-items-center rounded-[var(--lumen-radius-control)] border border-[color:var(--einui-command-divider)] bg-[var(--einui-command-row)] text-accent"
       >
-        <LumenMark className="drop-shadow-[0_0_10px_currentColor]" size="large" />
+        <LumenMark size="medium" />
       </span>
       <LumenButton
         aria-label={intent === 'computer' ? 'Switch to file search' : 'Switch to Computer Use'}

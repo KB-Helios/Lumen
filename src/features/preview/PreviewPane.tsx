@@ -62,13 +62,13 @@ function PreviewFrame({
   const title = stateTitle(controller);
   const subtitle = controller.preview?.subtitle;
   return (
-    <div className={mode === 'pane' ? 'grid h-full min-h-80 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-l border-[color:var(--einui-command-divider)]' : 'grid max-h-inherit grid-rows-[auto_minmax(0,1fr)] overflow-hidden'}>
+    <div className={mode === 'pane' ? 'grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-l border-[color:var(--einui-command-divider)]' : 'grid max-h-inherit grid-rows-[auto_minmax(0,1fr)] overflow-hidden'}>
       <header className="grid min-h-[66px] min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[color:var(--einui-command-divider)] px-4 py-3">
         <div className="grid min-w-0 gap-0.5">
           <span className="truncate font-sans text-[0.9375rem] font-semibold text-[color:var(--einui-command-text)]">{title}</span>
           {subtitle ? <span className="truncate font-sans text-[0.6875rem] text-[color:var(--einui-command-muted-text)]" title={subtitle}>{subtitle}</span> : null}
         </div>
-        {onClose ? <button aria-label="Close details" className="grid size-8 place-items-center rounded-control text-[color:var(--einui-command-muted-text)] outline-none transition-colors duration-[90ms] hover:bg-[var(--einui-command-row-hover)] hover:text-[color:var(--einui-command-text)] focus-visible:ring-2 focus-visible:ring-focus" type="button" onClick={onClose}><LumenUiIcon name="close" size="small" /></button> : null}
+        {onClose ? <button aria-label="Close details" className="grid size-[32px] place-items-center rounded-control text-[color:var(--einui-command-muted-text)] outline-none transition-colors duration-[var(--lumen-duration-hover)] hover:bg-[var(--einui-command-row-hover)] hover:text-[color:var(--einui-command-text)] focus-visible:ring-2 focus-visible:ring-focus" type="button" onClick={onClose}><LumenUiIcon name="close" size="small" /></button> : null}
       </header>
       <div className="min-h-0 overflow-auto [scrollbar-color:var(--einui-command-divider)_transparent] [scrollbar-width:thin]">
         <AnimatePresence initial={false} mode="wait">

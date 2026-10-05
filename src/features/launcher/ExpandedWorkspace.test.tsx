@@ -38,8 +38,16 @@ function mockViewport(width: number) {
   });
 }
 
-function renderWorkspace(preview: AppearanceSettings['preview'], width: number) {
-  mockViewport(width);
+function renderWorkspace(preview: AppearanceSettings['preview'], width: number, height = 320) {
+  // The launcher can be narrower than its browser/window host (e.g. the gallery).
+  mockViewport(1280);
+  const measure = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return this.hasAttribute('data-workspace-content') ? {
+      x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height,
+      toJSON: () => ({}),
+    } : measure.call(this);
+  });
   appearanceStore.setState({preview});
   render(
     <AppProviders appearance={appearance}>
@@ -72,7 +80,7 @@ afterEach(() => {
 describe('ExpandedWorkspace preview policy', () => {
   it.each([
     ['automatic', 720, false],
-    ['automatic', 800, false],
+    ['automatic', 800, true],
     ['automatic', 960, true],
     ['always', 720, false],
     ['always', 800, true],
@@ -88,5 +96,17 @@ describe('ExpandedWorkspace preview policy', () => {
     } else {
       expect(screen.queryByLabelText('File preview')).not.toBeInTheDocument();
     }
+  });
+
+  it('keeps a narrow launcher free of inline preview in a wide host', () => {
+    renderWorkspace('always', 520);
+
+    expect(screen.queryByLabelText('File preview')).not.toBeInTheDocument();
+  });
+
+  it.each(['automatic', 'always'] as const)('lets %s preview yield when results have too little height', (policy) => {
+    renderWorkspace(policy, 960, 160);
+
+    expect(screen.queryByLabelText('File preview')).not.toBeInTheDocument();
   });
 });

@@ -175,7 +175,7 @@ export function ActivityPage({
 
   return (
     <SettingsPage>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-[12px]">
         {!native ? (
           <LumenSelect<ActivityMode>
             aria-label="Development activity state"
@@ -229,7 +229,7 @@ export function ActivityPage({
         </SettingRow>
       </SettingSection>
       <SettingSection title="Application overrides" description="Give a selected executable a stable policy instead of relying on classification.">
-        <div className={native ? 'flex justify-end p-5' : 'grid grid-cols-[minmax(0,1fr)_auto] gap-2 p-5'}>
+        <div className={native ? 'flex min-w-0 flex-wrap justify-end p-[16px]' : 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[8px] p-[16px] @min-[32rem]/settings:grid-cols-[minmax(0,1fr)_auto]'}>
           {!native ? (
             <LumenTextField
               aria-label="Application override"
@@ -244,7 +244,7 @@ export function ActivityPage({
               }}
             />
           ) : null}
-          <LumenButton aria-label={native ? 'Choose application executable' : 'Add application override'} size="small" onPress={() => void addOverride()}>
+          <LumenButton aria-label={native ? 'Choose application executable' : 'Add application override'} className="justify-self-start" size="small" onPress={() => void addOverride()}>
             <LumenUiIcon name="add" size="small" /> {native ? 'Choose executable' : 'Add'}
           </LumenButton>
         </div>
@@ -258,24 +258,24 @@ export function ActivityPage({
         ))}
       </SettingSection>
       <SettingSection title="User-defined games" description="Select games that Windows may not classify consistently.">
-        <div className={native ? 'flex justify-end p-5' : 'grid grid-cols-[minmax(0,1fr)_auto] gap-2 p-5'}>
+        <div className={native ? 'flex min-w-0 flex-wrap justify-end p-[16px]' : 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[8px] p-[16px] @min-[32rem]/settings:grid-cols-[minmax(0,1fr)_auto]'}>
           {!native ? <LumenTextField aria-label="User-defined game" placeholder="Example: game.exe" value={gameName} onChange={setGameName} /> : null}
-          <LumenButton aria-label={native ? 'Choose game executable' : 'Add user-defined game'} size="small" onPress={() => void addGame()}>
+          <LumenButton aria-label={native ? 'Choose game executable' : 'Add user-defined game'} className="justify-self-start" size="small" onPress={() => void addGame()}>
             <LumenUiIcon name="tools" size="small" /> {native ? 'Choose game' : 'Add game'}
           </LumenButton>
         </div>
         {activity.userGames.length ? (
-          <div className="flex flex-wrap gap-2 p-5">
+          <div className="flex min-w-0 flex-wrap gap-[8px] p-[16px]">
             {activity.userGames.map((game) => (
-              <span key={game.id} className="inline-flex min-h-9 items-center gap-1 rounded-pill bg-surface-raised pl-3 text-xs text-text-secondary">
-                {game.name}
+              <span key={game.id} className="inline-flex min-h-[36px] min-w-0 max-w-full items-center gap-[4px] rounded-pill bg-surface-inset pl-[12px] text-xs text-text-secondary">
+                <span className="min-w-0 [overflow-wrap:anywhere]">{game.name}</span>
                 <LumenIconButton aria-label={`Remove game ${game.name}`} size="small" variant="quiet" onPress={() => void applyPolicy({...activity, userGames: activity.userGames.filter((item) => item.id !== game.id)})}>
                   <LumenUiIcon name="close" size="small" />
                 </LumenIconButton>
               </span>
             ))}
           </div>
-        ) : <div className="flex flex-wrap gap-2 p-5"><LumenText tone="tertiary" variant="meta">No custom game classifications.</LumenText></div>}
+        ) : <div className="flex flex-wrap gap-[8px] p-[16px]"><LumenText tone="tertiary" variant="meta">No custom game classifications.</LumenText></div>}
       </SettingSection>
       <LumenButton aria-label="Reset classifications" size="small" variant="quiet" onPress={resetAll}>Reset classifications</LumenButton>
     </SettingsPage>

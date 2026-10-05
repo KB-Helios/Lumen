@@ -57,14 +57,14 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
   });
 
   return (
-    <article aria-label={`Indexed root ${root.path}`} className="grid gap-4 border-b border-border-subtle p-5 last:border-b-0">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
-        <span aria-hidden="true" className="grid size-10 place-items-center rounded-control bg-accent/10 text-accent"><LumenUiIcon name="folder" size="medium" /></span>
+    <article aria-label={`Indexed root ${root.path}`} className="grid min-w-0 gap-[16px] border-b border-border-subtle p-[16px] last:border-b-0">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[12px] @min-[32rem]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <span aria-hidden="true" className="grid size-[40px] place-items-center rounded-control bg-surface-inset text-text-secondary"><LumenUiIcon name="folder" size="medium" /></span>
         <div className="grid min-w-0 gap-1">
           <LumenText className="truncate" weight="medium">{root.path}</LumenText>
           <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="col-span-full flex items-center gap-[4px] @min-[32rem]/settings:col-auto">
           <LumenIconButton
             aria-label={`${root.paused ? 'Resume' : 'Pause'} ${root.path}`}
             size="small"
@@ -85,8 +85,8 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
           </ConfirmationDialog>
         </div>
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
-        <LumenText tone="tertiary" variant="meta">Root policy</LumenText>
+      <div className="flex min-w-0 flex-wrap items-center gap-[12px]">
+        <LumenText className="w-full" tone="tertiary" variant="meta">Root policy</LumenText>
         <LumenSwitch
           aria-label={`Allow cloud enrichment for ${root.path}`}
           isSelected={cloudEnrichment}
@@ -108,8 +108,8 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
           onChange={(value) => onChange({...root, maxFileSizeMb: Number(value)})}
         />
       </div>
-      <div className="grid gap-2">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+      <div className="grid min-w-0 gap-[8px]">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[8px] @min-[32rem]/settings:grid-cols-[minmax(0,1fr)_auto]">
           <LumenTextField
             aria-label={`Exclusion pattern for ${root.path}`}
             placeholder="Examples: node_modules or *.tmp"
@@ -125,14 +125,14 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
               }
             }}
           />
-          <LumenButton aria-label={`Add exclusion for ${root.path}`} size="small" onPress={addExclusion}>Add</LumenButton>
+          <LumenButton aria-label={`Add exclusion for ${root.path}`} className="justify-self-start" size="small" onPress={addExclusion}>Add</LumenButton>
         </div>
         {error ? <LumenText className="text-danger" role="alert" variant="meta">{error}</LumenText> : null}
         {root.exclusions.length ? (
-          <div aria-label={`Exclusions for ${root.path}`} className="flex flex-wrap gap-2">
+          <div aria-label={`Exclusions for ${root.path}`} className="flex min-w-0 flex-wrap gap-[8px]">
             {root.exclusions.map((exclusion) => (
-              <span key={exclusion} className="inline-flex min-h-[26px] items-center gap-1 rounded-pill bg-surface-raised px-2.5 font-sans text-xs text-text-secondary">
-                {exclusion}
+              <span key={exclusion} className="inline-flex min-h-[32px] min-w-0 max-w-full items-center gap-[4px] rounded-pill bg-surface-inset px-[10px] font-sans text-xs text-text-secondary">
+                <span className="min-w-0 [overflow-wrap:anywhere]">{exclusion}</span>
                 <LumenIconButton
                   aria-label={`Remove exclusion ${exclusion}`}
                   size="small"

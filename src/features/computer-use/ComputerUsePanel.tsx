@@ -45,17 +45,17 @@ export function ComputerUsePanel({
           : 'A separate Microsoft Edge session will carry out this browser-only task.';
 
   return (
-    <section aria-label="Computer Use workspace" className="grid min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-t border-border-subtle">
-      <header className="flex items-center justify-between gap-6 border-b border-border-subtle px-6 py-4">
-        <div className="flex min-w-0 items-center gap-3">
+    <section aria-label="Computer Use workspace" className="@container/computer-use grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-t border-border-subtle [overflow-wrap:anywhere]">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-[8px] border-b border-border-subtle px-[16px] py-[10px]">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-[12px] gap-y-[4px]">
           <LumenUiIcon className="text-accent" name="computer" size="medium" />
           <LumenText weight="semibold">Computer Use</LumenText>
           <LumenText tone="tertiary" variant="meta">Gemini · browser only</LumenText>
         </div>
-        <LumenText aria-label={phaseLabel(controller)} className="rounded-pill bg-surface-inset px-2.5 py-1 text-text-secondary" role="status" variant="caption">{phaseLabel(controller)}</LumenText>
+        <LumenText aria-label={phaseLabel(controller)} className="max-w-full rounded-pill bg-surface-inset px-[10px] py-[4px] text-text-secondary" role="status" variant="caption">{phaseLabel(controller)}</LumenText>
       </header>
-      <div className="grid min-h-0 content-start gap-6 overflow-y-auto p-8" tabIndex={-1}>
-        <div className="grid gap-3 rounded-control border border-border-subtle bg-surface-inset p-5">
+      <div className="grid min-h-0 min-w-0 content-start gap-[16px] overflow-y-auto p-[16px]" tabIndex={-1}>
+        <div className="grid min-w-0 gap-[12px] rounded-control border border-border-subtle bg-surface-inset p-[16px]">
           <LumenText weight="medium">Protected browser session</LumenText>
           <LumenText tone="secondary" variant="meta">{setupMessage}</LumenText>
           <LumenText tone="tertiary" variant="caption">
@@ -63,7 +63,7 @@ export function ComputerUsePanel({
           </LumenText>
         </div>
         {controller.task ? (
-          <div className="grid gap-3 rounded-control border border-border-subtle bg-surface-inset p-5">
+          <div className="grid min-w-0 gap-[12px] rounded-control border border-border-subtle bg-surface-inset p-[16px]">
             <LumenText tone="tertiary" variant="caption">Current task</LumenText>
             <p className="m-0 font-sans text-sm leading-relaxed text-text-primary">{controller.task}</p>
             {controller.currentUrl ? (
@@ -74,16 +74,16 @@ export function ComputerUsePanel({
           </div>
         ) : null}
         {controller.reasoning ? (
-          <div aria-live="polite" className="grid gap-3 rounded-control border border-border-subtle bg-surface-inset p-5">
+          <div aria-live="polite" className="grid min-w-0 gap-[12px] rounded-control border border-border-subtle bg-surface-inset p-[16px]">
             <LumenText tone="tertiary" variant="caption">Agent update</LumenText>
             <LumenText tone="secondary">{controller.reasoning}</LumenText>
           </div>
         ) : null}
         {controller.approval ? (
-          <div aria-label="Approve Computer Use action" className="grid gap-4 rounded-control border border-accent/40 bg-accent/10 p-5" role="alertdialog">
+          <div aria-label="Approve Computer Use action" className="grid min-w-0 gap-[16px] rounded-control border border-accent/40 bg-accent/10 p-[16px]" role="alertdialog">
             <LumenText weight="semibold">Gemini needs your approval</LumenText>
             <LumenText tone="secondary">{controller.approval.explanation}</LumenText>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
               <LumenButton variant="primary" onPress={() => void controller.approve()}>
                 <LumenUiIcon name="success" size="small" /> Approve once
               </LumenButton>
@@ -94,21 +94,21 @@ export function ComputerUsePanel({
           </div>
         ) : null}
         {controller.summary ? (
-          <div aria-live="polite" className="grid gap-3 rounded-control border border-border-subtle bg-surface-inset p-5">
+          <div aria-live="polite" className="grid min-w-0 gap-[12px] rounded-control border border-border-subtle bg-surface-inset p-[16px]">
             <LumenText weight="medium">Task complete</LumenText>
             <LumenText tone="secondary">{controller.summary}</LumenText>
           </div>
         ) : null}
         {controller.error ? (
-          <div className="grid gap-3 rounded-control border border-danger/40 bg-danger/10 p-5" role="alert">
+          <div className="grid min-w-0 gap-[12px] rounded-control border border-danger/40 bg-danger/10 p-[16px]" role="alert">
             <LumenText weight="medium">Computer Use could not continue</LumenText>
             <LumenText tone="secondary">{controller.error}</LumenText>
           </div>
         ) : null}
         {controller.activity.length > 0 ? (
-          <ul aria-label="Computer Use activity" className="m-0 grid list-none gap-2 p-0">
+          <ul aria-label="Computer Use activity" className="m-0 grid min-w-0 list-none gap-[8px] p-0">
             {controller.activity.map((item) => (
-              <li key={item.id} className="flex items-center gap-3">
+              <li key={item.id} className="flex min-w-0 items-center gap-[12px]">
                 <span aria-hidden="true" className={['size-1.5 shrink-0 rounded-pill', item.tone === 'accent' ? 'bg-accent' : item.tone === 'success' ? 'bg-success' : 'bg-text-tertiary'].join(' ')} />
                 <LumenText tone="secondary" variant="meta">{item.label}</LumenText>
               </li>
@@ -116,11 +116,11 @@ export function ComputerUsePanel({
           </ul>
         ) : null}
       </div>
-      <footer className="flex items-center justify-between gap-4 border-t border-border-subtle px-6 py-3">
-        <LumenText tone="tertiary" variant="caption">
+      <footer className="flex min-w-0 flex-wrap items-center justify-between gap-[8px] border-t border-border-subtle px-[16px] py-[10px]">
+        <LumenText className="min-w-0 w-full @min-[32rem]/computer-use:w-auto" tone="tertiary" variant="caption">
           {controller.model ?? 'gemini-3.6-flash'} · {controller.browser ?? 'Microsoft Edge'}
         </LumenText>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
           {!setupReady && !active ? (
             <LumenButton size="small" variant="quiet" onPress={onOpenSettings}>
               <LumenUiIcon name="settings" size="small" /> Open settings

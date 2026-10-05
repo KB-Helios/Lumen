@@ -25,11 +25,20 @@ export function SelectionCapsule({
   const hasPositioned = useRef(false);
 
   useLayoutEffect(() => {
-    const container = containerRef.current;
-    let observer: ResizeObserver | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+    let styleObserver: MutationObserver | undefined;
+    let collectionObserver: MutationObserver | undefined;
+    let selectionFrame: number | undefined;
+    let pendingSelectedId = selectedId;
+    let active = true;
     const updateSelection = (fileId: string | null) => {
-      observer?.disconnect();
-      observer = undefined;
+      const container = containerRef.current;
+      resizeObserver?.disconnect();
+      resizeObserver = undefined;
+      styleObserver?.disconnect();
+      styleObserver = undefined;
+      collectionObserver?.disconnect();
+      collectionObserver = undefined;
       const selected = fileId
         ? [...(container?.querySelectorAll<HTMLElement>('[data-result-id]') ?? [])]
             .find((element) => element.dataset.resultId === fileId)
@@ -37,30 +46,63 @@ export function SelectionCapsule({
       if (!container || !selected) {
         opacity.set(0);
         hasPositioned.current = false;
+        // React Aria mounts collection rows after the parent's layout effects.
+        // Observe only until this selected row exists, then measure that row.
+        if (container && fileId && typeof MutationObserver === 'function') {
+          collectionObserver = new MutationObserver(() => updateSelection(fileId));
+          collectionObserver.observe(container, {childList: true, subtree: true});
+        }
         return;
       }
       const measure = () => {
+        if (!selected.isConnected) {
+          updateSelection(fileId);
+          return;
+        }
+        const transformY = selected.style.transform && typeof DOMMatrixReadOnly === 'function'
+          ? new DOMMatrixReadOnly(selected.style.transform).m42
+          : 0;
+        const positionY = selected.offsetTop + transformY;
         if (!hasPositioned.current) {
           hasPositioned.current = true;
-          springY.jump(selected.offsetTop);
+          springY.jump(positionY);
         }
-        targetY.set(selected.offsetTop);
+        targetY.set(positionY);
         height.set(selected.offsetHeight || rowHeight);
         opacity.set(1);
       };
       measure();
       if (typeof ResizeObserver === 'function') {
-        observer = new ResizeObserver(measure);
-        observer.observe(selected);
+        resizeObserver = new ResizeObserver(measure);
+        resizeObserver.observe(selected);
+      }
+      // Observe inline style changes (transform) for virtualized row position updates.
+      if (typeof MutationObserver === 'function') {
+        styleObserver = new MutationObserver(measure);
+        styleObserver.observe(selected, {attributes: true, attributeFilter: ['style']});
       }
     };
-    updateSelection(selectedId);
+    // Child layout effects run before the containing viewport's ref is attached.
+    // Measure after that commit, without waiting for the next animation frame.
+    queueMicrotask(() => { if (active) updateSelection(selectedId); });
     const unsubscribe = useSelectionStore.subscribe(
       (state) => state.selectedId,
-      updateSelection,
+      (fileId) => {
+        pendingSelectedId = fileId;
+        // Selection attributes update immediately. Read highlight geometry once
+        // before paint, even when several key events arrive in the same frame.
+        selectionFrame ??= requestAnimationFrame(() => {
+          selectionFrame = undefined;
+          if (active) updateSelection(pendingSelectedId);
+        });
+      },
     );
     return () => {
-      observer?.disconnect();
+      active = false;
+      if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+      resizeObserver?.disconnect();
+      styleObserver?.disconnect();
+      collectionObserver?.disconnect();
       unsubscribe();
     };
   }, [containerRef, height, opacity, rowHeight, selectedId, springY, targetY]);

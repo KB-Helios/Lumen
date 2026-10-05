@@ -10,9 +10,9 @@ export interface LumenSurfaceProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const materialClasses: Record<LumenMaterial, string> = {
-  mica: 'bg-surface-glass shadow-surface backdrop-blur-[32px] backdrop-saturate-[135%]',
-  raised: 'bg-surface-raised shadow-control backdrop-blur-[20px] backdrop-saturate-[125%]',
-  inset: 'bg-surface-inset shadow-[inset_0_-1px_0_rgba(0,0,0,0.14),inset_0_2px_8px_rgba(0,0,0,0.16)] high-contrast:shadow-none',
+  mica: 'bg-surface-glass shadow-surface backdrop-blur-[24px] backdrop-saturate-[105%]',
+  raised: 'bg-surface-raised shadow-control backdrop-blur-[16px]',
+  inset: 'bg-surface-inset shadow-none',
   flat: 'bg-surface-glass shadow-none',
 };
 
@@ -30,15 +30,15 @@ export const LumenSurface = forwardRef<HTMLDivElement, LumenSurfaceProps>(
         {...props}
         ref={ref}
         className={cn(
-          'relative isolate overflow-hidden border border-border-subtle text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.74),inset_0_-1px_0_rgba(0,0,0,0.14)] high-contrast:shadow-none',
+          'relative isolate overflow-hidden border border-border-subtle text-text-primary high-contrast:shadow-none',
           materialClasses[material],
           className,
         )}
         data-material={material}
       >
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-30 bg-[var(--lumen-surface-glass)]" />
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_14%_-18%,rgba(255,255,255,0.19),transparent_54%)] bg-[var(--lumen-surface-glass)] mix-blend-screen" />
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[image:var(--lumen-surface-noise)] bg-repeat opacity-[0.045] mix-blend-soft-light [background-size:180px_180px]" style={noiseStyle} />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-30 rounded-[inherit] shadow-[inset_0_1px_0_var(--lumen-border-specular)]" />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_14%_-18%,rgba(255,255,255,0.025),transparent_54%)]" />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[image:var(--lumen-surface-noise)] bg-repeat opacity-[0.018] mix-blend-soft-light [background-size:180px_180px]" style={noiseStyle} />
         {children}
       </div>
     );

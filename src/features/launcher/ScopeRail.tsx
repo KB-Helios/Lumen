@@ -58,13 +58,13 @@ export function ScopeRail() {
       selectedKey={activeScope}
       onSelectionChange={(key) => setScope(key as SearchScope)}
     >
-      <TabList aria-label="Search scopes" className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none]" items={enabledScopes}>
+      <TabList aria-label="Search scopes" className="flex items-center gap-[4px] overflow-x-auto px-[12px] py-[6px] [scrollbar-width:none]" items={enabledScopes}>
         {(scope) => (
           <Tab
             id={scope.id}
             className={({isFocusVisible, isHovered, isSelected}) =>
               cn(
-                'relative shrink-0 cursor-default rounded-[var(--lumen-radius-control)] bg-transparent px-3 py-2 font-sans text-sm font-medium text-[color:var(--einui-command-muted-text)] outline-2 outline-offset-1 outline-transparent transition-[background-color,color,outline-color] duration-[120ms] ease-standard',
+                'relative min-h-[32px] shrink-0 cursor-default rounded-[var(--lumen-radius-control)] bg-transparent px-[12px] py-[6px] font-sans text-sm font-medium text-[color:var(--einui-command-muted-text)] outline-2 outline-offset-1 outline-transparent transition-[background-color,color,outline-color] duration-[var(--lumen-duration-selection)] ease-standard',
                 isHovered && 'bg-[var(--einui-command-row-hover)] text-[color:var(--einui-command-text)]',
                 isSelected && 'text-[color:var(--einui-command-text)]',
                 isFocusVisible && 'outline-[color:var(--lumen-focus)]',

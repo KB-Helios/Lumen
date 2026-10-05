@@ -25,8 +25,8 @@ export function AppearancePage() {
 
   return (
     <SettingsPage>
-      <div aria-label="Appearance preview" className="grid min-h-[118px] place-items-center overflow-hidden rounded-surface border border-border-subtle bg-canvas [background-image:radial-gradient(circle_at_70%_25%,color-mix(in_srgb,var(--lumen-accent)_35%,transparent),transparent_42%)]">
-        <div className="flex min-h-[52px] w-[78%] items-center gap-3 rounded-surface border border-border-strong bg-surface-glass px-4 shadow-surface backdrop-blur-xl" style={{opacity: Math.max(0.55, presentation.glassIntensity / 100)}}>
+      <div aria-label="Appearance preview" className="grid min-h-[118px] min-w-0 place-items-center overflow-hidden rounded-surface border border-border-subtle bg-canvas">
+        <div className="flex min-h-[52px] min-w-0 w-[78%] items-center gap-[12px] rounded-surface border border-border-strong bg-surface-glass px-[16px] shadow-surface backdrop-blur-xl" style={{opacity: Math.max(0.55, presentation.glassIntensity / 100)}}>
           <LumenMark size="medium" />
           <span aria-hidden="true" className="h-1.5 flex-1 rounded-pill bg-border-strong" />
           <LumenText tone="tertiary" variant="caption">Preview</LumenText>

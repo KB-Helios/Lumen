@@ -20,6 +20,31 @@ async function captureScreenshot(page, options) {
   }
 }
 
+async function waitForScenario(page, scenario) {
+  const grid = page.getByRole('grid', {name: 'Search results'});
+  if (await grid.count() > 0) {
+    const count = Number(await grid.getAttribute('aria-rowcount'));
+    if (count > 0) await grid.locator('[data-result-id]').first().waitFor();
+  }
+  const preview = page.locator('[aria-label="File preview"]');
+  if (await preview.count() > 0) {
+    if (scenario.id === 'preview-loading') {
+      await preview.getByRole('status', {name: 'Loading preview'}).waitFor();
+    } else if (scenario.id === 'preview-failed') {
+      await preview.getByRole('alert').waitFor();
+    } else if (scenario.id === 'permission-required') {
+      await preview.getByText('Select a result to preview', {exact: true}).waitFor();
+    } else if (Number(await grid.getAttribute('aria-rowcount')) > 0) {
+      await preview.locator('[data-testid^="preview-"]').waitFor();
+    } else {
+      await preview.getByText('Select a result to preview', {exact: true}).waitFor();
+    }
+  }
+  await page.waitForFunction(() => [...document.querySelectorAll(
+    '[data-launcher-motion="workspace"], [role="tabpanel"] > div, [aria-label="File preview"] [style*="opacity"]',
+  )].every((element) => globalThis.getComputedStyle(element).opacity === '1'));
+}
+
 async function createContactSheet(browser, entries) {
   const page = await browser.newPage({viewport: {width: 1680, height: 1000}});
   const cards = await Promise.all(entries.map(async (entry) => {
@@ -32,11 +57,11 @@ async function createContactSheet(browser, entries) {
   }));
   await page.setContent(`<!doctype html>
     <html><head><style>
-      *{box-sizing:border-box} body{margin:0;padding:28px;background:#070b12;color:#eaf2ff;font:14px/1.4 "Segoe UI",sans-serif}
+      *{box-sizing:border-box} body{margin:0;padding:28px;background:#111110;color:#fafaf9;font:14px/1.4 "Segoe UI",sans-serif}
       h1{margin:0 0 20px;font-size:26px} main{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
-      figure{margin:0;padding:10px;background:#101824;border:1px solid #26354a;border-radius:14px;box-shadow:0 12px 30px #0006}
-      img{display:block;width:100%;aspect-ratio:28/19;object-fit:cover;border-radius:9px;background:#05070b}
-      figcaption{display:grid;gap:2px;padding:9px 3px 2px} strong{font-weight:600} span{color:#8fa2bb;font-size:12px}
+      figure{margin:0;padding:10px;background:#1c1c1b;border:1px solid #383836;border-radius:14px;box-shadow:0 12px 30px #0006}
+      img{display:block;width:100%;aspect-ratio:28/19;object-fit:cover;border-radius:9px;background:#111110}
+      figcaption{display:grid;gap:2px;padding:9px 3px 2px} strong{font-weight:600} span{color:#bfbeba;font-size:12px}
     </style></head><body><h1>Lumen visual state gallery</h1><main>${cards.join('')}</main></body></html>`);
   await captureScreenshot(page, {path: path.join(outputDirectory, 'contact-sheet.png'), fullPage: true});
   await page.close();
@@ -70,11 +95,12 @@ async function capture(baseUrl) {
       await page.locator(`[data-gallery-scenario="${scenario.id}"]`).waitFor();
       await page.evaluate(async (useLightBackdrop) => {
         document.documentElement.style.background = useLightBackdrop
-          ? 'linear-gradient(145deg, #f7fbff, #dce8f3)'
-          : 'radial-gradient(circle at 28% 8%, #20334f, #090d14 58%, #05070b)';
+          ? 'linear-gradient(145deg, #fafaf8, #e2e1dc)'
+          : 'radial-gradient(circle at 28% 8%, #30302c, #171716 58%, #111110)';
         await document.fonts.ready;
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       }, scenario.id === 'theme-light' || scenario.id === 'theme-high-contrast');
+      await waitForScenario(page, scenario);
       const filename = `${scenario.id}.png`;
       const absolutePath = path.join(outputDirectory, filename);
       await captureScreenshot(page, {path: absolutePath, animations: 'disabled'});

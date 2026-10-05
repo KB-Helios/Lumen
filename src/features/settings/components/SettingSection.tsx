@@ -10,8 +10,8 @@ export interface SettingSectionProps extends PropsWithChildren {
 export function SettingSection({children, description, title}: SettingSectionProps) {
   const sectionId = `setting-section-${title.toLowerCase().replace(/\s+/g, '-')}`;
   return (
-    <section aria-labelledby={sectionId} className="grid gap-3" data-setting-section="true">
-      <div className="grid gap-1 px-1">
+    <section aria-labelledby={sectionId} className="grid min-w-0 gap-[12px]" data-setting-section="true">
+      <div className="grid min-w-0 gap-[4px]">
         <LumenText
           as="h2"
           id={sectionId}
@@ -22,7 +22,7 @@ export function SettingSection({children, description, title}: SettingSectionPro
         </LumenText>
         {description ? <LumenText tone="tertiary" variant="meta">{description}</LumenText> : null}
       </div>
-      <div className="overflow-hidden rounded-surface border border-border-subtle bg-surface-raised">{children}</div>
+      <div className="min-w-0 rounded-surface border border-border-subtle bg-surface-raised">{children}</div>
     </section>
   );
 }

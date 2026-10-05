@@ -82,6 +82,8 @@ test('the constrained work area keeps controls contained while results and answe
     await expect(footer).toBeVisible();
     await expect(grid).toBeVisible();
     await expect(answer).toBeVisible();
+    await expect.poll(() => resultViewport.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(58);
+    await expect.poll(() => answer.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(24);
     await expect(answer).toHaveCount(1);
     await expect(modeControl).toHaveAccessibleName('Switch to Computer Use');
     await expect(modeLabel).toBeVisible();

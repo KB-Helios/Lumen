@@ -46,7 +46,7 @@ export function ProviderRegistryList({
   );
 
   return (
-    <div>
+    <div className="min-w-0">
       {registry.routes.map((route) => {
         const compatibleModels = registry.models.filter((model) =>
           model.capabilities.includes(route.capability) &&
@@ -64,8 +64,8 @@ export function ProviderRegistryList({
           upstreamModel: custom ? draft.upstreamModel : null,
         } : null;
         return (
-          <div key={route.alias} className="grid gap-3 border-b border-border-subtle p-5 last:border-b-0">
-            <div className="grid min-h-10 grid-cols-[minmax(130px,.7fr)_minmax(190px,1fr)_auto] items-center gap-4">
+          <div key={route.alias} className="grid min-w-0 gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0">
+            <div className="grid min-h-[40px] min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-[12px] @min-[36rem]/settings:grid-cols-[minmax(0,.7fr)_minmax(0,1fr)_auto]">
               <div className="grid min-w-0 gap-1">
                 <LumenText weight="medium">{route.alias}</LumenText>
                 <StatusBadge tone={route.status === 'ready' ? 'success' : 'warning'}>{statusLabel(route)}</StatusBadge>
@@ -87,13 +87,13 @@ export function ProviderRegistryList({
                   }
                 }}
               />
-              <LumenButton size="small" variant="quiet" onPress={() => void onTest(route.alias)}>Test</LumenButton>
+              <LumenButton className="justify-self-start" size="small" variant="quiet" onPress={() => void onTest(route.alias)}>Test</LumenButton>
             </div>
             {custom ? (
-              <div className="grid grid-cols-[minmax(0,1fr)_minmax(120px,.6fr)_auto] gap-2">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[8px] @min-[36rem]/settings:grid-cols-[minmax(0,1fr)_minmax(0,.6fr)_auto]">
                 <LumenTextField aria-label={`Base URL for ${route.alias}`} placeholder="https://api.example.com/v1" value={draft.baseUrl} onChange={(baseUrl) => setCustomDrafts((current) => ({...current, [route.alias]: {...draft, baseUrl}}))} />
                 <LumenTextField aria-label={`Upstream model for ${route.alias}`} placeholder="model-id" value={draft.upstreamModel} onChange={(upstreamModel) => setCustomDrafts((current) => ({...current, [route.alias]: {...draft, upstreamModel}}))} />
-                <LumenButton isDisabled={!update || !draft.baseUrl || !draft.upstreamModel} size="small" variant="primary" onPress={() => update && void onSet(update)}>Apply</LumenButton>
+                <LumenButton className="justify-self-start" isDisabled={!update || !draft.baseUrl || !draft.upstreamModel} size="small" variant="primary" onPress={() => update && void onSet(update)}>Apply</LumenButton>
               </div>
             ) : null}
           </div>

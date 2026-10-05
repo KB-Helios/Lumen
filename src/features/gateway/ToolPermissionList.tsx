@@ -7,9 +7,9 @@ export function ToolPermissionList({permissions, onChange}: {
   onChange(id: string, access: ToolAccess): void;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       {permissions.map((permission) => (
-        <div key={permission.id} className="grid min-h-[66px] grid-cols-[minmax(0,1fr)_auto] items-center gap-6 border-b border-border-subtle p-5 last:border-b-0">
+        <div key={permission.id} className="grid min-h-[66px] min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[32rem]/settings:grid-cols-[minmax(0,1fr)_minmax(0,.85fr)]">
           <div className="grid min-w-0 gap-1">
             <LumenText weight="medium">{permission.label}</LumenText>
             <LumenText tone="tertiary" variant="meta">{permission.description}</LumenText>

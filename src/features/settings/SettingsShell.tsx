@@ -1,6 +1,6 @@
-import {useEffect, useRef, type ReactNode} from 'react';
+import {useEffect, useLayoutEffect, useRef, type ReactNode} from 'react';
 
-import {AnimatePresence, motion} from 'motion/react';
+import {motion} from 'motion/react';
 import {TabPanel, Tabs} from 'react-aria-components';
 
 import {useLumenMotion} from '../../design-system/MotionProvider';
@@ -50,6 +50,7 @@ export function SettingsShell({onClose, pages}: SettingsShellProps) {
   const hydrate = useSettingsStore((state) => state.hydrate);
   const setActivePage = useSettingsStore((state) => state.setActivePage);
   const shellRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLElement>(null);
   const page = settingsPages.find((item) => item.id === activePage) ?? settingsPages[0];
 
   useEffect(() => {
@@ -59,6 +60,10 @@ export function SettingsShell({onClose, pages}: SettingsShellProps) {
   useEffect(() => {
     shellRef.current?.querySelector<HTMLElement>('[role="tab"][data-selected="true"]')?.focus();
   }, []);
+
+  useLayoutEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [page.id]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -85,8 +90,8 @@ export function SettingsShell({onClose, pages}: SettingsShellProps) {
       className="grid h-full min-h-0 min-w-0 w-full grid-rows-[54px_minmax(0,1fr)] overflow-hidden rounded-surface"
       material="mica"
     >
-      <header data-tauri-drag-region className="flex items-center justify-between gap-6 border-b border-border-subtle px-6">
-        <div className="flex items-baseline gap-3">
+      <header data-tauri-drag-region className="flex min-w-0 items-center justify-between gap-[12px] border-b border-border-subtle px-[20px]">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-[12px]">
           <LumenText weight="semibold">Lumen</LumenText>
           <LumenText tone="tertiary" variant="meta">Settings</LumenText>
         </div>
@@ -98,34 +103,31 @@ export function SettingsShell({onClose, pages}: SettingsShellProps) {
         orientation="vertical"
         selectedKey={page.id}
         onSelectionChange={handleSelectionChange}
-        className="grid min-h-0 min-w-0 grid-cols-[minmax(176px,260px)_minmax(0,1fr)]"
+        className="grid min-h-0 min-w-0 grid-cols-[clamp(148px,30%,260px)_minmax(0,1fr)]"
       >
         <div className="min-h-0 min-w-0 overflow-y-auto border-r border-border-subtle bg-surface-inset"><SettingsNav /></div>
-        <main aria-label="Settings content" className="min-h-0 min-w-0 overflow-y-auto" data-testid="settings-content">
-          <TabPanel key={page.id} id={page.id}>
-          <AnimatePresence initial={false} mode="wait">
+        <main ref={contentRef} aria-label="Settings content" className="min-h-0 min-w-0 overflow-y-auto" data-testid="settings-content">
+          <TabPanel id={page.id} className="min-w-0 outline-none">
             <motion.div
               key={page.id}
-              className="mx-auto grid w-full max-w-[760px] content-start gap-8 px-8 py-8"
-              initial={{opacity: 0, x: reducedMotion ? 0 : 10}}
-              animate={{opacity: 1, x: 0}}
-              exit={{opacity: 0, x: reducedMotion ? 0 : -8}}
+              className="mx-auto grid min-w-0 w-full max-w-[760px] content-start gap-[24px] px-[20px] py-[24px] [overflow-wrap:anywhere]"
+              initial={{opacity: 0, y: reducedMotion ? 0 : 6}}
+              animate={{opacity: 1, y: 0}}
               transition={{duration: pageDuration}}
             >
-              <div className="grid gap-2">
+              <div className="grid min-w-0 gap-[8px]">
                 <LumenText as="h1" variant="title">{page.label}</LumenText>
                 <LumenText tone="secondary">{page.description}</LumenText>
               </div>
               <PersistenceNotice />
               {pages?.[page.id] ?? defaultPageContent(page.id) ?? (
-                <div className="rounded-surface border border-border-subtle bg-surface-inset p-6">
+                <div className="min-w-0 rounded-surface border border-border-subtle bg-surface-inset p-[16px]">
                   <LumenText tone="secondary">
                     Lumen keeps this area focused on the controls that belong to {page.label.toLowerCase()}.
                   </LumenText>
                 </div>
               )}
             </motion.div>
-          </AnimatePresence>
           </TabPanel>
         </main>
       </Tabs>

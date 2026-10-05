@@ -19,14 +19,14 @@ export function ConfirmationDialog({cancelLabel = 'Cancel', children, confirmLab
   return (
     <DialogTrigger>
       {children}
-      <ModalOverlay className="fixed inset-0 z-30 grid place-items-center bg-scrim p-8" isDismissable>
-        <Modal className="w-full max-w-[430px] outline-none">
-          <Dialog aria-label={title} className="grid gap-6 rounded-surface border border-border-strong bg-surface-raised p-6 text-text-primary shadow-surface outline-none">
+      <ModalOverlay className="lumen-preview-overlay fixed inset-0 z-30 grid min-h-0 place-items-center overflow-y-auto bg-scrim p-[16px]" isDismissable>
+        <Modal className="lumen-preview-modal min-h-0 min-w-0 w-full max-w-[430px] max-h-full overflow-y-auto outline-none">
+          <Dialog aria-label={title} className="grid min-w-0 gap-[20px] rounded-surface border border-border-strong bg-surface-raised p-[20px] text-text-primary shadow-surface outline-none [overflow-wrap:anywhere]">
             {({close}) => (
               <>
                 <Heading slot="title"><LumenText as="span" variant="bodyLarge" weight="semibold">{title}</LumenText></Heading>
                 <LumenText tone="secondary">{description}</LumenText>
-                <div className="flex justify-end gap-3">
+                <div className="flex min-w-0 flex-wrap justify-end gap-[8px]">
                   <LumenButton size="small" variant="quiet" onPress={close}>{cancelLabel}</LumenButton>
                   <LumenButton
                     size="small"

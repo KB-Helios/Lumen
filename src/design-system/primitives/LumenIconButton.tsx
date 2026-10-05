@@ -8,9 +8,9 @@ import {
 } from './LumenButton';
 
 const iconButtonSizes = {
-  small: 'w-8',
-  medium: 'w-9',
-  large: 'w-11',
+  small: 'w-[32px]',
+  medium: 'w-[36px]',
+  large: 'w-[44px]',
 } as const;
 
 export interface LumenIconButtonProps extends ButtonProps {

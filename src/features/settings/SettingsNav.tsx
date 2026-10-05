@@ -27,20 +27,20 @@ export const settingsPages: readonly SettingsPageDefinition[] = [
 
 export function SettingsNav() {
   return (
-    <nav aria-label="Settings">
-      <TabList aria-label="Settings pages" items={settingsPages} className="grid content-start gap-1 p-3">
+    <nav aria-label="Settings" className="min-w-0">
+      <TabList aria-label="Settings pages" items={settingsPages} className="grid min-w-0 content-start gap-[4px] p-[8px]">
         {(page) => (
           <Tab
             id={page.id}
             className={({isFocusVisible, isHovered, isSelected}) => [
-              'flex min-h-10 cursor-default items-center gap-3 rounded-control px-4 font-sans text-sm font-medium text-text-secondary outline-none transition-[background-color,color,box-shadow] duration-150 ease-standard',
+              'flex min-h-[40px] min-w-0 cursor-default items-center gap-[10px] rounded-control px-[10px] py-[8px] font-sans text-sm font-medium text-text-secondary outline-none transition-[background-color,color,box-shadow] duration-[var(--lumen-duration-selection)] ease-standard',
               isHovered ? 'bg-surface-raised text-text-primary' : '',
               isSelected ? 'bg-surface-raised text-text-primary shadow-[inset_3px_0_0_var(--lumen-accent)]' : '',
               isFocusVisible ? 'ring-2 ring-focus/70' : '',
             ].filter(Boolean).join(' ')}
           >
             <span aria-hidden="true" className="grid shrink-0 text-current">{page.icon}</span>
-            {page.label}
+            <span className="min-w-0 [overflow-wrap:anywhere]">{page.label}</span>
           </Tab>
         )}
       </TabList>
