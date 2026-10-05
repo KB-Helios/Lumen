@@ -77,8 +77,17 @@ export function SelectionCapsule({
         resizeObserver.observe(selected);
       }
       // Observe inline style changes (transform) for virtualized row position updates.
+      // Only remeasure when the transform value actually changes to avoid overhead
+      // during hover/focus style changes that don't affect position.
       if (typeof MutationObserver === 'function') {
-        styleObserver = new MutationObserver(measure);
+        let lastTransform = selected.style.transform;
+        styleObserver = new MutationObserver(() => {
+          const currentTransform = selected.style.transform;
+          if (currentTransform !== lastTransform) {
+            lastTransform = currentTransform;
+            measure();
+          }
+        });
         styleObserver.observe(selected, {attributes: true, attributeFilter: ['style']});
       }
     };
