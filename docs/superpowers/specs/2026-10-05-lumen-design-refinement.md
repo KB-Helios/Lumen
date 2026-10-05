@@ -73,4 +73,4 @@ Primary owners are `src/design-system/global.css`, shared surface/control primit
 - Unit/component tests passed: 51 files, 369 tests.
 - Full Edge e2e baseline passed: 39 tests. Its containment checks did not detect the zero-height result viewport or sideways settings navigation.
 - Final verification passed: typecheck, zero-warning lint, 51 unit/component files with 373 tests, 51 Edge e2e tests, and frontend production build.
-- All 57 gallery states, six interaction recordings, and the cadence-aware performance summary were regenerated for source commit `23d206d`. Strict 240Hz and native visual verification remain outside the established evidence; see the validation report.
+- All 57 gallery states, six interaction recordings, and the cadence-aware performance summary were regenerated for the final blue source commit `32d6450`. Strict 240Hz checks did not pass, and native visuals remain unverified; see the validation report.

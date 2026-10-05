@@ -86,5 +86,5 @@
 - [x] Replace the four shared accent/focus values and update current design documentation.
 - [x] Run the existing browser primary-action contrast regression and inspect focus, selected navigation, primary actions, and activity in both themes. Require primary-action contrast of at least 4.5:1.
 - [x] Run typecheck, zero-warning lint, all unit/component tests, all Edge e2e tests, and the frontend production build in repository order.
-- [ ] Commit the final source, regenerate all 57 gallery states, six recordings, and the performance summary; inspect representative output and record the same source revision in the manifests.
-- [ ] Update the report and completed checklist, check the final diff, and commit the verified evidence before pushing the branch and creating the requested PR against the verified fork point.
+- [x] Commit the final source, regenerate all 57 gallery states, six recordings, and the performance summary; inspect representative output and record the same source revision in the manifests.
+- [x] Update the report and completed checklist, check the final diff, and commit the verified evidence before pushing the branch and creating the requested PR against the verified fork point.
