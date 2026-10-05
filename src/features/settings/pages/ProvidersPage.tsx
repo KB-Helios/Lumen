@@ -9,6 +9,8 @@ import {tauriProvidersService} from '../../../services/providers/tauri-providers
 import {SettingSection} from '../components/SettingSection';
 import {SettingsCallout, SettingsPage} from '../components/SettingsPage';
 import {StatusBadge} from '../components/StatusBadge';
+import {AuthCenterPanel} from '../components/AuthCenterPanel';
+import {UsagePanel} from '../components/UsagePanel';
 
 /** Exclusive tools: exactly one provider feeds the live config (mirrors the Rust file-switch engine). */
 export const SWITCH_APPS = ['claude', 'codex', 'gemini'] as const;
@@ -109,6 +111,14 @@ export function ProvidersPage({
         </SettingSection>
         <LumenText tone="tertiary" variant="meta">Switch and add actions enable once provider dialogs land.</LumenText>
       </div>
+      <SettingSection title="Authorization center" description="OAuth sign-in for ChatGPT, Anthropic, and xAI through the loopback sidecar. Only link status is shown; secrets never leave the sidecar.">
+        <AuthCenterPanel />
+      </SettingSection>
+      <SettingSection title="Usage" description="Recent per-provider request counts from the sidecar. Pricing and model breakdowns follow later.">
+        <div className="p-5">
+          <UsagePanel />
+        </div>
+      </SettingSection>
     </SettingsPage>
   );
 }
