@@ -75,7 +75,7 @@ export const useDiagnosticsStore = create<DiagnosticsState>()(
           document.removeEventListener('visibilitychange', finish);
           resolve();
         };
-        const timeout = window.setTimeout(finish, 2000);
+        const timeout = window.setTimeout(finish, 3000);
         document.addEventListener('visibilitychange', finish, {once: true});
         const sample = (now: number) => {
           if (previous !== undefined && now > previous) samples.push(now - previous);
