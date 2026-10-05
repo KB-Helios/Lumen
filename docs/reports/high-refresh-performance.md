@@ -58,18 +58,18 @@ high-refresh display's frame rate.
 
 | Metric | Release budget | Final result |
 | --- | ---: | ---: |
-| Warm launcher visible p95 | < 20 ms | 9.1 ms |
+| Warm launcher visible p95 | < 20 ms | 3.7 ms |
 | Synchronous input handler p95 | < observed frame + 2 ms | 0.1 ms |
-| Input to next frame p95 | < 6.3 ms | 4.3 ms |
+| Input to next frame p95 | < 6.3 ms | 2.2 ms |
 | Selection to next frame p95 | < 6.3 ms | 4.9 ms |
-| Hover to next frame p95 | < paired frame p95, 10.268 ms | 6.5 ms |
+| Hover to next frame p95 | < paired frame p95, 10.2 ms | 6.8 ms |
 | Ordinary React commit p95 | < 3 ms | 0 ms |
-| Synchronous 30-event input / selection bursts | < 16 ms each | 1.4 / 4.1 ms |
-| Synchronous hover dispatch maximum | < 16 ms | 1.3 ms |
+| Synchronous 30-event input / selection bursts | < 16 ms each | 0.9 / 3.1 ms |
+| Synchronous hover dispatch maximum | < 16 ms | 1.2 ms |
 | Browser Long Tasks | none ≥ 50 ms | none |
 | Active animations / indicators after settling | 0 / 0 | 0 / 0 |
-| Idle renderer task time | < 2 percent | 0.27 percent |
-| JavaScript heap after GC | < 100 MB | 29.59 MB |
+| Idle renderer task time | < 2 percent | 0.11 percent |
+| JavaScript heap after GC | < 100 MB | 29.51 MB |
 | Idle frame interval median / p95 | recorded without forcing cadence | 4.2 / 4.3 ms |
 
 All 16 cadence-aware release checks pass. Direct synchronous work is bounded
@@ -79,8 +79,9 @@ cannot establish a 16 ms or 4.167 ms work bound.
 Strict target checks preserve the nominal 8.333 ms (120 Hz) and 4.167 ms (240 Hz)
 budgets. Cadence permits one 0.1 ms timestamp quantum; work budgets remain strict.
 At 120 Hz all interaction/work checks pass, while the hover-paired cadence p95
-exceeds its target. At 240 Hz input, selection, hover, and cadence checks miss
-their targets. Both aggregate `passed` values are **false**. Raw chronological
+exceeds its target. At 240 Hz selection, hover, and cadence checks miss
+their targets; input and synchronous-work checks pass. Both aggregate `passed`
+values are **false**. Raw chronological
 intervals and individual samples remain in
 [profile-summary.json](../../artifacts/performance/profile-summary.json).
 
@@ -104,10 +105,10 @@ running native transform keyframe animation with the shared spring easing.
 | --- | ---: |
 | Desktop logical size / scale | 1707 × 1067 / 150 percent |
 | Tested content viewport | 800 × 540 logical pixels |
-| 180 complete frame intervals, median / p95 | 4.2 / 4.3 ms |
+| 180 complete frame intervals, median / p95 | 4.2 / 4.4 ms |
 | Refresh estimate from median | 238 Hz |
-| Input handler / next-frame p95, 30 samples | 0.1 / 5.2 ms |
-| Selection next-frame p95, 120 samples | 5.3 ms |
+| Input handler / next-frame p95, 30 samples | 0.1 / 15.4 ms |
+| Selection next-frame p95, 120 samples | 5.4 ms |
 | Capsule settled top / height error | 0 / 0 pixels |
 | Running animations after settling | 0 |
 
@@ -117,25 +118,48 @@ with a [WebView content capture](../../artifacts/performance/native-webview.png)
 WebView2 retains its normal GPU-enabled configuration; actual acceleration is
 verified for this host and run.
 
+The refreshed native input next-frame p95 exceeds both nominal frame targets.
+The small synchronous handler duration does not establish that the subsequent
+browser/window scheduling fits a frame budget. Native timing variation remains
+visible in the retained samples rather than being replaced by the faster browser
+profile. The probe waits for Tauri's initial navigation before loading its test
+URL; connecting as soon as the debugging endpoint appeared previously allowed
+that navigation to replace the query parameters.
+
 ## Validation and evidence boundary
 
-Typecheck, zero-warning lint, 53 unit/component files with **382 passing tests**,
-all **42 installed-Edge e2e tests**, the frontend production build, and **14 script
-contract/budget tests** pass. The native development build and sidecar staging
-also pass. The staging command ran its existing Windows AI helper checks.
+Typecheck, zero-warning lint, 53 unit/component files with **387 passing tests**,
+all **54 installed-Edge e2e tests**, the frontend production build, and **14 script
+contract/budget tests** pass. The native development binary and sidecars were
+built and staged earlier the same day; their Rust source is unchanged by this
+integration. Staging ran its existing Windows AI helper checks.
 The current registry produced **57 screenshots** and **six recordings**; the
 contact sheet, ordinary/virtualized selection, native capture, and forced colors
 were inspected. Code review found no remaining issues in the native animation
 or frame batching changes.
 
-This is working-tree evidence based on
-`fc33748640dcaad17fa63863025b01b643eb6df4` plus the local source changes, not an
-immutable new commit. The profile explicitly records `sourceWorktreeDirty`.
+The implementation was rebased onto `517f4e5` to preserve the current theme,
+responsive layouts, immediate accessible settings panels, and selected virtual
+row style-change observation. A focused regression test verifies that transform
+changes on a mounted selected row reposition the capsule through the same frame
+batch. Final review found no required integration fixes.
+
+An earlier complete Edge run missed the input next-frame assertion: 8 ms p95
+against a 6.4 ms observed-frame budget. The isolated four performance tests and
+the complete 54-test rerun passed with identical product and test source. No
+threshold or retry setting was changed. This intermittent miss is part of the
+timing evidence, not a claim that variability was fixed.
+
+Both refreshed profiles identify implementation commit
+`925700ce013744218af70ea6b08445cf03ac4f20`. Product source matches that commit;
+`sourceWorktreeDirty` records the regenerated evidence files during the runs.
+The report and refreshed artifacts are saved in a subsequent documentation
+commit.
 The original fresh baseline's selection capsule did not reliably position or
 remain visible, so raw before/after selection timings are not equivalent visual
 workloads. During implementation, per-event animation interruption caused a
-57.8 ms selection burst; frame batching removed that failure, with 4.1 ms in the
-final run.
+57.8 ms selection burst; frame batching removed that failure, with 4.1 ms before
+integration and 3.1 ms in the refreshed browser run.
 
 Animation-frame callbacks occur before physical presentation. GPU feature
 status and an accelerated animation layer establish the rendering path, not
