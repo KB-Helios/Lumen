@@ -4,7 +4,9 @@ Status: approved and implemented on 2026-10-05. Fresh checks and regenerated evi
 
 ## Direction
 
-Refine the existing keyboard-first Windows launcher around readable graphite and off-white surfaces, one restrained teal accent, clear hierarchy, and brief motion that confirms an action. Improve the existing launcher, results, previews, answers, settings, onboarding, and browser-agent presentation through the shared design system.
+Refine the existing keyboard-first Windows launcher around readable graphite and off-white surfaces, one restrained blue accent, clear hierarchy, and brief motion that confirms an action. Improve the existing launcher, results, previews, answers, settings, onboarding, and browser-agent presentation through the shared design system.
+
+The user's follow-up on 2026-10-05 authorizes replacing the original teal accent with an Apple/ChatGPT-inspired blue and publishing all changes as a GitHub pull request. Use theme-adjusted blue shades with accessible contrast, through the existing semantic tokens.
 
 The recommendation is a coordinated refinement. A token-only polish would improve color consistency but leave the measured layout failures. A new visual identity would cost more and discard established interaction patterns. The coordinated refinement addresses both appearance and usability while retaining the product's current character.
 
@@ -30,7 +32,7 @@ Live audit captures: [constrained results](../../../artifacts/design-audit/2026-
 
 ## Surface and type system
 
-Use the existing graphite canvas (`#111110`) and off-white light canvas (`#f7f7f5`) as the palette anchors. Retain the teal accent (`#63c7af` dark, `#0f7a67` light). Launcher and management surfaces consume the same semantic roles; selected and hovered controls receive distinct neutral fills, with teal reserved for focus and intentional emphasis.
+Use the existing graphite canvas (`#111110`) and off-white light canvas (`#f7f7f5`) as the palette anchors. Use blue accents (`#5aa2ff` dark, `#0066cc` light), with focus shades `#80baff` dark and `#005fcc` light. Launcher and management surfaces consume the same semantic roles; selected and hovered controls receive distinct neutral fills, with blue reserved for focus and intentional emphasis. Primary-action text must retain at least 4.5:1 contrast. Success, warning, danger, and system high-contrast colors retain their semantic roles.
 
 Increase useful secondary and tertiary text contrast and reduce decorative luminosity. Keep the 18px outer radius and 12px control radius. Use one outer shadow and a subtle inner edge; internal settings sections are separated by borders and spacing rather than stacked shadows. Passive previews keep an opaque canvas for wallpaper-independent legibility.
 

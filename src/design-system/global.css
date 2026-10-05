@@ -51,8 +51,8 @@
   --lumen-text-tertiary: rgba(72, 69, 65, 0.78);
   --lumen-text-inverse: #f9fafb;
   --lumen-text-button: rgba(31, 30, 29, 0.94);
-  --lumen-accent: #0f7a67;
-  --lumen-focus: #0b6f5c;
+  --lumen-accent: #0066cc;
+  --lumen-focus: #005fcc;
   --lumen-border-subtle: rgba(37, 43, 48, 0.12);
   --lumen-border-strong: rgba(37, 43, 48, 0.2);
   --lumen-border-specular: rgba(255, 255, 255, 0.88);
@@ -89,8 +89,8 @@
   --lumen-text-tertiary: rgba(212, 210, 205, 0.72);
   --lumen-text-inverse: #111110;
   --lumen-text-button: rgba(250, 250, 249, 0.96);
-  --lumen-accent: #63c7af;
-  --lumen-focus: #76d2bb;
+  --lumen-accent: #5aa2ff;
+  --lumen-focus: #80baff;
   --lumen-border-subtle: rgba(240, 243, 245, 0.12);
   --lumen-border-strong: rgba(240, 243, 245, 0.22);
   --lumen-border-specular: rgba(255, 255, 255, 0.16);

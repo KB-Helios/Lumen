@@ -12,7 +12,7 @@
 
 - Read the approved spec in `docs/superpowers/specs/2026-10-05-lumen-design-refinement.md`.
 - Use `rtk` for shell commands and Bun for JavaScript tasks.
-- Retain the 18px outer radius, 12px control radius, graphite/off-white anchors, and existing teal accent.
+- Retain the 18px outer radius, 12px control radius, and graphite/off-white anchors. The user's approved follow-up replaces the original teal accent with blue.
 - Retain 90ms hover, 72ms press, 120ms selection, 160ms preview/open, 190ms reveal, 210ms page, and at most 80ms reduced-motion fade.
 - Do not change native geometry, credentials, consent rules, process ownership, search semantics, or backend services.
 - Keep targets at least 32 logical pixels high; preserve React Aria keyboard behavior and themed portals.
@@ -76,3 +76,15 @@
 - [x] Inspect representative images/recordings, ensure the current registry is fully represented, and assess measured performance without asserting strict 240Hz eligibility.
 - [x] Request an independent code review, address actionable findings, and rerun checks affected by any follow-up changes.
 - [x] Update documentation and the completed checklist, run `rtk git diff --check`, commit the local work, and report concrete changes and verification boundaries.
+
+### Task 5: Blue accent follow-up and publication
+
+**Files:** `src/design-system/global.css`, current design documentation, screenshot/recording/performance artifacts, and the final validation report.
+
+**Interfaces:** Change only the existing `--lumen-accent` and `--lumen-focus` values: light `#0066cc` / `#005fcc`, dark `#5aa2ff` / `#80baff`. Existing inverse text, status tokens, neutral selection fills, and system-color overrides remain authoritative.
+
+- [x] Replace the four shared accent/focus values and update current design documentation.
+- [x] Run the existing browser primary-action contrast regression and inspect focus, selected navigation, primary actions, and activity in both themes. Require primary-action contrast of at least 4.5:1.
+- [x] Run typecheck, zero-warning lint, all unit/component tests, all Edge e2e tests, and the frontend production build in repository order.
+- [ ] Commit the final source, regenerate all 57 gallery states, six recordings, and the performance summary; inspect representative output and record the same source revision in the manifests.
+- [ ] Update the report and completed checklist, check the final diff, and commit the verified evidence before pushing the branch and creating the requested PR against the verified fork point.

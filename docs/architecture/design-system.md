@@ -22,7 +22,7 @@ Appearance data is validated with Zod before entering the Zustand store or being
 
 `LumenSurface` is the material boundary. It composes a semantic tint, a subtle inner edge, low-opacity procedural noise, and one elevation shadow while keeping its three decorative nodes out of the accessibility tree. `mica`, `raised`, `inset`, and `flat` describe hierarchy rather than individual screens. Insets and flat surfaces use borders without additional elevation.
 
-The launcher consumes the same graphite/off-white surface, text, and border roles as management surfaces. Neutral 3%, 6%, and 10% foreground mixes distinguish quiet, hovered, and selected controls. Teal remains the focus and intentional-emphasis accent; semantic status colors remain independent. High-contrast selected and hovered result labels and glyphs resolve to `HighlightText` over `Highlight`.
+The launcher consumes the same graphite/off-white surface, text, and border roles as management surfaces. Neutral 3%, 6%, and 10% foreground mixes distinguish quiet, hovered, and selected controls. Blue remains the focus and intentional-emphasis accent (`#0066cc` light, `#5aa2ff` dark), with theme-adjusted focus shades (`#005fcc` light, `#80baff` dark). Primary actions use the semantic inverse foreground for readable contrast. Semantic status colors remain independent. High-contrast selected and hovered result labels and glyphs resolve to `HighlightText` over `Highlight`.
 
 `LumenButton`, `LumenIconButton`, and `LumenText` carry shared focus, keyboard, type, and density rules. Icon-only buttons require an accessible name. Focus remains a visible semantic outline in every theme, including Windows forced-colors mode.
 
