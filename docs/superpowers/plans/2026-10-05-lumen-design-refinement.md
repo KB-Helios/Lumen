@@ -1,6 +1,6 @@
 # Lumen Design Refinement Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deliver the approved neutral visual refinement with usable constrained layouts and consistent accessible motion.
 
@@ -24,17 +24,17 @@
 
 **Interfaces:** Preserve `ExpandedWorkspaceProps`, `AnswerPanelProps`, and `SearchService`. Observe the result/preview content element with `ResizeObserver`; update the preview eligibility boolean only when a threshold changes. Automatic preview requires 800px of real workspace width; always requires 760px. Both require 220px of usable content height.
 
-- [ ] Add a regression that measures the result scroll viewport itself:
+- [x] Add a regression that measures the result scroll viewport itself:
   ```ts
   await page.goto('/?gallery=1&scenario=constrained-work-area&capture=1');
   const viewport = page.getByRole('grid', {name: 'Search results'}).locator('..');
   await expect.poll(() => viewport.evaluate(el => el.clientHeight)).toBeGreaterThanOrEqual(58);
   await expect(page.getByRole('region', {name: 'File preview'})).toBeHidden();
   ```
-- [ ] Run `rtk bun run test:e2e -- tests/e2e/design-refinement.spec.ts`; confirm the viewport regression fails with zero height.
-- [ ] Bound answers and results independently. Compact the answer toolbar by keeping Stop/Copy beside the mode control; keep sources available. Use an inner scroll region when large text cannot fit both primary regions simultaneously. Keep actions and status outside that scroll region.
-- [ ] Add result-column container queries for metadata, remove the preview frame's fixed minimum height, and resolve preview from measured content width/height. Update unit tests to provide real-element measurement at the DOM boundary rather than window media-query assumptions.
-- [ ] Run the focused workspace/component tests and Edge design/dpi regressions; confirm nonzero scroll regions, containment, and keyboard actions.
+- [x] Run `rtk bun run test:e2e -- tests/e2e/design-refinement.spec.ts`; confirm the viewport regression fails with zero height.
+- [x] Bound answers and results independently. Compact the answer toolbar by keeping Stop/Copy beside the mode control; keep sources available. Use an inner scroll region when large text cannot fit both primary regions simultaneously. Keep actions and status outside that scroll region.
+- [x] Add result-column container queries for metadata, remove the preview frame's fixed minimum height, and resolve preview from measured content width/height. Update unit tests to provide real-element measurement at the DOM boundary rather than window media-query assumptions.
+- [x] Run the focused workspace/component tests and Edge design/dpi regressions; confirm nonzero scroll regions, containment, and keyboard actions.
 
 ### Task 2: Shared visual language and motion
 
@@ -42,11 +42,11 @@
 
 **Interfaces:** Existing `--lumen-*` semantic colors and material attributes remain authoritative. Add CSS timing variables `--lumen-duration-hover`, `--lumen-duration-press`, `--lumen-duration-selection`, `--lumen-duration-open`, `--lumen-duration-close`, `--lumen-duration-page` matching the existing TypeScript motion contract. Settings controls consume those variables.
 
-- [ ] Align the palette surface/text/borders with semantic tokens, improve quiet-text contrast, and reduce additive glow. Preserve system colors and opaque modes.
-- [ ] Preserve three inaccessible surface decoration nodes but make tint/luminosity subtle; keep one exterior shadow and an inner edge.
-- [ ] Keep a single owner for workspace reveal. Use shared short CSS entering/exiting transitions for popovers and confirmation overlays, including reduced-motion overrides.
-- [ ] Use fixed bounded chrome gutters/heights so enlarged text can scroll within its content region.
-- [ ] Verify the existing appearance/primitive tests and visually inspect dark, light, opaque, and forced-colors states.
+- [x] Align the palette surface/text/borders with semantic tokens, improve quiet-text contrast, and reduce additive glow. Preserve system colors and opaque modes.
+- [x] Preserve three inaccessible surface decoration nodes but make tint/luminosity subtle; keep one exterior shadow and an inner edge.
+- [x] Keep a single owner for workspace reveal. Use shared short CSS entering/exiting transitions for popovers and confirmation overlays, including reduced-motion overrides.
+- [x] Use fixed bounded chrome gutters/heights so enlarged text can scroll within its content region.
+- [x] Verify the existing appearance/primitive tests and visually inspect dark, light, opaque, and forced-colors states.
 
 ### Task 3: Responsive settings and onboarding (independent agent)
 
@@ -54,25 +54,25 @@
 
 **Interfaces:** Consume semantic tokens and the timing variables in Task 2. Own no edits to `global.css`, launcher/results/answer code, service files, or the Task 1 test file. Named Tailwind settings container queries may be used directly in component classes. Retain all public props and accessible names.
 
-- [ ] Add and run the navigation regression before editing components:
+- [x] Add and run the navigation regression before editing components:
   ```ts
   await page.goto('/?gallery=1&scenario=settings-general&capture=1&scale=200');
   const nav = page.getByRole('navigation', {name: 'Settings'});
   await expect.poll(() => nav.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
   ```
-- [ ] Use a bounded navigation rail, wrapping text, stable page padding, and independent vertical scrolling. Stack settings rows when the content container is narrow. Bound fields/popovers and wrap route/provider/consent actions.
-- [ ] Replace the remounting settings presence controller with a short entrance on the accessible active panel. Reset the page scroll position on page changes while keeping focus in navigation.
-- [ ] Make onboarding's scene scroll independently with bounded choice/root content. Keep the primary action, header, directional transition, and backend completion behavior intact.
-- [ ] Reuse the dialog choreography and shared motion variables for controls; retain 32px targets and all Computer Use approval actions.
-- [ ] Run relevant unit tests and the agent-owned Edge regression; report exact touched files and outcomes for integration review.
+- [x] Use a bounded navigation rail, wrapping text, stable page padding, and independent vertical scrolling. Stack settings rows when the content container is narrow. Bound fields/popovers and wrap route/provider/consent actions.
+- [x] Replace the remounting settings presence controller with a short entrance on the accessible active panel. Reset the page scroll position on page changes while keeping focus in navigation.
+- [x] Make onboarding's scene scroll independently with bounded choice/root content. Keep the primary action, header, directional transition, and backend completion behavior intact.
+- [x] Reuse the dialog choreography and shared motion variables for controls; retain 32px targets and all Computer Use approval actions.
+- [x] Run relevant unit tests and the agent-owned Edge regression; report exact touched files and outcomes for integration review.
 
 ### Task 4: Integrated verification, evidence, and review
 
 **Files:** current screenshot/recording/performance artifacts, evidence generators if they capture an unfinished lazy preview, architecture documentation, and a final design report under `docs/reports/`.
 
-- [ ] Review and integrate the independent changes; resolve conflicts without overwriting another owner's edits.
-- [ ] Run, in order: `rtk bun run typecheck`, `rtk bun run lint`, `rtk bun run test`, `rtk bun run test:e2e`, `rtk bun run build`.
-- [ ] Regenerate evidence with `rtk bun run capture:gallery`, `rtk bun run record:interactions`, and `rtk bun run profile`. Capture completed previews only after their intended state is visible.
-- [ ] Inspect representative images/recordings, ensure the current registry is fully represented, and assess measured performance without asserting strict 240Hz eligibility.
-- [ ] Request an independent code review, address actionable findings, and rerun checks affected by any follow-up changes.
-- [ ] Update documentation and the completed checklist, run `rtk git diff --check`, commit the local work, and report concrete changes and verification boundaries.
+- [x] Review and integrate the independent changes; resolve conflicts without overwriting another owner's edits.
+- [x] Run, in order: `rtk bun run typecheck`, `rtk bun run lint`, `rtk bun run test`, `rtk bun run test:e2e`, `rtk bun run build`.
+- [x] Regenerate evidence with `rtk bun run capture:gallery`, `rtk bun run record:interactions`, and `rtk bun run profile`. Capture completed previews only after their intended state is visible.
+- [x] Inspect representative images/recordings, ensure the current registry is fully represented, and assess measured performance without asserting strict 240Hz eligibility.
+- [x] Request an independent code review, address actionable findings, and rerun checks affected by any follow-up changes.
+- [x] Update documentation and the completed checklist, run `rtk git diff --check`, commit the local work, and report concrete changes and verification boundaries.

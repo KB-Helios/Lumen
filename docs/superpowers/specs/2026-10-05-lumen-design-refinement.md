@@ -1,6 +1,6 @@
 # Lumen design, layout, and motion refinement
 
-Status: approved by the user on 2026-10-05. Implementation in progress.
+Status: approved and implemented on 2026-10-05. Fresh checks and regenerated evidence are recorded in [the validation report](../../reports/2026-10-05-design-refinement.md).
 
 ## Direction
 
@@ -70,4 +70,5 @@ Primary owners are `src/design-system/global.css`, shared surface/control primit
 - Lint passed with zero warnings.
 - Unit/component tests passed: 51 files, 369 tests.
 - Full Edge e2e baseline passed: 39 tests. Its containment checks did not detect the zero-height result viewport or sideways settings navigation.
-- Implementation and regenerated post-change evidence are in progress.
+- Final verification passed: typecheck, zero-warning lint, 51 unit/component files with 373 tests, 51 Edge e2e tests, and frontend production build.
+- All 57 gallery states, six interaction recordings, and the cadence-aware performance summary were regenerated for source commit `23d206d`. Strict 240Hz and native visual verification remain outside the established evidence; see the validation report.
