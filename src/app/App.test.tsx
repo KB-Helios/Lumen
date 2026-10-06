@@ -94,7 +94,7 @@ describe('App', () => {
     queue.push({activationId: 'warm-lumen', agentName: 'lumen.browser', prompt: 'Incoming Lumen task'});
     act(() => source.signal());
     await waitFor(() => expect(useQueryStore.getState().draft).toBe('Incoming Lumen task'));
-    await user.click(screen.getByRole('searchbox', {name: 'Describe a browser task'}));
+    await user.click(screen.getByRole('searchbox', {name: 'Describe a computer task'}));
     await user.keyboard('{Enter}');
     expect(deliveries).toEqual([]);
     expect(screen.getByRole('button', {name: /Agent application/})).toHaveTextContent('Lumen browser agent');
@@ -113,7 +113,7 @@ describe('App', () => {
     await act(async () => source.signal());
     expect(useQueryStore.getState().draft).toBe('Reviewed incoming task');
     expect(queue.map((item) => item.activationId)).toEqual(['review-two']);
-    await user.click(screen.getByRole('searchbox', {name: 'Describe a browser task'}));
+    await user.click(screen.getByRole('searchbox', {name: 'Describe a computer task'}));
     await user.keyboard('{Enter}');
     await waitFor(() => expect(useQueryStore.getState().draft).toBe('Queued incoming task'));
   });

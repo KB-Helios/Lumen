@@ -31,6 +31,37 @@ function Assert-SmokeTarget([string]$Path) {
     }
 }
 
+function Get-SmokeSha256([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $digest = [Security.Cryptography.SHA256]::Create()
+    try { return ($digest.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) -join '' }
+    finally { $stream.Dispose(); $digest.Dispose() }
+}
+
+function Assert-ComputerUseRuntime([string]$ApplicationDirectory) {
+    $inventoryPath = Join-Path $repositoryRoot 'workers\computer-use-preview\.build\staged-runtime-inventory.json'
+    $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
+    if ($inventory.version -ne 1) { throw 'The staged Computer Use inventory is unavailable.' }
+    $expectedFiles = @()
+    foreach ($entry in $inventory.files.PSObject.Properties) {
+        $relativeFile = if ($entry.Name -eq 'lumen-computer-use-x86_64-pc-windows-msvc.exe') { 'lumen-computer-use.exe' } else { $entry.Name }
+        $file = Join-Path $ApplicationDirectory $relativeFile
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw 'An installed Computer Use resource is missing.' }
+        $info = Get-Item -LiteralPath $file
+        if (($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $info.Length -ne $entry.Value.size -or (Get-SmokeSha256 $file) -ne $entry.Value.sha256) {
+            throw 'An installed Computer Use resource differs from the staged checksummed inventory.'
+        }
+        $expectedFiles += $relativeFile.Replace('\', '/')
+    }
+    $actualFiles = @('lumen-computer-use.exe') + @(Get-ChildItem -LiteralPath (Join-Path $ApplicationDirectory 'computer-use-runtime') -File -Recurse | ForEach-Object {
+        $_.FullName.Substring($ApplicationDirectory.Length + 1).Replace('\', '/')
+    })
+    if (@(Compare-Object ($expectedFiles | Sort-Object) ($actualFiles | Sort-Object)).Count) {
+        throw 'The installed Computer Use runtime contains unexpected resources.'
+    }
+    return $expectedFiles.Count
+}
+
 function Get-LumenProfileState {
     $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Lumen"
     $productKey = "HKCU:\Software\bridgehammer\Lumen"
@@ -100,6 +131,7 @@ try {
     if (-not $application) {
         throw "The installed Lumen executable was not found."
     }
+    $computerUseRuntimeFiles = Assert-ComputerUseRuntime (Split-Path -Parent $application.FullName)
     $vector = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter "vector.dll" -File | Select-Object -First 1
     if (-not $vector) {
         throw "The packaged sqlite-vector runtime was not found."
@@ -124,7 +156,7 @@ try {
     }
     $reportText = Get-Content -LiteralPath $reportFile.FullName -Raw
     $report = $reportText | ConvertFrom-Json
-    if (-not $report.passed -or -not $report.exactVector -or -not $report.lexicalFallback -or -not $report.windowShowHide -or -not $report.diagnosticsExport) {
+    if (-not $report.passed -or -not $report.exactVector -or -not $report.lexicalFallback -or -not $report.windowShowHide -or -not $report.diagnosticsExport -or -not $report.computerUsePackaged) {
         throw "The native packaged smoke report did not pass every required check."
     }
     if ($reportText.Contains("packaged smoke secret") -or $reportText.Contains($smokeRoot)) {
@@ -153,20 +185,28 @@ try {
     }
 
     $installerFile = Get-Item -LiteralPath $installer
-    $installerHash = Get-FileHash -LiteralPath $installer -Algorithm SHA256
-    $signature = Get-AuthenticodeSignature -LiteralPath $installer
+    $installerHash = Get-SmokeSha256 $installer
+    $signatureStatus = if (Get-Command Get-AuthenticodeSignature -ErrorAction SilentlyContinue) {
+        (Get-AuthenticodeSignature -LiteralPath $installer).Status.ToString()
+    } else { 'Unavailable' }
     $payload = [ordered]@{
         recordedAt = (Get-Date).ToUniversalTime().ToString("o")
         installer = $installerFile.Name
         installerBytes = $installerFile.Length
-        installerSha256 = $installerHash.Hash.ToLowerInvariant()
-        signatureStatus = $signature.Status.ToString()
+        installerSha256 = $installerHash
+        signatureStatus = $signatureStatus
         cleanProfilePreflight = $cleanProfilePreflight
         exactVector = [bool]$report.exactVector
         vectorVersion = [string]$report.vectorVersion
         lexicalFallback = [bool]$report.lexicalFallback
         windowShowHide = [bool]$report.windowShowHide
         diagnosticsExport = [bool]$report.diagnosticsExport
+        computerUsePackaged = [bool]$report.computerUsePackaged
+        computerUseNativeStop = [bool]$report.computerUseNativeStop
+        computerUseBrowser = [bool]$report.computerUseBrowser
+        computerUseDesktop = [bool]$report.computerUseDesktop
+        computerUseRuntimeInventoryVerified = $true
+        computerUseRuntimeFiles = $computerUseRuntimeFiles
         uninstall = $uninstalled
         profileCleanup = $profileCleanup
     }

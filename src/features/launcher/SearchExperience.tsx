@@ -290,7 +290,7 @@ export function SearchExperience({
   }, [onOpenSettings, setActiveSettingsPage, windowService]);
 
   const runLumenTask = useCallback(async (task: string) => {
-    if (!task.trim() || browserRunPending.current || ['starting', 'running', 'approval'].includes(computerUse.phase)) return;
+    if (!task.trim() || browserRunPending.current || ['starting', 'running', 'approval', 'stopping'].includes(computerUse.phase)) return;
     browserRunPending.current = true;
     const activationId = useLauncherStore.getState().agentActivationId;
     try { await computerUse.start(task); }
@@ -372,7 +372,7 @@ export function SearchExperience({
       <CollapsedLauncher
         expandedContent={intent === 'computer' ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-          <WindowsAgentPicker selected={externalAgentId} busy={externalAgentBusy || computerUse.phase === 'running' || computerUse.phase === 'approval' || computerUse.phase === 'starting'} message={actionMessage} onChange={setExternalAgentId} onRun={() => void handleRunExternalAgent(useQueryStore.getState().committed)} />
+          <WindowsAgentPicker selected={externalAgentId} busy={externalAgentBusy || ['starting', 'running', 'approval', 'stopping'].includes(computerUse.phase)} message={actionMessage} onChange={setExternalAgentId} onRun={() => void handleRunExternalAgent(useQueryStore.getState().committed)} />
           {!externalAgentId ? (
           <QueryBoundComputerUsePanel
             cloudConsent={computerUseSettings.cloudConsent}
@@ -412,18 +412,20 @@ export function SearchExperience({
           />
         )}
         inputRef={inputRef}
-        intentLocked={externalAgentBusy || computerUse.phase === 'starting' || computerUse.phase === 'running' || computerUse.phase === 'approval'}
+        intentLocked={externalAgentBusy || ['starting', 'running', 'approval', 'stopping'].includes(computerUse.phase)}
         onVoiceRequest={voiceReady || voiceActive ? () => void toggleVoice() : undefined}
         voiceActive={voiceActive}
         searching={intent === 'computer'
           ? computerUse.phase === 'starting' || computerUse.phase === 'running'
           : controller.lifecycle === 'searching' || answerRunning}
         statusLabel={intent === 'computer'
-          ? computerUse.phase === 'approval' ? 'Approval'
+          ? computerUse.phase === 'stopping' ? 'Stopping'
+            : computerUse.phase === 'stopped' ? 'Stopped'
+            : computerUse.phase === 'approval' ? 'Approval'
             : computerUse.phase === 'completed' ? 'Done'
               : computerUse.phase === 'error' ? 'Unavailable'
                 : computerUse.phase === 'running' || computerUse.phase === 'starting' ? 'Working'
-                  : 'Browser agent'
+                  : 'Computer Use'
           : answerRunning ? 'Answering'
             : statusLabel(controller.lifecycle, controller.results.length)}
         windowService={windowService}

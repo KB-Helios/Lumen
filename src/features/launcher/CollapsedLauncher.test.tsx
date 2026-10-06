@@ -161,7 +161,7 @@ describe('CollapsedLauncher', () => {
     );
 
     await user.click(screen.getByRole('button', {name: 'Switch to Computer Use'}));
-    const input = screen.getByRole('searchbox', {name: 'Describe a browser task'});
+    const input = screen.getByRole('searchbox', {name: 'Describe a computer task'});
     await user.type(input, 'Find the latest Lumen release{Enter}');
 
     expect(useLauncherStore.getState().intent).toBe('computer');
@@ -182,7 +182,7 @@ describe('CollapsedLauncher', () => {
     );
 
     await user.click(screen.getByRole('button', {name: 'Switch to Computer Use'}));
-    const input = screen.getByRole('searchbox', {name: 'Describe a browser task'});
+    const input = screen.getByRole('searchbox', {name: 'Describe a computer task'});
 
     expect(input).toHaveValue('');
     expect(useQueryStore.getState().committed).toBe('');
@@ -203,7 +203,7 @@ describe('CollapsedLauncher', () => {
     );
 
     await user.type(
-      screen.getByRole('searchbox', {name: 'Describe a browser task'}),
+      screen.getByRole('searchbox', {name: 'Describe a computer task'}),
       'Replace the active task{Enter}',
     );
 

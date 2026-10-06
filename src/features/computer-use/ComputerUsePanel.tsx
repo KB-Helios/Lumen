@@ -1,15 +1,17 @@
 import {LumenUiIcon} from '../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../design-system/primitives/LumenButton';
 import {LumenText} from '../../design-system/primitives/LumenText';
+import {LumenCheckbox, LumenSelect} from '../settings/components/SettingsControls';
 import type {ComputerUseController} from './useComputerUseController';
 
 function phaseLabel(controller: ComputerUseController) {
   switch (controller.phase) {
-    case 'starting': return 'Starting Edge';
+    case 'starting': return 'Starting';
     case 'running': return 'Working';
     case 'approval': return 'Approval required';
     case 'completed': return 'Completed';
-    case 'cancelled': return 'Stopped';
+    case 'stopping': return 'Stopping';
+    case 'stopped': return 'Stopped';
     case 'error': return 'Unavailable';
     default: return controller.health?.state === 'ready' ? 'Ready' : 'Setup required';
   }
@@ -26,23 +28,16 @@ export interface ComputerUsePanelProps {
 export function ComputerUsePanel({
   controller,
   draftTask,
-  cloudConsent,
   onOpenSettings,
   onStart,
 }: ComputerUsePanelProps) {
-  const active = controller.phase === 'starting' || controller.phase === 'running' || controller.phase === 'approval';
-  const setupReady = controller.health?.state === 'ready'
-    && controller.health.credentialConfigured
-    && cloudConsent;
-  const setupMessage = !controller.health
-    ? 'Checking the local Computer Use worker…'
-    : controller.health.state !== 'ready'
-      ? controller.health.detail ?? 'The Computer Use worker is unavailable.'
-      : !controller.health.credentialConfigured
-        ? 'Add a Gemini API key in Computer Use settings.'
-        : !cloudConsent
-          ? 'Review and grant browser screenshot consent in Computer Use settings.'
-          : 'A separate Microsoft Edge session will carry out this browser-only task.';
+  const active = ['starting', 'running', 'approval', 'stopping'].includes(controller.phase);
+  const setupReady = controller.health?.state === 'ready' && !controller.refusal;
+  const providerLabel = controller.provider === 'openai' ? 'OpenAI' : 'Gemini';
+  const windowTarget = controller.target?.kind === 'window';
+  const selectedTargetId = controller.target?.kind === 'window' ? controller.target.targetId : 'browser';
+  const setupMessage = controller.refusal ?? (windowTarget ? 'Only the selected native window can receive input. Its identity is checked before each action.' : 'Every browser task uses a fresh Microsoft Edge context.');
+  const targetOptions = [{id: 'browser', label: 'Fresh Microsoft Edge'}, ...(controller.targets ?? []).map((target) => ({id: target.targetId, label: `${target.title || target.processName}${target.available ? '' : ` · ${target.reason ?? 'Unavailable'}`}`}))];
 
   return (
     <section aria-label="Computer Use workspace" className="@container/computer-use grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-t border-border-subtle [overflow-wrap:anywhere]">
@@ -50,17 +45,22 @@ export function ComputerUsePanel({
         <div className="flex min-w-0 flex-wrap items-center gap-x-[12px] gap-y-[4px]">
           <LumenUiIcon className="text-accent" name="computer" size="medium" />
           <LumenText weight="semibold">Computer Use</LumenText>
-          <LumenText tone="tertiary" variant="meta">Gemini · browser only</LumenText>
+          <LumenText tone="tertiary" variant="meta">{providerLabel} · {controller.executionMode === 'background' ? 'Background' : 'Fast'}{controller.simulated ? ' · Simulated' : ''}</LumenText>
         </div>
         <LumenText aria-label={phaseLabel(controller)} className="max-w-full rounded-pill bg-surface-inset px-[10px] py-[4px] text-text-secondary" role="status" variant="caption">{phaseLabel(controller)}</LumenText>
       </header>
       <div className="grid min-h-0 min-w-0 content-start gap-[16px] overflow-y-auto p-[16px]" tabIndex={-1}>
         <div className="grid min-w-0 gap-[12px] rounded-control border border-border-subtle bg-surface-inset p-[16px]">
-          <LumenText weight="medium">Protected browser session</LumenText>
+          <LumenText weight="medium">{windowTarget ? 'Selected Windows window' : 'Fresh browser session'}</LumenText>
           <LumenText tone="secondary" variant="meta">{setupMessage}</LumenText>
           <LumenText tone="tertiary" variant="caption">
-            Lumen sends the task and browser screenshots to Gemini. File URLs and desktop control are blocked; sensitive actions pause here for approval.
+            {controller.simulated ? 'This preview simulates progress and approvals. It sends no native input or provider requests.' : `Lumen sends task and selected-target observations to ${providerLabel} with your separate consent. Background refuses unsupported actions; Fast asks before foreground input.`}
           </LumenText>
+          {!active ? <>
+            <LumenSelect aria-label="Computer Use target" options={targetOptions} value={selectedTargetId} onChange={controller.selectTarget} />
+            <LumenButton size="small" variant="quiet" onPress={() => void controller.refreshHealth()}>Refresh targets</LumenButton>
+            {controller.target?.kind === 'browser' ? <LumenCheckbox isDisabled={controller.executionMode === 'background' && !controller.target.visible} isSelected={controller.target.visible ?? false} onChange={controller.setVisibleBrowser}>Request visible browser (Fast only)</LumenCheckbox> : null}
+          </> : null}
         </div>
         {controller.task ? (
           <div className="grid min-w-0 gap-[12px] rounded-control border border-border-subtle bg-surface-inset p-[16px]">
@@ -81,7 +81,7 @@ export function ComputerUsePanel({
         ) : null}
         {controller.approval ? (
           <div aria-label="Approve Computer Use action" className="grid min-w-0 gap-[16px] rounded-control border border-accent/40 bg-accent/10 p-[16px]" role="alertdialog">
-            <LumenText weight="semibold">Gemini needs your approval</LumenText>
+            <LumenText weight="semibold">{controller.approval.scope === 'foreground' ? 'Allow one foreground action?' : controller.approval.scope === 'visibleBrowser' ? 'Allow visible browser launch?' : `${providerLabel} needs your approval`}</LumenText>
             <LumenText tone="secondary">{controller.approval.explanation}</LumenText>
             <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
               <LumenButton variant="primary" onPress={() => void controller.approve()}>
@@ -118,7 +118,7 @@ export function ComputerUsePanel({
       </div>
       <footer className="flex min-w-0 flex-wrap items-center justify-between gap-[8px] border-t border-border-subtle px-[16px] py-[10px]">
         <LumenText className="min-w-0 w-full @min-[32rem]/computer-use:w-auto" tone="tertiary" variant="caption">
-          {controller.model ?? 'gemini-3.6-flash'} · {controller.browser ?? 'Microsoft Edge'}
+          {controller.model ?? 'gemini-3.8-flash'} · {windowTarget ? 'Selected window' : controller.browser ?? 'Microsoft Edge'}
         </LumenText>
         <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
           {!setupReady && !active ? (
@@ -127,12 +127,15 @@ export function ComputerUsePanel({
             </LumenButton>
           ) : null}
           {active ? (
+            <>
             <LumenButton size="small" variant="quiet" onPress={controller.stop}>
               <LumenUiIcon name="stop" size="small" /> Stop
             </LumenButton>
+            <LumenButton size="small" variant="quiet" onPress={controller.takeOver}>Take Over</LumenButton>
+            </>
           ) : (
             <LumenButton isDisabled={!setupReady || !draftTask.trim()} size="small" variant="primary" onPress={onStart}>
-              <LumenUiIcon name="computer" size="small" /> Run in Edge
+              <LumenUiIcon name="computer" size="small" /> {windowTarget ? 'Run in selected window' : 'Run in Edge'}
             </LumenButton>
           )}
         </div>

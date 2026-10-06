@@ -63,14 +63,18 @@ function galleryAnswer(state: GalleryAnswerState | undefined, constrained = fals
 
 const approvalState: ComputerUseState = {
   phase: 'approval',
-  health: {state: 'ready', mode: 'python', browser: 'Microsoft Edge', credentialConfigured: true},
+  health: {state: 'ready', mode: 'python', browser: 'Microsoft Edge', credentialConfigured: true, detail: 'Simulated gallery session', nativeStop: {available: true}, routes: {browser: {available: true}, desktop: {available: false, reason: 'Native app required'}, foreground: {available: false, reason: 'Native app required'}}, providers: {gemini: {available: true, credentialConfigured: true, models: ['gemini-3.8-flash']}, openai: {available: true, credentialConfigured: true, models: ['gpt-6.1-sol']}}},
   task: 'Review the release notes in the isolated browser session.',
   taskId: 1,
-  model: 'gemini-3.6-flash',
+  model: 'gemini-3.8-flash',
+  provider: 'gemini',
+  executionMode: 'fast',
+  target: {kind: 'browser', initialUrl: 'https://example.test/release-notes'},
+  simulated: true,
   browser: 'Microsoft Edge',
   currentUrl: 'https://example.test/release-notes',
   reasoning: 'The next action could change a remote setting.',
-  approval: {id: 'gallery-approval', explanation: 'Apply the requested change in the isolated Edge session.'},
+  approval: {id: 'gallery-approval', scope: 'safety', explanation: 'Apply the requested change in the isolated Edge session.'},
   activity: [{id: 1, label: 'Waiting for your approval', tone: 'accent'}],
 };
 
@@ -138,6 +142,9 @@ function GalleryComputerUse() {
     ...state,
     async refreshHealth() {},
     async start() {},
+    selectTarget() {},
+    setVisibleBrowser() {},
+    takeOver() {setState((current) => ({...current, phase: 'stopped', approval: undefined}));},
     async approve() {
       setState((current) => ({
         ...current,
@@ -150,14 +157,14 @@ function GalleryComputerUse() {
     async deny() {
       setState((current) => ({
         ...current,
-        phase: 'cancelled',
+        phase: 'stopped',
         approval: undefined,
         reasoning: 'The deterministic gallery session stopped without performing the action.',
         activity: [...current.activity, {id: 2, label: 'Denied and stopped in the deterministic gallery session', tone: 'neutral'}],
       }));
     },
     stop() {
-      setState((current) => ({...current, phase: 'cancelled', approval: undefined}));
+      setState((current) => ({...current, phase: 'stopped', approval: undefined}));
     },
   }), [state]);
 

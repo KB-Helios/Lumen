@@ -16,25 +16,33 @@ test('keeps every Computer Use safety action in native keyboard order', async ({
   await expectFocused(intentSwitch);
   await page.keyboard.press('Enter');
 
-  const task = page.getByRole('searchbox', {name: 'Describe a browser task'});
+  const task = page.getByRole('searchbox', {name: 'Describe a computer task'});
   const clear = page.getByRole('button', {name: 'Clear search'});
   await task.fill('Review the support form');
   const run = page.getByRole('button', {name: 'Run in Edge'});
   await expect(run).toBeEnabled();
+  await expect(page.getByText('Gemini · Fast · Simulated')).toBeVisible();
+  const target = page.getByRole('button', {name: /Computer Use target/});
+  const refreshTargets = page.getByRole('button', {name: 'Refresh targets'});
+  const visibleBrowser = page.getByRole('checkbox', {name: 'Request visible browser (Fast only)'});
 
   await task.focus();
   await tab(page);
   await expectFocused(clear);
   await tab(page);
-  await expectFocused(run);
-  await tab(page, 'backward');
-  await expectFocused(clear);
+  await expectFocused(target);
   await tab(page);
+  await expectFocused(refreshTargets);
+  await tab(page);
+  await expectFocused(visibleBrowser);
+  await tab(page);
+  await expectFocused(run);
   await page.keyboard.press('Enter');
 
   const approve = page.getByRole('button', {name: 'Approve once'});
   const deny = page.getByRole('button', {name: 'Deny and stop'});
   const stop = page.getByRole('button', {name: 'Stop', exact: true});
+  const takeOver = page.getByRole('button', {name: 'Take Over'});
   await expect(approve).toBeVisible();
   await task.focus();
   await tab(page);
@@ -44,6 +52,10 @@ test('keeps every Computer Use safety action in native keyboard order', async ({
   await tab(page);
   await expectFocused(deny);
   await tab(page);
+  await expectFocused(stop);
+  await tab(page);
+  await expectFocused(takeOver);
+  await tab(page, 'backward');
   await expectFocused(stop);
   await tab(page, 'backward');
   await expectFocused(deny);
@@ -57,7 +69,10 @@ test('keeps every Computer Use safety action in native keyboard order', async ({
   await expectFocused(clear);
   await tab(page);
   await expectFocused(stop);
+  await tab(page);
+  await expectFocused(takeOver);
   await page.keyboard.press('Enter');
+  await expect(page.getByRole('status', {name: 'Stopped', exact: true})).toBeVisible();
   await expect(run).toBeVisible();
 
   await run.focus();

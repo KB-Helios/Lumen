@@ -194,6 +194,10 @@ export function useLumenKeyboard({
         handleTab(event);
         return;
       }
+      if (intent !== 'search' && regionForTarget(event.target) !== 'search') {
+        // Selects, checkboxes, approvals and Stop own their native keyboard flow.
+        return;
+      }
       if (event.key === 'Escape') {
         if (regionForTarget(event.target) === 'search') {
           return;
@@ -220,7 +224,7 @@ export function useLumenKeyboard({
       if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && targetRegion === 'search') {
         return;
       }
-      if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
+      if (intent === 'search' && (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
         targetRegion !== 'scope' && targetRegion !== 'preview') {
         event.preventDefault();
         moveSelection(event.key === 'ArrowDown' ? 1 : -1);

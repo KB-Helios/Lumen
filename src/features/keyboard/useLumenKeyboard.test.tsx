@@ -3,11 +3,7 @@ import userEvent from '@testing-library/user-event';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {BrowserWindowService} from '../../platform/window/browser-window-service';
-import type {ComputerUseService} from '../../services/computer-use/computer-use-service';
-import type {
-  ComputerUseEvent,
-  ComputerUseRequest,
-} from '../../services/computer-use/computer-use.types';
+import {DevelopmentComputerUseService as KeyboardComputerUseService} from '../../services/computer-use/development-computer-use-service';
 import {MemorySearchService} from '../../services/search/memory-search-service';
 import type {SearchResult} from '../../services/search/search.types';
 import {SearchExperience} from '../launcher/SearchExperience';
@@ -17,55 +13,6 @@ import {useQueryStore} from '../launcher/query.store';
 import {useScopeStore} from '../launcher/scope.store';
 import {useSelectionStore} from '../launcher/selection.store';
 import {useSettingsStore} from '../settings/settings.store';
-
-class KeyboardComputerUseService implements ComputerUseService {
-  private approval?: {approved: boolean; resolve(): void};
-
-  async health() {
-    return {
-      state: 'ready' as const,
-      mode: 'python' as const,
-      browser: 'Microsoft Edge',
-      credentialConfigured: true,
-    };
-  }
-
-  async *stream(
-    request: ComputerUseRequest,
-    signal: AbortSignal,
-  ): AsyncIterable<ComputerUseEvent> {
-    yield {type: 'started', model: request.model, browser: 'Microsoft Edge'};
-    yield {
-      type: 'approvalRequired',
-      approvalId: 'keyboard-approval',
-      explanation: 'Submit the browser form?',
-    };
-    const response = await new Promise<boolean | null>((resolve) => {
-      const onAbort = () => resolve(null);
-      signal.addEventListener('abort', onAbort, {once: true});
-      this.approval = {
-        approved: false,
-        resolve: () => {
-          signal.removeEventListener('abort', onAbort);
-          resolve(this.approval?.approved ?? false);
-        },
-      };
-    });
-    if (response === null) return;
-    yield {type: 'approvalResolved', approvalId: 'keyboard-approval', approved: response};
-    if (!response) {
-      yield {type: 'cancelled'};
-      return;
-    }
-    await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), {once: true}));
-  }
-
-  async respond(_taskId: number, _approvalId: string, approved: boolean) {
-    if (!this.approval) throw new Error('No approval is pending.');
-    this.approval.approved = approved;
-    this.approval.resolve();
-  }
-}
 
 function file(id: string): SearchResult {
   return {
@@ -118,7 +65,7 @@ describe('Lumen keyboard coordination', () => {
       />,
     );
 
-    const input = screen.getByRole('searchbox', {name: 'Describe a browser task'});
+    const input = screen.getByRole('searchbox', {name: 'Describe a computer task'});
     await user.type(input, 'Review the support form');
     const run = await screen.findByRole('button', {name: 'Run in Edge'});
     await waitFor(() => expect(run).toBeEnabled());
@@ -126,6 +73,19 @@ describe('Lumen keyboard coordination', () => {
     input.focus();
     await user.tab();
     expect(screen.getByRole('button', {name: 'Clear search'})).toHaveFocus();
+    await user.tab();
+    const target = screen.getByRole('button', {name: /Computer Use target/});
+    expect(target).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(await screen.findByRole('listbox')).toBeVisible();
+    expect(screen.getByRole('option', {name: 'Fresh Microsoft Edge'})).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(target).toHaveFocus();
+    expect(input).toHaveValue('Review the support form');
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Refresh targets'})).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('checkbox', {name: 'Request visible browser (Fast only)'})).toHaveFocus();
     await user.tab();
     expect(run).toHaveFocus();
     await user.keyboard('{Enter}');
@@ -169,7 +129,7 @@ describe('Lumen keyboard coordination', () => {
       />,
     );
 
-    const input = screen.getByRole('searchbox', {name: 'Describe a browser task'});
+    const input = screen.getByRole('searchbox', {name: 'Describe a computer task'});
     await user.type(input, 'Review the support form');
     await user.click(await screen.findByRole('button', {name: 'Run in Edge'}));
     const deny = await screen.findByRole('button', {name: 'Deny and stop'});

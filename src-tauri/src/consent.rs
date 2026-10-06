@@ -31,6 +31,14 @@ impl PersistedConsent {
     pub fn computer_use_granted(&self) -> bool {
         self.setting("computerUse", "cloudConsent")
     }
+
+    pub fn desktop_control_granted(&self) -> bool {
+        self.setting("computerUse", "desktopControlConsent")
+    }
+
+    pub fn desktop_cloud_granted(&self) -> bool {
+        self.setting("computerUse", "desktopCloudConsent")
+    }
 }
 
 #[cfg(test)]
@@ -55,6 +63,13 @@ mod tests {
         .unwrap();
         assert!(consent.answer_granted());
         assert!(consent.computer_use_granted());
+        assert!(!consent.desktop_control_granted());
+        assert!(!consent.desktop_cloud_granted());
+
+        fs::write(&path, r#"{"management":{"computerUse":{"desktopControlConsent":true,"desktopCloudConsent":true}}}"#).unwrap();
+        assert!(consent.desktop_control_granted());
+        assert!(consent.desktop_cloud_granted());
+        assert!(!consent.computer_use_granted());
 
         fs::write(
             &path,

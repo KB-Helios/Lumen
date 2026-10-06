@@ -38,7 +38,7 @@ interface SettingsActions {
   updateAi(patch: Partial<AiSettings>): Promise<boolean>;
   setCloudAnswerConsent(granted: boolean): Promise<boolean>;
   updateComputerUse(patch: Partial<ComputerUseSettings>): Promise<boolean>;
-  setComputerUseConsent(granted: boolean): Promise<boolean>;
+  setComputerUseConsent(granted: boolean, consent?: 'cloudConsent' | 'desktopControlConsent' | 'desktopCloudConsent'): Promise<boolean>;
   updateActivity(patch: Partial<ActivitySettings>): Promise<boolean>;
   updatePrivacy(patch: Partial<PrivacySettings>): Promise<boolean>;
 }
@@ -103,6 +103,7 @@ export const useSettingsStore = create<SettingsState>()(
   subscribeWithSelector((set, get) => {
     let writeRevision = 0;
     let writeQueue = Promise.resolve();
+    const computerUseConsentRevisions = {cloudConsent: 0, desktopControlConsent: 0, desktopCloudConsent: 0};
 
     async function persist(
       settings: () => LumenSettings = () => stateSettings(get()),
@@ -145,6 +146,9 @@ export const useSettingsStore = create<SettingsState>()(
       },
       reset: () => {
         writeRevision += 1;
+        computerUseConsentRevisions.cloudConsent += 1;
+        computerUseConsentRevisions.desktopControlConsent += 1;
+        computerUseConsentRevisions.desktopCloudConsent += 1;
         set({...defaultSettings, ...initialMeta});
       },
       setActivePage: (activePage) => {
@@ -186,19 +190,30 @@ export const useSettingsStore = create<SettingsState>()(
         () => set((state) => ({ai: {...state.ai, cloudAnswerConsent: granted}})),
       ),
       updateComputerUse: (patch) => {
-        set((state) => ({computerUse: {...state.computerUse, ...patch}}));
+        const configuration = {...patch};
+        delete configuration.cloudConsent;
+        delete configuration.desktopControlConsent;
+        delete configuration.desktopCloudConsent;
+        set((state) => ({computerUse: {...state.computerUse, ...configuration}}));
         return persist();
       },
-      setComputerUseConsent: (granted) => persist(
-        () => {
-          const settings = stateSettings(get());
-          return settingsSchema.parse({
-            ...settings,
-            computerUse: {...settings.computerUse, cloudConsent: granted},
-          });
-        },
-        () => set((state) => ({computerUse: {...state.computerUse, cloudConsent: granted}})),
-      ),
+      setComputerUseConsent: (granted, consent = 'cloudConsent') => {
+        const revision = ++computerUseConsentRevisions[consent];
+        // Withdrawal closes UI admission immediately, even while the disk is busy.
+        if (!granted) set((state) => ({computerUse: {...state.computerUse, [consent]: false}}));
+        return persist(
+          () => {
+            const settings = stateSettings(get());
+            return settingsSchema.parse({
+              ...settings,
+              computerUse: {...settings.computerUse, [consent]: revision === computerUseConsentRevisions[consent] ? granted : settings.computerUse[consent]},
+            });
+          },
+          () => {
+            if (revision === computerUseConsentRevisions[consent]) set((state) => ({computerUse: {...state.computerUse, [consent]: granted}}));
+          },
+        );
+      },
       updateActivity: (patch) => {
         set((state) => ({activity: {...state.activity, ...patch}}));
         return persist();

@@ -149,6 +149,8 @@ pub fn run() {
                 packaged_computer_use,
                 staged_computer_use,
                 source_computer_use,
+                data_directory.join("lumen.settings.json"),
+                data_directory.clone(),
             ));
             let packaged_cliproxy = app.path().resource_dir()?.join("cliproxy-sidecar.exe");
             let staged_cliproxy = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -223,6 +225,13 @@ pub fn run() {
                 smoke_checkpoint("checks");
                 let report_path = data_directory.join("lumen-packaged-smoke.json");
                 let smoke = (|| -> Result<serde_json::Value, String> {
+                    let computer_use = tauri::async_runtime::block_on(
+                        app.state::<computer_use::ComputerUseSupervisor>().health(),
+                    );
+                    let computer_use_packaged = computer_use.mode == "packaged"
+                        && computer_use.native_stop.available
+                        && computer_use.routes.browser.available
+                        && computer_use.routes.desktop.available;
                     let search = search::run_packaged_search_smoke(
                         &data_directory.join("packaged-search-smoke"),
                         &vector_extension,
@@ -257,12 +266,16 @@ pub fn run() {
                         && !diagnostics.contains("packaged smoke secret")
                         && !diagnostics.contains(data_path.as_ref());
                     Ok(serde_json::json!({
-                        "passed": search.exact_vector && search.lexical_fallback && shown && hidden && diagnostics_export,
+                        "passed": search.exact_vector && search.lexical_fallback && shown && hidden && diagnostics_export && computer_use_packaged,
                         "exactVector": search.exact_vector,
                         "lexicalFallback": search.lexical_fallback,
                         "vectorVersion": search.vector_version,
                         "windowShowHide": shown && hidden,
                         "diagnosticsExport": diagnostics_export,
+                        "computerUsePackaged": computer_use_packaged,
+                        "computerUseNativeStop": computer_use.native_stop.available,
+                        "computerUseBrowser": computer_use.routes.browser.available,
+                        "computerUseDesktop": computer_use.routes.desktop.available,
                     }))
                 })();
                 let exit_code = if smoke.as_ref().is_ok_and(|value| {
@@ -336,9 +349,12 @@ pub fn run() {
             gateway::provisioning::start_provisioning,
             gateway::provisioning::cancel_provisioning,
             computer_use::computer_use_health,
+            computer_use::computer_use_targets,
+            computer_use::computer_use_diagnostics,
             computer_use::start_computer_use,
             computer_use::respond_computer_use_approval,
             computer_use::cancel_computer_use,
+            computer_use::stop_computer_use,
             provider_switcher::supervisor::cliproxy_health,
             provider_switcher::supervisor::cliproxy_restart,
             provider_switcher::client::cliproxy_get_config,

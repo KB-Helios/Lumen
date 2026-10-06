@@ -23,7 +23,7 @@ test('renders dark, light, and opaque shell variants', async ({page}) => {
   const search = page.getByRole('searchbox', {name: 'Search files'});
   await expect(search).toHaveAttribute('placeholder', 'Search apps and files');
   await page.getByRole('button', {name: 'Switch to Computer Use'}).click();
-  await expect(page.getByRole('searchbox', {name: 'Describe a browser task'}))
+  await expect(page.getByRole('searchbox', {name: 'Describe a computer task'}))
     .toHaveAttribute('placeholder', 'Describe browser task');
   await page.getByRole('button', {name: 'Switch to file search'}).click();
   await expect(commandPalette).toHaveAttribute('data-upstream', 'einui-glass-command-palette');

@@ -1,227 +1,147 @@
 import {act, render, renderHook, screen, waitFor} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
-
 import {AppProviders} from '../../app/AppProviders';
 import type {ComputerUseService} from '../../services/computer-use/computer-use-service';
-import type {
-  ComputerUseEvent,
-  ComputerUseRequest,
-} from '../../services/computer-use/computer-use.types';
+import type {ComputerUseEvent, ComputerUseHealth, ComputerUseRequest, ComputerUseStopReason} from '../../services/computer-use/computer-use.types';
 import {ComputerUsePanel} from './ComputerUsePanel';
-import {type ComputerUseController, useComputerUseController} from './useComputerUseController';
+import {useComputerUseController} from './useComputerUseController';
 
-const options = {
-  model: 'gemini-3.6-flash' as const,
-  initialUrl: 'https://www.google.com',
-  cloudConsent: true,
+const options = {provider: 'gemini' as const, model: 'gemini-3.8-flash', openaiModel: 'gpt-6.1-sol', executionMode: 'fast' as const, initialUrl: 'https://example.com', cloudConsent: true, desktopControlConsent: false, desktopCloudConsent: false};
+const ready: ComputerUseHealth = {
+  state: 'ready', mode: 'python', browser: 'Microsoft Edge', credentialConfigured: true,
+  nativeStop: {available: true}, routes: {browser: {available: true}, desktop: {available: true}, foreground: {available: true}},
+  providers: {gemini: {available: true, credentialConfigured: true, models: ['gemini-3.8-flash']}, openai: {available: true, credentialConfigured: true, models: ['gpt-6.1-sol']}},
 };
 
-function panelController(overrides: Partial<ComputerUseController> = {}): ComputerUseController {
-  return {
-    phase: 'idle',
-    health: {
-      state: 'ready',
-      mode: 'python',
-      browser: 'Microsoft Edge',
-      credentialConfigured: true,
-    },
-    model: 'gemini-3.6-flash',
-    browser: 'Microsoft Edge',
-    activity: [],
-    refreshHealth: async () => undefined,
-    start: async () => undefined,
-    approve: async () => undefined,
-    deny: async () => undefined,
-    stop: () => undefined,
-    ...overrides,
-  };
-}
-
-function renderPanel(controller: ComputerUseController) {
-  return render(
-    <AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}>
-      <ComputerUsePanel cloudConsent controller={controller} draftTask="review the support form" onOpenSettings={() => undefined} onStart={() => undefined} />
-    </AppProviders>,
-  );
-}
-
-class MemoryComputerUseService implements ComputerUseService {
+class NativeBoundaryFixture implements ComputerUseService {
   request?: ComputerUseRequest;
-  requests: ComputerUseRequest[] = [];
+  stops: Array<{taskId: number; reason: ComputerUseStopReason}> = [];
   responses: Array<{taskId: number; approvalId: string; approved: boolean}> = [];
-  private approvalResolve?: () => void;
-  private approvalResult = true;
-  private responseResolve?: () => void;
-  private responseWait?: Promise<void>;
-
-  constructor(private readonly approval = false, deferResponse = false) {
-    if (deferResponse) {
-      this.responseWait = new Promise((resolve) => {
-        this.responseResolve = resolve;
-      });
-    }
-  }
-
-  async health() {
-    return {
-      state: 'ready' as const,
-      mode: 'python' as const,
-      browser: 'Microsoft Edge',
-      credentialConfigured: true,
-    };
-  }
-
+  private queue: ComputerUseEvent[] = [];
+  private wake?: () => void;
+  private stopped = false;
+  acknowledge?: () => void;
+  health = async () => ready;
+  targets = async () => [{targetId: 'window-one', title: 'Notepad', processName: 'notepad.exe', available: true}];
   async *stream(request: ComputerUseRequest): AsyncIterable<ComputerUseEvent> {
     this.request = request;
-    this.requests.push(request);
-    yield {type: 'started', model: request.model, browser: 'Microsoft Edge'};
-    yield {type: 'action', action: 'navigate'};
-    if (this.approval) {
-      yield {type: 'approvalRequired', approvalId: 'approval1', explanation: 'Submit this form?'};
-      await new Promise<void>((resolve) => {
-        this.approvalResolve = resolve;
-      });
-      yield {type: 'approvalResolved', approvalId: 'approval1', approved: this.approvalResult};
-      if (!this.approvalResult) {
-        yield {type: 'cancelled'};
-        return;
-      }
+    while (!this.stopped || this.queue.length) {
+      if (!this.queue.length) await new Promise<void>((resolve) => {this.wake = resolve;});
+      const event = this.queue.shift();
+      if (event) yield event;
     }
-    yield {type: 'completed', summary: 'The browser task is complete.'};
   }
-
-  async respond(taskId: number, approvalId: string, approved: boolean) {
-    this.responses.push({taskId, approvalId, approved});
-    await this.responseWait;
-    this.approvalResult = approved;
-    this.approvalResolve?.();
+  send(event: Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>) {
+    this.queue.push({...event, taskId: this.request!.taskId, runId: 'fixture-run', targetId: 'edge-fixture'} as ComputerUseEvent);
+    this.wake?.();
   }
-
-  releaseResponse() {
-    this.responseResolve?.();
+  async stop(taskId: number, reason: ComputerUseStopReason) {
+    this.stops.push({taskId, reason});
+    await new Promise<void>((resolve) => {this.acknowledge = resolve;});
+    this.stopped = true;
+    this.wake?.();
   }
+  async respond(taskId: number, approvalId: string, approved: boolean) {this.responses.push({taskId, approvalId, approved});}
 }
 
-describe('useComputerUseController', () => {
-  it('keeps approval and a later failure inside the Computer Use workspace with textual status', () => {
-    const {rerender} = renderPanel(panelController({
-      phase: 'approval',
-      task: 'Submit the support form',
-      approval: {id: 'approval1', explanation: 'Submit this form?'},
-    }));
-
-    expect(screen.getByRole('status', {name: 'Approval required'})).toHaveTextContent('Approval required');
-    expect(screen.getByRole('alertdialog', {name: 'Approve Computer Use action'})).toHaveTextContent('Submit this form?');
-    expect(screen.getByRole('button', {name: 'Deny and stop'})).toBeVisible();
-
-    rerender(
-      <AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}>
-        <ComputerUsePanel cloudConsent controller={panelController({phase: 'error', error: 'Worker connection closed.'})} draftTask="review the support form" onOpenSettings={() => undefined} onStart={() => undefined} />
-      </AppProviders>,
-    );
-
-    expect(screen.getByRole('status', {name: 'Unavailable'})).toHaveTextContent('Unavailable');
-    expect(screen.getByRole('alert')).toHaveTextContent('Worker connection closed.');
-    expect(screen.queryByRole('alertdialog', {name: 'Approve Computer Use action'})).not.toBeInTheDocument();
-  });
-
-  it('streams a browser task through the typed service boundary', async () => {
-    const service = new MemoryComputerUseService();
+describe('Computer Use safety controls', () => {
+  it('keeps Stop pending during startup until native acknowledgment', async () => {
+    const service = new NativeBoundaryFixture();
     const {result} = renderHook(() => useComputerUseController(service, options));
-
-    await waitFor(() => expect(result.current.health?.state).toBe('ready'));
-    await act(async () => result.current.start('  Find the Lumen repository  '));
-
-    expect(service.request).toMatchObject({
-      task: 'Find the Lumen repository',
-      model: 'gemini-3.6-flash',
-      initialUrl: 'https://www.google.com',
-      cloudConsent: true,
-    });
-    expect(result.current.phase).toBe('completed');
-    expect(result.current.summary).toBe('The browser task is complete.');
-    expect(result.current.activity.map((item) => item.label)).toContain('Navigate');
-    expect(result.current.activity.map((item) => item.id)).toEqual([1, 2, 3]);
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    act(() => {void result.current.start('Review form');});
+    act(() => service.send({type: 'observation', generation: 1, snapshotId: 'snapshot-one'} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>));
+    await waitFor(() => expect(result.current.phase).toBe('starting'));
+    act(() => result.current.stop());
+    expect(result.current.phase).toBe('stopping');
+    expect(service.stops).toEqual([{taskId: service.request!.taskId, reason: 'stop'}]);
+    await act(async () => {service.acknowledge!();});
+    await waitFor(() => expect(result.current.phase).toBe('stopped'));
   });
-
-  it('pauses for one explicit approval before the worker continues', async () => {
-    const service = new MemoryComputerUseService(true);
+  it('does not resume after Take Over when an approval reply arrives late', async () => {
+    const service = new NativeBoundaryFixture();
     const {result} = renderHook(() => useComputerUseController(service, options));
-
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    act(() => {void result.current.start('Review form');});
+    act(() => service.send({type: 'observation', generation: 1, snapshotId: 'snapshot-one'} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>));
+    act(() => service.send({type: 'approvalRequired', generation: 1, approvalId: 'approval-one', actionId: 'action-one', snapshotId: 'snapshot-one', scope: 'foreground', explanation: 'Allow one foreground action?'} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>));
+    await waitFor(() => expect(result.current.phase).toBe('approval'));
+    act(() => result.current.takeOver());
+    act(() => service.send({type: 'approvalResolved', generation: 1, approvalId: 'approval-one', approved: true} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>));
+    expect(result.current.phase).toBe('stopping');
+    await act(async () => {service.acknowledge!();});
+    expect(result.current.phase).toBe('stopped');
+    expect(service.stops[0]?.reason).toBe('takeOver');
+    expect(result.current.approval).toBeUndefined();
+  });
+  it('stops an active window task when either persisted desktop grant is revoked', async () => {
+    const service = new NativeBoundaryFixture();
+    const granted = {...options, desktopControlConsent: true, desktopCloudConsent: true};
+    const {result, rerender} = renderHook(({config}) => useComputerUseController(service, config), {initialProps: {config: granted}});
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    act(() => result.current.selectTarget('window-one'));
+    act(() => {void result.current.start('Edit note');});
+    rerender({config: {...granted, desktopCloudConsent: false}});
+    await waitFor(() => expect(result.current.phase).toBe('stopping'));
+    expect(service.stops[0]?.reason).toBe('consentRevoked');
+    await act(async () => {service.acknowledge!();});
+    expect(result.current.phase).toBe('stopped');
+  });
+  it('refuses desktop in missing native environments and visible Background before streaming', async () => {
+    const service = new NativeBoundaryFixture();
+    service.health = async () => ({...ready, routes: {...ready.routes, desktop: {available: false, reason: 'Native desktop unavailable'}}});
+    const {result, rerender} = renderHook(({config}) => useComputerUseController(service, config), {initialProps: {config: {...options, executionMode: 'fast' as 'fast' | 'background'}}});
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    act(() => result.current.selectTarget('window-one'));
+    await act(async () => result.current.start('Edit note'));
+    expect(service.request).toBeUndefined();
+    expect(result.current.refusal).toBe('Native desktop unavailable');
+    act(() => {result.current.selectTarget('browser'); result.current.setVisibleBrowser(true);});
+    rerender({config: {...options, executionMode: 'background'}});
+    await act(async () => result.current.start('Review form'));
+    expect(service.request).toBeUndefined();
+    expect(result.current.refusal).toMatch(/Background.*visible/i);
+  });
+  it('shows Stop and Take Over while stopping and labels deterministic mode simulated', async () => {
+    const service = new NativeBoundaryFixture();
+    const {result} = renderHook(() => useComputerUseController(service, options));
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    render(<AppProviders><ComputerUsePanel cloudConsent controller={{...result.current, phase: 'stopping', simulated: true}} draftTask="Task" onOpenSettings={() => undefined} onStart={() => undefined} /></AppProviders>);
+    expect(screen.getByRole('status', {name: 'Stopping'})).toBeVisible();
+    expect(screen.getByRole('button', {name: /^Stop$/})).toBeVisible();
+    expect(screen.getByRole('button', {name: 'Take Over'})).toBeVisible();
+    expect(screen.getByText(/Simulated/)).toBeVisible();
+  });
+  it('sends one response per approval even when its native event is delayed', async () => {
+    const service = new NativeBoundaryFixture();
+    const {result} = renderHook(() => useComputerUseController(service, options));
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    act(() => {void result.current.start('Review form');});
     act(() => {
-      void result.current.start('Submit the support form');
+      service.send({type: 'observation', generation: 1, snapshotId: 'snapshot-one'} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>);
+      service.send({type: 'approvalRequired', generation: 1, approvalId: 'approval-one', actionId: 'action-one', snapshotId: 'snapshot-one', scope: 'safety', explanation: 'Submit?'} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>);
     });
     await waitFor(() => expect(result.current.phase).toBe('approval'));
-    expect(result.current.approval?.explanation).toBe('Submit this form?');
-
-    await act(async () => result.current.approve());
-    await waitFor(() => expect(result.current.phase).toBe('completed'));
-    expect(service.responses).toEqual([{
-      taskId: expect.any(Number),
-      approvalId: 'approval1',
-      approved: true,
-    }]);
-  });
-
-  it('keeps a denied sensitive action cancelled and reports it accurately', async () => {
-    const service = new MemoryComputerUseService(true);
-    const {result} = renderHook(() => useComputerUseController(service, options));
-
-    act(() => {
-      void result.current.start('Submit the support form');
-    });
-    await waitFor(() => expect(result.current.phase).toBe('approval'));
-
-    await act(async () => result.current.deny());
-
-    await waitFor(() => expect(result.current.phase).toBe('cancelled'));
-    expect(result.current.activity.map((item) => item.label)).toContain('Sensitive action denied');
-    expect(result.current.activity.map((item) => item.label)).not.toContain('Sensitive action approved');
-    expect(service.responses).toEqual([{
-      taskId: expect.any(Number),
-      approvalId: 'approval1',
-      approved: false,
-    }]);
-  });
-
-  it('does not replace an active task before native cancellation completes', async () => {
-    const service = new MemoryComputerUseService(true);
-    const {result} = renderHook(() => useComputerUseController(service, options));
-
-    act(() => {
-      void result.current.start('Keep this task active');
-    });
-    await waitFor(() => expect(result.current.phase).toBe('approval'));
-
-    await act(async () => result.current.start('Replace it too early'));
-
-    expect(service.requests).toHaveLength(1);
-    expect(service.request?.task).toBe('Keep this task active');
-    await act(async () => result.current.deny());
-  });
-
-  it('accepts only the first response to a pending approval', async () => {
-    const service = new MemoryComputerUseService(true, true);
-    const {result} = renderHook(() => useComputerUseController(service, options));
-
-    act(() => {
-      void result.current.start('Approve one sensitive action');
-    });
-    await waitFor(() => expect(result.current.phase).toBe('approval'));
-
-    let approve: Promise<void> | undefined;
-    let deny: Promise<void> | undefined;
-    act(() => {
-      approve = result.current.approve();
-      deny = result.current.deny();
-    });
-
+    await act(async () => {await result.current.approve(); await result.current.approve();});
     expect(service.responses).toHaveLength(1);
-    expect(service.responses[0]?.approved).toBe(true);
-    await act(async () => {
-      service.releaseResponse();
-      await Promise.all([approve, deny]);
+  });
+  it('accepts native shortcut Stop before startup and never publishes a late started event', async () => {
+    const service = new NativeBoundaryFixture();
+    const {result} = renderHook(() => useComputerUseController(service, options));
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    act(() => {void result.current.start('Review form');});
+    act(() => {
+      service.send({type: 'stopped', generation: 2, reason: 'stop', uncertain: false} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>);
+      service.send({type: 'started', generation: 1, provider: 'gemini', model: 'gemini-3.8-flash', executionMode: 'fast', browser: 'Microsoft Edge'} as Omit<ComputerUseEvent, 'taskId' | 'runId' | 'targetId'>);
     });
-    await waitFor(() => expect(result.current.phase).toBe('completed'));
+    await waitFor(() => expect(result.current.phase).toBe('stopped'));
+    expect(result.current.activity.map((item) => item.label)).not.toContain('Session started');
+  });
+  it('accepts 4,000 Unicode task characters without counting surrogate halves twice', async () => {
+    const service = new NativeBoundaryFixture();
+    const {result} = renderHook(() => useComputerUseController(service, options));
+    await waitFor(() => expect(result.current.health).toBeDefined());
+    act(() => {void result.current.start('🔎'.repeat(4_000));});
+    expect(Array.from(service.request?.task ?? '')).toHaveLength(4_000);
   });
 });

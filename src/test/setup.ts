@@ -8,4 +8,11 @@ Object.defineProperty(window, 'scrollTo', {
   writable: true,
 });
 
+// jsdom has no canvas runtime; font measurement uses its documented fallback.
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  configurable: true,
+  value: () => null,
+  writable: true,
+});
+
 afterEach(cleanup);
