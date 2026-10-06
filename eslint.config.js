@@ -7,6 +7,7 @@ export default tseslint.config(
       'dist',
       'node_modules',
       'src-tauri/target',
+      'src-tauri/binaries',
       'workers/**/.venv',
       'workers/**/.build',
     ],

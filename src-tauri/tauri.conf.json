@@ -53,6 +53,7 @@
       "binaries/libwinpthread-1.dll": "libwinpthread-1.dll",
       "binaries/vector.dll": "vector.dll",
       "binaries/windows-ai/": "windows-ai/",
+      "binaries/computer-use-runtime/": "computer-use-runtime/",
       "../packaging/windows/Assets/": "Assets/"
     },
     "icon": [

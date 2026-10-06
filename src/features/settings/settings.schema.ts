@@ -1,6 +1,6 @@
 import {z} from 'zod';
 
-import {computerUseModelSchema} from '../../services/computer-use/computer-use.types';
+import {computerUseExecutionModeSchema, computerUseModelSchema, computerUseProviderSchema, computerUseWebUrlSchema} from '../../services/computer-use/computer-use.types';
 
 export const settingsPageIds = [
   'general',
@@ -56,7 +56,12 @@ const defaultAiSettings = {
 };
 
 const defaultComputerUseSettings = {
-  model: 'gemini-3.6-flash' as const,
+  model: 'gemini-3.8-flash',
+  openaiModel: 'gpt-6.1-sol',
+  provider: 'gemini' as const,
+  executionMode: 'fast' as const,
+  desktopControlConsent: false,
+  desktopCloudConsent: false,
   initialUrl: 'https://www.google.com',
   cloudConsent: false,
 };
@@ -101,7 +106,12 @@ export const settingsSchema = z.object({
   }).default(defaultAiSettings),
   computerUse: z.object({
     model: computerUseModelSchema,
-    initialUrl: z.url().refine((value) => value.startsWith('https://') || value.startsWith('http://')),
+    openaiModel: computerUseModelSchema.default('gpt-6.1-sol'),
+    provider: computerUseProviderSchema.default('gemini'),
+    executionMode: computerUseExecutionModeSchema.default('fast'),
+    desktopControlConsent: z.boolean().default(false),
+    desktopCloudConsent: z.boolean().default(false),
+    initialUrl: computerUseWebUrlSchema,
     cloudConsent: z.boolean(),
   }).default(defaultComputerUseSettings),
   activity: z.object({

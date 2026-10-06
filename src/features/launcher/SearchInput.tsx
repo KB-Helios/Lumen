@@ -131,7 +131,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       >
         <input
           ref={inputRef}
-          aria-label={intent === 'computer' ? 'Describe a browser task' : 'Search files'}
+          aria-label={intent === 'computer' ? 'Describe a computer task' : 'Search files'}
           autoCapitalize="off"
           autoComplete="off"
           defaultValue={useQueryStore.getState().draft}

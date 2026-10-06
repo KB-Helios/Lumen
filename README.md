@@ -1,6 +1,6 @@
 # Lumen
 
-Lumen is a keyboard-first Windows 11 search and browser-agent experience built with Tauri 2, React 19, TypeScript, Tailwind CSS v4, React Aria Components, and Motion. Its owned EinUI command palette uses OpenAI Apps SDK UI icons within Lumen's semantic glass theme. It combines confined local-file search, local/cloud answers behind AgentGateway, and an explicitly consented Gemini Computer Use mode for browser-only tasks.
+Lumen is a keyboard-first Windows 11 search and Computer Use experience built with Tauri 2, React 19, TypeScript, Tailwind CSS v4, React Aria Components, and Motion. Its owned EinUI command palette uses OpenAI Apps SDK UI icons within Lumen's semantic glass theme. It combines confined local-file search, local/cloud answers behind AgentGateway, and explicitly consented Gemini/OpenAI planning for fresh Edge sessions and selected Windows windows.
 
 ![Lumen phase-one visual state gallery](artifacts/screenshots/contact-sheet.png)
 
@@ -13,7 +13,7 @@ Lumen is a keyboard-first Windows 11 search and browser-agent experience built w
 - Eight-scene onboarding and ten settings pages covering appearance, roots, search, local AI, AgentGateway, Computer Use, activity, privacy, and diagnostics.
 - Light, dark, opaque, reduced-effects, reduced-motion, and forced-colors/high-contrast presentation.
 - Typed local-file search, metadata, preview, and opener commands confined to user-selected roots.
-- A supervised Gemini Computer Use sidecar that controls a fresh Microsoft Edge context, pauses model-requested sensitive actions for approval, and stops with Lumen.
+- A Rust Computer Use coordinator with semantic Edge/UI Automation routes, a credential-free local executor, scoped approvals, Fast/Background modes, and native Ctrl+Alt+Esc Stop.
 - Availability-checked Windows AI, App Content Search, Agent Launchers and current-host Edge AI integrations, with controls in the existing settings pages.
 - Development-only 57-scenario visual gallery, screenshot set, contact sheet, six interaction recordings, accessibility/DPI suites, and a strict high-refresh profiler.
 
@@ -100,4 +100,4 @@ Start with [the Computer Use architecture](docs/architecture/computer-use.md), [
 
 Local search commands canonicalize every root and requested path. Paths outside a selected root are rejected, symlinks are not followed, generated dependency/build directories are skipped, text previews are capped at 64 KiB, image previews at 4 MiB, and binary text is not returned to the webview. The Tauri capability does not grant shell execute or spawn permissions.
 
-The webview cannot launch arbitrary processes, contact Gemini directly, or read provider credentials. Computer Use accepts only a typed task request, approval responses, and cancellation through Rust IPC. The task, visited page URLs, and browser screenshots leave the device only after explicit consent; the Gemini key is read from Windows Credential Manager and passed directly to the fixed worker process.
+The webview cannot launch arbitrary processes, contact Computer Use providers directly, or read provider credentials. Computer Use accepts typed tasks, target discovery, approval responses, and Stop through Rust IPC. Rust keeps provider keys in native requests; the fixed local executor receives no credentials. Browser cloud consent and the two desktop grants are independent. Tasks, selected-target observations and optional screenshots leave the device only within the recorded scope. Background mode forbids foreground escalation, and Stop reports uncertain in-flight outcomes without implying rollback.

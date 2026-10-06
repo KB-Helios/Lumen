@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "70fc9e67c0bd8ac3479ea62f1bcaf1e13ceb0b54",
+  "recordedAt": "2026-10-06T16:09:42.950718+00:00",
+  "referenceHost": {
+    "windows": "10.0.26300",
+    "python": "3.11.15",
+    "playwright": "1.62.0",
+    "cuaDriver": "0.34.0"
+  },
+  "stagedBuildId": "2908565257dd2fb41c3c81090bd2faa20eb85ed7d67f4ce6ed25d5d6d06b4228",
+  "stagedExecutorSha256": "320f581be46aa14d16adfd57814e2bad7de2c880026f64e6ca80f8df3ce491c4",
+  "stagedRuntimeFiles": 275,
+  "method": "Twenty warm repetitions of five semantic field changes in installed headless Edge; one warm-up excluded. Local fixed executor protocol and independent read-back, no cloud calls.",
+  "browserSource": {
+    "warmRepetitionLatencyMs": [
+      358.24,
+      342.85,
+      325.57,
+      333.98,
+      337.81,
+      330.31,
+      357.37,
+      328.77,
+      329.76,
+      332.98,
+      325.5,
+      353.01,
+      311.08,
+      326.73,
+      326.15,
+      323.18,
+      323.9,
+      338.26,
+      336.91,
+      390.31
+    ],
+    "warmRepetitionSummary": {
+      "count": 20,
+      "medianMs": 331.64,
+      "p95Ms": 358.24,
+      "minimumMs": 311.08,
+      "maximumMs": 390.31
+    },
+    "warmActionSummary": {
+      "count": 100,
+      "medianMs": 66.33,
+      "p95Ms": 78.64,
+      "minimumMs": 58.04,
+      "maximumMs": 97.35
+    },
+    "semanticActionCount": 100,
+    "semanticScreenshotCount": 0,
+    "confirmedReadbacks": 100
+  },
+  "browserPackaged": {
+    "warmRepetitionLatencyMs": [
+      413.79,
+      393.18,
+      395.46,
+      415.8,
+      394.22,
+      397.19,
+      385.25,
+      382.64,
+      379.79,
+      390.4,
+      388.66,
+      391.61,
+      366.29,
+      394.51,
+      389.55,
+      372.51,
+      444.52,
+      434.77,
+      453.27,
+      377.17
+    ],
+    "warmRepetitionSummary": {
+      "count": 20,
+      "medianMs": 392.39,
+      "p95Ms": 444.52,
+      "minimumMs": 366.29,
+      "maximumMs": 453.27
+    },
+    "warmActionSummary": {
+      "count": 100,
+      "medianMs": 78.25,
+      "p95Ms": 91.66,
+      "minimumMs": 69.15,
+      "maximumMs": 113.77
+    },
+    "semanticActionCount": 100,
+    "semanticScreenshotCount": 0,
+    "confirmedReadbacks": 100
+  },
+  "conservativeLegacyBaseline": {
+    "kind": "reproducedConservativeScreenshotLoop",
+    "warmRepetitions": 20,
+    "sequence": "coordinate click, Ctrl+A, Backspace, keyboard.type, load wait, duplicate load wait, 500 ms sleep, PNG screenshot, value read-back",
+    "provenance": "upstream/computers/playwright/playwright.py:type_text_at/current_state",
+    "limitation": "Excludes upstream extra screenshots inside key_combination and all provider latency; comparison is a conservative local execution floor.",
+    "warmRepetitionLatencyMs": [
+      3692.17,
+      3706.42,
+      3684.74,
+      3762.61,
+      3653.65,
+      3588.15,
+      3631.93,
+      3440.57,
+      3660.44,
+      3749.74,
+      3813.24,
+      3844.61,
+      3709.82,
+      3617.07,
+      3758.54,
+      3286.01,
+      3750.71,
+      3803.6,
+      3800.6,
+      3774.18
+    ],
+    "warmRepetitionSummary": {
+      "count": 20,
+      "medianMs": 3708.12,
+      "p95Ms": 3813.24,
+      "minimumMs": 3286.01,
+      "maximumMs": 3844.61
+    },
+    "warmActionSummary": {
+      "count": 100,
+      "medianMs": 750.9,
+      "p95Ms": 772.35,
+      "minimumMs": 632.53,
+      "maximumMs": 787.6
+    },
+    "semanticScreenshotCount": 100,
+    "screenshotPngBytes": 1957518,
+    "confirmedReadbacks": 100
+  },
+  "medianLocalOverheadReductionPercent": {
+    "source": 91.06,
+    "packaged": 89.42
+  },
+  "nativePackaged": {
+    "metrics": [
+      {
+        "command": "begin",
+        "latencyMs": 348.78,
+        "requestBytes": 400,
+        "responseBytes": 81,
+        "screenshot": false,
+        "ok": true,
+        "effect": null,
+        "refusal": null
+      },
+      {
+        "command": "observe",
+        "latencyMs": 1623.99,
+        "requestBytes": 87,
+        "responseBytes": 1862,
+        "screenshot": false,
+        "ok": true,
+        "effect": null,
+        "refusal": null
+      },
+      {
+        "command": "act",
+        "latencyMs": 2967.19,
+        "requestBytes": 264,
+        "responseBytes": 1927,
+        "screenshot": false,
+        "ok": true,
+        "effect": "confirmed",
+        "refusal": null
+      },
+      {
+        "command": "end",
+        "latencyMs": 42.4,
+        "requestBytes": 83,
+        "responseBytes": 81,
+        "screenshot": false,
+        "ok": true,
+        "effect": null,
+        "refusal": null
+      }
+    ],
+    "confirmedReadbacks": 1,
+    "semanticScreenshotCount": 0
+  },
+  "nativeFixtureInvariants": {
+    "nativeActions": [
+      "setValue",
+      "invoke"
+    ],
+    "noEffectInvokeConfirmed": false,
+    "rawMouseMovements": 0,
+    "cursorMethod": "Exact cursor equality remains required; raw movement is diagnostic only",
+    "foregroundUnchanged": true,
+    "cursorUnchanged": true,
+    "targetVisibleZOrderUnchanged": true,
+    "zOrderMethod": "Target relative order among surviving visible windows; excludes hidden/new helper windows",
+    "ownedInputReadback": true,
+    "actualForegroundKeyboardTested": false,
+    "inputEvidence": "Concurrent WM_CHAR sent only to a second owned background fixture control"
+  },
+  "earlierNotepadProbe": {
+    "valueReadback": true,
+    "foregroundPreservedDuringValueAction": true,
+    "earlierKeyboardCleanupPreservedForeground": false,
+    "currentKeyboardRoute": "Refused before SDK dispatch; owned fixture document left open"
+  },
+  "liveProviders": {
+    "gemini": {
+      "credentialConfigured": false,
+      "taskVerified": false
+    },
+    "openai": {
+      "credentialConfigured": false,
+      "taskVerified": false
+    },
+    "plannerRoundTripSavingsMeasured": false,
+    "providerLatencyMeasured": false
+  },
+  "limitations": [
+    "Reproduced legacy baseline excludes extra upstream modifier screenshots and all provider latency.",
+    "Measurements exclude startup and human approval wait; no full end-to-end provider result.",
+    "Native packaged measurement is one value change, not a twenty-repetition native efficiency comparison.",
+    "Native ordering covers the selected target relative to surviving visible windows.",
+    "Concurrent WM_CHAR input goes to an owned background fixture; real foreground keyboard input remains untested."
+  ]
+}
