@@ -22,6 +22,10 @@ Every event has `taskId,runId,generation,targetId` plus:
 
 `respond_computer_use_approval` retains `{taskId,approvalId,approved}`. Native pending approval stores the full run/generation/target/snapshot/action scope; stale or replayed IDs fail.
 
+An IPC rejection leaves the same pending approval available for another response. A successful resolved event clears its temporary response error; denying it ends the run as Stopped.
+
 `stop_computer_use` accepts `{taskId,reason:"stop"|"takeOver"|"consentRevoked"}` and returns after native gate closure/teardown dispatch. `cancel_computer_use` remains a compatibility alias. Stop must be sent immediately, including while start is pending; the stream stays open until native terminal acknowledgment. `stream` also accepts an optional scoped `onStopped` callback carrying only a validated, admitted stopped event; it preserves native acknowledgment if a damaged generator has ended and cleanup IPC rejects. The controller applies the same identity and terminal admission to that callback and the stream. Frontend shows `stopping` until `stopped`. Take Over ends the run permanently.
+
+Startup or stream failures reach the controller while native cleanup is still pending. The original cause stays visible after either IPC or native-event Stop acknowledgment. Cleanup rejection keeps the run in Stopping and allows an explicit Stop retry.
 
 Settings add `provider` (Gemini), `executionMode` (Fast), `desktopControlConsent` (false), `desktopCloudConsent` (false), and `openaiModel` (`gpt-6.1-sol`). Existing `model` is the saved Gemini selection; new configurations use `gemini-3.8-flash`. Target windows are never persisted as reusable HWNDs. Persisted grant updates use the existing write-before-publish path. Revocation stops the current run and any warm executor.

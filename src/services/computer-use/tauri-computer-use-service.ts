@@ -82,7 +82,8 @@ export class TauriComputerUseService implements ComputerUseService {
     } finally {
       signal.removeEventListener('abort', cancel);
       if (!terminal && !stopAcknowledged) cancel();
-      if (!terminal && !stopAcknowledged) await cancellation;
+      // Report the stream failure while cleanup is pending. The retained
+      // subscription still delivers native Stop acknowledgment to the caller.
       // A failed generator is still subscribed to the authoritative native
       // acknowledgment. Keep it available to a retry until native has stopped.
       if ((terminal || stopAcknowledged) && this.streams.get(request.taskId) === activeStream) this.streams.delete(request.taskId);

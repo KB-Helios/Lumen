@@ -140,13 +140,16 @@ describe('native Computer Use boundary', () => {
     tauri.channels[0]({...identity, type: 'reasoning', text: 'Do not publish'});
     await expect(pending).rejects.toThrow();
   });
-  it('finishes failed channel cleanup when native stopped acknowledges a delayed Stop IPC', async () => {
+  it('reports a failed channel while retaining native acknowledgment of a delayed Stop IPC', async () => {
     tauri.invoke.mockImplementation((command: string) => command === 'stop_computer_use' ? new Promise<void>(() => undefined) : Promise.resolve());
-    const pending = new TauriComputerUseService().stream(request, new AbortController().signal)[Symbol.asyncIterator]().next();
+    const onStopped = vi.fn();
+    const pending = new TauriComputerUseService().stream(request, new AbortController().signal, onStopped)[Symbol.asyncIterator]().next();
+    const rejected = expect(pending).rejects.toThrow();
     await vi.waitFor(() => expect(tauri.channels).toHaveLength(1));
     tauri.channels[0]({type: 'malformed'});
     await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith('stop_computer_use', {taskId: 17, reason: 'stop'}));
+    await rejected;
     tauri.channels[0]({...identity, generation: 2, type: 'stopped', reason: 'stop', uncertain: false});
-    await expect(pending).rejects.toThrow();
+    expect(onStopped).toHaveBeenCalledWith({...identity, generation: 2, type: 'stopped', reason: 'stop', uncertain: false});
   }, 750);
 });

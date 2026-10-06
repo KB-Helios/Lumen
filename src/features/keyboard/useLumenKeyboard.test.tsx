@@ -80,7 +80,7 @@ describe('Lumen keyboard coordination', () => {
     expect(await screen.findByRole('listbox')).toBeVisible();
     expect(screen.getByRole('option', {name: 'Fresh Microsoft Edge'})).toBeVisible();
     await user.keyboard('{Escape}');
-    expect(target).toHaveFocus();
+    await waitFor(() => expect(target).toHaveFocus());
     expect(input).toHaveValue('Review the support form');
     await user.tab();
     expect(screen.getByRole('button', {name: 'Refresh targets'})).toHaveFocus();

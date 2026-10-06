@@ -35,7 +35,7 @@ function applyEvent(state: ComputerUseState, event: ComputerUseEvent): ComputerU
     case 'action': return {...state, activity: appendActivity(state.activity, event.action.replace(/_/g, ' ').replace(/\b\w/g, (value) => value.toUpperCase()))};
     case 'observation': return {...state, currentUrl: event.url, approval: undefined};
     case 'approvalRequired': return {...state, phase: 'approval', approval: {id: event.approvalId, explanation: event.explanation, scope: event.scope}, activity: appendActivity(state.activity, 'Waiting for your approval', 'accent')};
-    case 'approvalResolved': return {...state, phase: event.approved ? 'running' : 'stopping', approval: undefined, activity: appendActivity(state.activity, event.approved ? 'Action approved once' : 'Action denied', event.approved ? 'success' : 'neutral')};
+    case 'approvalResolved': return {...state, phase: event.approved ? 'running' : 'stopping', approval: undefined, error: undefined, activity: appendActivity(state.activity, event.approved ? 'Action approved once' : 'Action denied', event.approved ? 'success' : 'neutral')};
     case 'completed': return {...state, phase: 'completed', summary: event.summary, approval: undefined, activity: appendActivity(state.activity, 'Task completed', 'success')};
     case 'stopped': return {...state, phase: 'stopped', error: undefined, approval: undefined, reasoning: undefined, activity: appendActivity(state.activity, event.reason === 'takeOver' ? 'You took over' : event.reason === 'consentRevoked' ? 'Consent revoked; task stopped' : 'Task stopped')};
     case 'failed': return {...state, phase: 'error', error: event.message, approval: undefined};
@@ -88,7 +88,7 @@ export function useComputerUseController(service: ComputerUseService, options: C
       if (active.current !== run) return;
       run.terminal = true;
       active.current = null;
-      setState((current) => ({...current, phase: 'stopped', error: undefined, approval: undefined, reasoning: undefined, activity: appendActivity(current.activity, reason === 'takeOver' ? 'You took over' : reason === 'consentRevoked' ? 'Consent revoked; task stopped' : 'Task stopped')}));
+      setState((current) => ({...current, phase: 'stopped', error: run.streamError, approval: undefined, reasoning: undefined, activity: appendActivity(current.activity, reason === 'takeOver' ? 'You took over' : reason === 'consentRevoked' ? 'Consent revoked; task stopped' : 'Task stopped')}));
     }).catch((error: unknown) => {
       if (active.current !== run || run.terminal) return;
       run.stopPromise = undefined;
@@ -128,7 +128,7 @@ export function useComputerUseController(service: ComputerUseService, options: C
       if (run.stopRequested && event.type !== 'stopped') return;
       run.terminal = event.generation === 2;
       if (run.terminal) active.current = null;
-      setState((current) => applyEvent(current, event));
+      setState((current) => event.type === 'stopped' ? {...applyEvent(current, event), error: run.streamError} : applyEvent(current, event));
       if (event.type === 'approvalResolved' && !event.approved) requestStop('stop');
     };
     try {
@@ -153,6 +153,7 @@ export function useComputerUseController(service: ComputerUseService, options: C
     run.responses.add(approval.id);
     try {await service.respond(run.request.taskId, approval.id, approved);}
     catch (error) {
+      run.responses.delete(approval.id);
       if (active.current === run && !run.stopRequested) setState((current) => ({...current, error: error instanceof Error ? error.message : String(error)}));
     } finally {responding.current = null;}
   };

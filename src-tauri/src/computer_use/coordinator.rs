@@ -273,7 +273,8 @@ impl Run {
         if approved {
             Ok(())
         } else {
-            Err("approval_denied".to_owned())
+            self.stop(StopReason::Stop);
+            Err("stopped".to_owned())
         }
     }
     fn respond(&self, id: &str, approved: bool) -> Result<(), String> {
@@ -313,6 +314,38 @@ struct Inner {
     native_stop: AtomicBool,
     diagnostics: Mutex<VecDeque<Metrics>>,
 }
+impl Inner {
+    fn stop(&self, task_id: Option<u64>, reason: StopReason) -> Result<(), String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "Computer Use state unavailable")?;
+        if let Some(task_id) = task_id
+            && state
+                .active
+                .as_ref()
+                .is_some_and(|run| run.request.task_id != task_id)
+        {
+            return Err("The requested task is not active".to_owned());
+        }
+        let task_id = task_id.or_else(|| state.active.as_ref().map(|run| run.request.task_id));
+        if let Some(task_id) = task_id
+            && !state.stopped.iter().any(|(id, _)| *id == task_id)
+        {
+            state.stopped.push_back((task_id, reason));
+            if state.stopped.len() > 128 {
+                state.stopped.pop_front();
+            }
+        }
+        if let Some(run) = state.active.as_ref() {
+            run.stop(reason);
+        }
+        // Keep start serialized through gate closure and pool invalidation.
+        self.pool.discard();
+        state.active.take();
+        Ok(())
+    }
+}
 pub struct ComputerUseSupervisor {
     inner: Arc<Inner>,
     _stop: NativeStop,
@@ -341,11 +374,7 @@ impl ComputerUseSupervisor {
         let weak = Arc::downgrade(&inner);
         let stop = NativeStop::register(move || {
             if let Some(inner) = weak.upgrade() {
-                let active = inner.state.lock().ok().and_then(|s| s.active.clone());
-                if let Some(run) = active {
-                    run.stop(StopReason::Stop);
-                }
-                inner.pool.discard();
+                let _ = inner.stop(None, StopReason::Stop);
             }
         });
         inner.native_stop.store(stop.available(), Ordering::Release);
@@ -359,8 +388,7 @@ impl ComputerUseSupervisor {
                 let active = inner.state.lock().ok().and_then(|s| s.active.clone());
                 if let Some(run) = active {
                     if !policy::consent_current(&run.request, &inner.consent) {
-                        run.stop(StopReason::ConsentRevoked);
-                        inner.pool.discard();
+                        let _ = inner.stop(Some(run.request.task_id), StopReason::ConsentRevoked);
                     }
                 } else {
                     inner.pool.check_consent(&inner.consent);
@@ -452,8 +480,15 @@ impl ComputerUseSupervisor {
                 run.stop(*reason);
                 return Ok(());
             }
-            if state.active.is_some() {
+            if state
+                .active
+                .as_ref()
+                .is_some_and(|active| !active.terminal.load(Ordering::Acquire))
+            {
                 return Err("Another Computer Use task is still active".to_owned());
+            }
+            if state.active.is_some() {
+                self.inner.pool.discard();
             }
             state.active = Some(Arc::clone(&run));
         }
@@ -465,12 +500,7 @@ impl ComputerUseSupervisor {
             {
                 run.finish(
                     EventKind::Failed {
-                        code: if error == "approval_denied" {
-                            "approval_denied"
-                        } else {
-                            "computer_use_failed"
-                        }
-                        .to_owned(),
+                        code: "computer_use_failed".to_owned(),
                         message: error,
                     },
                     "failed",
@@ -507,32 +537,7 @@ impl ComputerUseSupervisor {
         Ok(())
     }
     pub fn stop(&self, task_id: u64, reason: StopReason) -> Result<(), String> {
-        let run = {
-            let mut state = self
-                .inner
-                .state
-                .lock()
-                .map_err(|_| "Computer Use state unavailable")?;
-            if state
-                .active
-                .as_ref()
-                .is_some_and(|run| run.request.task_id != task_id)
-            {
-                return Err("The requested task is not active".to_owned());
-            }
-            if !state.stopped.iter().any(|(id, _)| *id == task_id) {
-                state.stopped.push_back((task_id, reason));
-                if state.stopped.len() > 128 {
-                    state.stopped.pop_front();
-                }
-            }
-            state.active.clone()
-        };
-        if let Some(run) = run {
-            run.stop(reason);
-        }
-        self.inner.pool.discard();
-        Ok(())
+        self.inner.stop(Some(task_id), reason)
     }
     pub fn respond(&self, task_id: u64, approval_id: &str, approved: bool) -> Result<(), String> {
         let run = self
@@ -549,10 +554,7 @@ impl ComputerUseSupervisor {
 }
 impl Drop for ComputerUseSupervisor {
     fn drop(&mut self) {
-        if let Some(run) = self.inner.state.lock().ok().and_then(|s| s.active.clone()) {
-            run.stop(StopReason::Stop);
-        }
-        self.inner.pool.discard();
+        let _ = self.inner.stop(None, StopReason::Stop);
     }
 }
 
@@ -1035,6 +1037,82 @@ mod tests {
     use super::*;
     fn request() -> ComputerUseRequest {
         serde_json::from_value(serde_json::json!({"taskId":1,"task":"Fixture","provider":"gemini","model":"gemini-3.8-flash","executionMode":"fast","target":{"kind":"browser","initialUrl":"https://example.com"},"cloudConsent":true,"desktopControlConsent":false,"desktopCloudConsent":false})).unwrap()
+    }
+    #[test]
+    fn acknowledged_stop_releases_the_run_before_executor_cleanup() {
+        let directory =
+            std::env::temp_dir().join(format!("lumen-stop-test-{}", uuid::Uuid::new_v4()));
+        let supervisor = ComputerUseSupervisor::detect(
+            directory.join("missing-packaged"),
+            directory.join("missing-staged"),
+            directory.join("missing-source"),
+            directory.join("settings.json"),
+            directory,
+        );
+        let run = Run::new(request(), Channel::new(|_| Ok(())));
+        supervisor.inner.state.lock().unwrap().active = Some(Arc::clone(&run));
+
+        supervisor.stop(1, StopReason::Stop).unwrap();
+
+        assert!(run.terminal.load(Ordering::Acquire));
+        assert!(!run.gate.is_open(run.generation));
+        assert!(supervisor.inner.state.lock().unwrap().active.is_none());
+        let mut next = request();
+        next.task_id = 2;
+        let next_run = Run::new(next, Channel::new(|_| Ok(())));
+        supervisor.inner.state.lock().unwrap().active = Some(Arc::clone(&next_run));
+        supervisor.stop(2, StopReason::TakeOver).unwrap();
+        assert!(next_run.terminal.load(Ordering::Acquire));
+    }
+    #[test]
+    fn denied_approval_closes_admission_and_finishes_as_stopped() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let output = Arc::clone(&events);
+        let run = Run::new(
+            request(),
+            Channel::new(move |body| {
+                output.lock().unwrap().push(format!("{body:?}"));
+                Ok(())
+            }),
+        );
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let outcome = runtime.block_on(async {
+            let deny = async {
+                let id = loop {
+                    if let Some(id) = run
+                        .pending
+                        .lock()
+                        .unwrap()
+                        .as_ref()
+                        .map(|approval| approval.id.clone())
+                    {
+                        break id;
+                    }
+                    tokio::task::yield_now().await;
+                };
+                run.respond(&id, false).unwrap();
+            };
+            tokio::join!(
+                run.approve(
+                    "action",
+                    "snapshot",
+                    ApprovalScope::Safety,
+                    "Submit?".into()
+                ),
+                deny
+            )
+            .0
+        });
+        assert_eq!(outcome, Err("stopped".to_owned()));
+        assert!(run.terminal.load(Ordering::Acquire));
+        assert!(!run.gate.is_open(run.generation));
+        assert_eq!(run.metrics.lock().unwrap().terminal, "stopped");
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 3);
+        assert!(events[2].contains("stopped"));
     }
     #[test]
     fn stop_does_not_need_stdin_and_invalidates_approvals_and_generations() {
