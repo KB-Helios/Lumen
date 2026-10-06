@@ -46,6 +46,69 @@ class HealthTests(unittest.TestCase):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_navigation_confirmation_normalizes_urls_but_requires_exact_post_observation(self):
+        from browser_executor import BrowserSession
+        session = BrowserSession.__new__(BrowserSession)
+        session.last_descriptor = None
+        cases = [
+            ('HTTPS://Example.COM:443', 'https://example.com/', True),
+            ('http://example.com:80?q=1#section', 'http://example.com/?q=1#section', True),
+            ('https://example.com/path?q=1#section', 'https://example.com/path?q=1#section', True),
+            ('https://example.com/path', 'https://example.com/path/', False),
+            ('https://example.com/Path', 'https://example.com/path', False),
+            ('https://example.com/?q=1', 'https://example.com/?q=2', False),
+            ('https://example.com/#one', 'https://example.com/#two', False),
+            ('https://example.com/', 'http://example.com/', False),
+            ('https://example.com:8443/', 'https://example.com/', False),
+            ('https://example.com/', 'https://other.example/', False),
+        ]
+        for invalid in [None, '', 123, 'example.com', 'https://', 'https://[bad',
+                        'https://example.com:bad', 'https://example.com:99999',
+                        'file:///private', 'https://user:secret@example.com',
+                        'https://example.com/with space']:
+            cases.extend([(invalid, invalid, False), (invalid, 'https://example.com/', False),
+                          ('https://example.com/', invalid, False)])
+        for requested, readback, expected in cases:
+            with self.subTest(requested=requested, readback=readback):
+                session.last_readback = readback
+                result = {'effect': 'unverifiable', 'verified': False}
+                session.verify({'kind': 'navigate', 'url': requested}, {},
+                               {'url': readback, 'elements': []}, result)
+                self.assertEqual(result['verified'], expected)
+        session.last_readback = 'https://example.com/'
+        for observed in ['HTTPS://EXAMPLE.COM:443', 'https://other.example/', None]:
+            result = {'effect': 'unverifiable', 'verified': False}
+            session.verify({'kind': 'navigate', 'url': session.last_readback}, {},
+                           {'url': observed, 'elements': []}, result)
+            self.assertFalse(result['verified'])
+
+    def test_window_bounds_are_relative_in_both_screenshot_modes(self):
+        import base64
+        from types import SimpleNamespace as Object
+        from unittest.mock import Mock
+        from window_executor import WindowSession
+        session = WindowSession.__new__(WindowSession)
+        session.target = {'pid': 1, 'windowId': 2}
+        session.check_target = Mock()
+        session.refs = {}
+        session.driver = Mock()
+        png = base64.b64encode(bytes.fromhex(
+            '89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c02'
+            '0000000b4944415478da6364f80f00010501012718e3660000000049454e44ae426082')).decode()
+        for x, y in [(100, 200), (-800, -600)]:
+            state = {'pid': 1, 'window_id': 2, 'capture_id': 'capture',
+                     'window_bounds': {'x': x, 'y': y, 'width': 800, 'height': 600},
+                     'elements': [{'role': 'Edit', 'label': 'Owned', 'element_index': 1,
+                                   'frame': {'x': x + 30, 'y': y + 40, 'w': 120, 'h': 20}}]}
+            session.call = Mock(return_value=Object(
+                is_error=False, degraded=False, structured_json=json.dumps(state),
+                images=[Object(mime_type='image/png', data_base64=png)]))
+            for screenshot in [False, True]:
+                with self.subTest(x=x, y=y, screenshot=screenshot):
+                    observed = session.observe(screenshot=screenshot)
+                    self.assertEqual(observed['elements'][0]['bounds'],
+                                     {'x': 30, 'y': 40, 'width': 120, 'height': 20})
+
     def test_urls_reject_local_schemes_credentials_and_invalid_authority(self):
         from worker import validate_initial_url
         for value in ['file:///C:/private', 'javascript:alert(1)', 'example.com',

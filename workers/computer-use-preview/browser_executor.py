@@ -5,6 +5,7 @@ import base64
 import struct
 import time
 import uuid
+from urllib.parse import urlsplit
 
 from worker import Refusal, validate_initial_url
 
@@ -38,6 +39,17 @@ ELEMENT_STATE = r'''e => {
   if (e.id) item.automationId=e.id.slice(0,256);
   return item;
 }'''
+
+
+def normalized_url(value):
+    """Compare HTTP(S) URLs without changing path, query or fragment semantics."""
+    try:
+        parsed = urlsplit(validate_initial_url(value))
+        scheme = parsed.scheme.lower()
+        port = parsed.port if parsed.port is not None else (443 if scheme == 'https' else 80)
+        return (scheme, parsed.hostname.lower(), port, parsed.path or '/', parsed.query, parsed.fragment)
+    except ValueError:
+        return None
 
 
 class BrowserSession:
@@ -253,7 +265,9 @@ class BrowserSession:
         if kind in {'setValue', 'select'}:
             confirmed = self.last_readback == self.last_expected == observed_value
         elif kind == 'navigate':
-            confirmed = self.last_readback == action['url'] and after.get('url') == action['url']
+            requested = normalized_url(action.get('url'))
+            confirmed = (requested is not None and requested == normalized_url(self.last_readback)
+                         and after.get('url') == self.last_readback)
         elif kind == 'type' and self.last_readback:
             confirmed = self.last_readback[0] == self.last_readback[1] == observed_value
         if confirmed:

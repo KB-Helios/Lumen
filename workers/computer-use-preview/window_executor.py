@@ -148,8 +148,8 @@ class WindowSession:
                 item['value'] = element['value'][:4000]
             if element.get('frame'):
                 frame = element['frame']
-                item['bounds'] = {'x': frame['x'] - (0 if screenshot else bounds.get('x', 0)),
-                    'y': frame['y'] - (0 if screenshot else bounds.get('y', 0)),
+                item['bounds'] = {'x': frame['x'] - bounds.get('x', 0),
+                    'y': frame['y'] - bounds.get('y', 0),
                     'width': frame['w'], 'height': frame['h']}
             self.refs[ref] = {'token': element.get('element_token'), 'descriptor': (role, item['name'], element['element_index']),
                               'actions': supported}

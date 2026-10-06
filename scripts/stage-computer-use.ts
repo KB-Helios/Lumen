@@ -150,11 +150,10 @@ export async function stageComputerUse() {
   if (await readFile(buildIdPath, 'utf8').catch(() => '') === expectedBuildId && await runtimePresent()
       && await verifyRuntimeInventory(binariesRoot, storedInventory, expectedBuildId)) {
     await verifyPinnedNativeResources(join(runtime, 'cua_driver'));
-    if (JSON.stringify(readHealth(virtualPython, true)) !== JSON.stringify(readHealth(output))) {
-      throw new Error('Source and packaged worker routes disagree');
+    if (JSON.stringify(readHealth(virtualPython, true)) === JSON.stringify(readHealth(output))) {
+      console.log('Fixed Computer Use executor is already staged.');
+      return;
     }
-    console.log('Fixed Computer Use executor is already staged.');
-    return;
   }
   const hasUv = spawn(['uv', '--version'], workerRoot, true).success;
   if (hasUv) {

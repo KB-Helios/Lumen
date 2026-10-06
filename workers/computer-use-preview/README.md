@@ -17,9 +17,9 @@ From the repository root, stage with `bun scripts/stage-computer-use.ts`. PyInst
 Run local checks from this directory:
 
 ```powershell
-rtk proxy .venv/Scripts/python.exe -m unittest discover -v
-rtk proxy .venv/Scripts/python.exe benchmark_executor.py --native --baseline
-rtk proxy .venv/Scripts/python.exe benchmark_executor.py --packaged --native
+.venv/Scripts/python.exe -m unittest discover -v
+.venv/Scripts/python.exe benchmark_executor.py --native --baseline
+.venv/Scripts/python.exe benchmark_executor.py --packaged --native
 ```
 
 Tests use a disposable HTTP fixture in actual headless Edge and a disposable native Win32 window. The benchmark excludes a warm-up, measures 20 warm repetitions of five distinct fields, and records command latency, payload sizes, screenshot count and verified outcomes in `.build/benchmark-source.json` and `.build/benchmark-packaged.json`. `--baseline` measures the reproduced original local screenshot sequence with duplicate load waits and 500 ms sleep per input; it excludes extra upstream modifier screenshots. It performs no cloud tasks. These are executor measurements; they do not measure provider latency, token usage or end-to-end Rust batching. A potential one five-action plan versus five old single-step turns is deterministic planner behavior, not measured provider savings.
