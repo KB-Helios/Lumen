@@ -31,7 +31,7 @@ describe('SettingsShell', () => {
     expect(screen.getAllByRole('navigation', {name: 'Settings'})).toHaveLength(1);
     expect(screen.getByRole('main', {name: 'Settings content'})).toBeVisible();
     expect(screen.getAllByRole('main', {name: 'Settings content'})).toHaveLength(1);
-    expect(screen.getAllByRole('tab')).toHaveLength(10);
+    expect(screen.getAllByRole('tab')).toHaveLength(11);
     expect(screen.getByRole('tab', {name: 'Activity'})).toBeVisible();
     expect(screen.getByRole('tab', {name: 'General'})).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(screen.getByRole('heading', {name: 'General'})).toBeVisible());

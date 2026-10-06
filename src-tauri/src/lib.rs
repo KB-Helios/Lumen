@@ -3,6 +3,7 @@ mod computer_use;
 mod consent;
 mod gateway;
 mod privacy;
+pub mod provider_switcher;
 mod search;
 mod window;
 mod windows_ai;
@@ -149,6 +150,16 @@ pub fn run() {
                 staged_computer_use,
                 source_computer_use,
             ));
+            let packaged_cliproxy = app.path().resource_dir()?.join("cliproxy-sidecar.exe");
+            let staged_cliproxy = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("binaries/cliproxy-sidecar-x86_64-pc-windows-msvc.exe");
+            let mut cliproxy = provider_switcher::ProviderSwitcherSupervisor::new(
+                &packaged_cliproxy,
+                &staged_cliproxy,
+                &data_directory.join("cliproxy"),
+            );
+            let _ = cliproxy.start();
+            app.manage(tokio::sync::Mutex::new(cliproxy));
             let development_worker = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("binaries/lumen-enrichment-x86_64-pc-windows-msvc.exe");
             let packaged_worker = app.path().resource_dir()?.join("lumen-enrichment.exe");
@@ -328,6 +339,19 @@ pub fn run() {
             computer_use::start_computer_use,
             computer_use::respond_computer_use_approval,
             computer_use::cancel_computer_use,
+            provider_switcher::supervisor::cliproxy_health,
+            provider_switcher::supervisor::cliproxy_restart,
+            provider_switcher::client::cliproxy_get_config,
+            provider_switcher::client::cliproxy_patch_config,
+            provider_switcher::client::cliproxy_list_credentials,
+            provider_switcher::client::cliproxy_oauth_auth_url,
+            provider_switcher::client::cliproxy_oauth_poll,
+            provider_switcher::client::cliproxy_oauth_cancel,
+            provider_switcher::client::cliproxy_oauth_linked,
+            provider_switcher::client::cliproxy_oauth_import,
+            provider_switcher::client::cliproxy_usage,
+            provider_switcher::files::switch_provider,
+            provider_switcher::files::remove_from_live,
             windows_ai::windows_ai_status,
             windows_ai::windows_ai_update_preferences,
             windows_ai::windows_ai_prepare,
