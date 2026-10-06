@@ -1,0 +1,90 @@
+{
+  "sourceCommit": "70fc9e67c0bd8ac3479ea62f1bcaf1e13ceb0b54",
+  "gateP95Micros": 1,
+  "method": "native gate and Job Object with blocked stdin and held admission permit",
+  "platform": "Windows x64",
+  "repetitions": 20,
+  "samples": [
+    {
+      "gateMicros": 2,
+      "teardownMicros": 4969
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 5343
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3788
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 5260
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 4468
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3897
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3726
+    },
+    {
+      "gateMicros": 1,
+      "teardownMicros": 4075
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3562
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3789
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 5253
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3722
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3532
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 5334
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 4329
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 4134
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 4496
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3793
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 5907
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 4273
+    }
+  ],
+  "teardownP95Micros": 5343
+}
