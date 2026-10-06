@@ -54,7 +54,7 @@ Unverified input ends the batch. A bounded read-only provider outcome review can
 
 The reproduced baseline includes coordinate input, repeated load waits, the fixed 500 ms sleep and a PNG after each change. It excludes the old implementation's extra modifier screenshots, so it is a conservative comparison. Measurements cover the fixed executor protocol and application read-back; they exclude startup, provider latency, human approval and the complete Rust planner loop. A packaged native value change took 2,967.19 ms and passed read-back with zero screenshots; that single sample does not establish a native twenty-repetition efficiency improvement. Five operations in one semantic proposal are supported; live planner round-trip savings require an actual provider run.
 
-The refreshed [UI profile](../../artifacts/performance/profile-summary.json) records 3.3 ms warm launcher p95, 0.1 ms input p95, 4.2 ms selection-to-paint p95, 12 ms hover-to-paint p95 and no browser tasks over 50 ms in the measured interactions. Its cadence-aware checks pass. Observed browser cadence was approximately 238 Hz, while the recorded strict 240 Hz aggregate remains false. This is installed-Edge renderer evidence, not a packaged WebView2 or guaranteed 240 FPS result.
+The review follow-up's refreshed [UI profile](../../artifacts/performance/profile-summary.json) records 7.2 ms warm launcher p95, 0.1 ms input p95, 4.4 ms selection-to-paint p95, 11.8 ms hover-to-paint p95 and no browser tasks over 50 ms in the measured interactions. Its cadence-aware checks pass. Observed browser cadence was approximately 238 Hz, while the recorded strict 240 Hz aggregate remains false. This is installed-Edge renderer evidence, not a packaged WebView2 or guaranteed 240 FPS result.
 
 ## Packaging and remaining acceptance
 
@@ -68,4 +68,37 @@ The frontend release build retains the existing `lottie-web` direct-eval and plu
 
 Neither Gemini nor OpenAI credentials are configured on this host. Both availability probes correctly return unavailable. Live cloud task completion, current model availability, provider latency/usage and the requested 50% planner-round-trip reduction remain unverified. Physical hotkey delivery and real concurrent foreground keyboard input also remain open. Hyper-V workspaces, UFO workflows, dedicated Office COM adapters and attachment to existing browser profiles remain outside v1.
 
-The implementation and local evidence are ready for PR review. `origin/main` was refreshed and still matches the base commit above. Source and evidence diffs pass `git diff --check`. The branch has not been pushed and no PR has been created.
+At the original verification above, `origin/main` matched the base commit and source/evidence diffs passed `git diff --check`. Publication and subsequent review are recorded in the follow-up below.
+
+## PR #20 review follow-up
+
+Review baseline: `357a904d389ea7ba6e91f4786bdc7c43c9588e74`. The five CodeRabbit corrections already present in that commit were checked against the current source and regression tests. The five remaining Codex findings received these fixes:
+
+- A window-owned marker distinguishes native window instances within the same process. Missing markers refuse admission, and pruning stale DPI/owner fingerprints preserves a marker still referenced by a current selection.
+- Stop releases the active supervisor slot while serializing teardown with new starts. Later cleanup and consent watchdogs remain scoped to the retired task.
+- A rejected approval IPC response can be retried; a resolved approval clears its temporary response error.
+- Denied approvals close input admission and terminate as Stopped.
+- Startup and stream errors reach the controller before cleanup acknowledgment and remain visible after native or IPC Stop acknowledgment.
+
+Independent review caught the unmarked-admission and shared-marker-pruning cases. Both received failing regressions before their fixes. The native discovery fixtures serialize access to the shared desktop through registry teardown. They run as explicit native acceptance tests on a non-elevated interactive Windows desktop: production correctly rejects the elevated fixture processes on [GitHub's administrator Windows runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#administrative-privileges). The final scoped review found no remaining important issues.
+
+The inherited GitHub CI failure was the keyboard test's immediate focus assertion after Escape. The test now waits for actual focus restoration, matching React Aria's asynchronous FocusScope cleanup without relaxing the expected focus target.
+
+| Follow-up check | Result |
+| --- | --- |
+| Typecheck and lint | Passed; zero ESLint warnings |
+| Complete Vitest suite | 420 tests in 58 files passed, with four workers |
+| Complete installed-Edge e2e suite | 52 serial tests passed against a fresh development server |
+| Rust formatting and all-target/all-feature Clippy | Passed, including `-D warnings` |
+| Complete Rust suite | 165 passed; ten acceptance/integration tests explicitly ignored |
+| Explicit native window identity acceptance | Three passed via `cargo test --all-features computer_use::windows::tests -- --ignored` |
+| Complete Python executor/native/staging suite | 31 passed |
+| Full Tauri release/NSIS build | Passed |
+| Gallery and recordings | 57 states and six WebM studies regenerated |
+| UI profiler | All cadence-aware checks passed; strict 240 Hz aggregate remains false |
+
+The refreshed gallery, recordings and UI profile identify source commit `31b943e6537d043186931dfea3280c89f48a4559`. Capture and profiling used installed Microsoft Edge 154.0.4258.62 against fresh development servers. The gallery contact sheet and Computer Use approval state were visually inspected.
+
+An initial Python native fixture run detected concurrent physical mouse movement; a second run hit an observation timeout. The final complete run passed the unchanged cursor, foreground, target-order and value-readback assertions. Native development/test builds used `CARGO_PROFILE_DEV_DEBUG=0` and `CARGO_PROFILE_TEST_DEBUG=0` after a full-symbol rebuild exhausted disk space; cleanup was confined to this worktree's generated compiler output.
+
+The rebuilt installer is 202,482,375 bytes with SHA-256 `0c730e54b1f9b763d08366745d0e0918f66aa8a283bf50d3833dcca0f2c6c569`. This follow-up verifies local suites and release packaging. The installed smoke, execution benchmarks, physical input and live-provider boundaries above retain their original scope.
