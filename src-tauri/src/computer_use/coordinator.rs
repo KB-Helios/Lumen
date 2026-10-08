@@ -9,6 +9,10 @@ use super::{
     windows::{self, TargetRegistry, WindowIdentity},
 };
 use crate::consent::PersistedConsent;
+use crate::improvement::{
+    coordinator::ImprovementRuntime,
+    types::{ExecutionTrace, HarnessVersion, ToolId, TraceError, TraceOutcome, digest, now_ms},
+};
 use serde::Serialize;
 use std::{
     collections::{HashMap, VecDeque},
@@ -56,6 +60,7 @@ pub struct Metrics {
     pub teardown_dispatch_micros: u64,
 }
 pub struct Run {
+    harness: HarnessVersion,
     request: ComputerUseRequest,
     run_id: String,
     target_id: String,
@@ -74,7 +79,15 @@ pub struct Run {
     metrics: Mutex<Metrics>,
 }
 impl Run {
+    #[cfg(test)]
     fn new(request: ComputerUseRequest, channel: Channel<ComputerUseEvent>) -> Arc<Self> {
+        Self::with_harness(request, channel, HarnessVersion::default())
+    }
+    fn with_harness(
+        request: ComputerUseRequest,
+        channel: Channel<ComputerUseEvent>,
+        harness: HarnessVersion,
+    ) -> Arc<Self> {
         let target_id = match &request.target {
             TargetSelection::Browser { .. } => format!("edge:{}", uuid::Uuid::new_v4()),
             TargetSelection::Window { target_id } => target_id.clone(),
@@ -91,6 +104,7 @@ impl Run {
             ..Metrics::default()
         };
         Arc::new(Self {
+            harness,
             request,
             run_id: uuid::Uuid::new_v4().to_string(),
             target_id,
@@ -306,6 +320,7 @@ struct State {
     stopped: VecDeque<(u64, StopReason)>,
 }
 struct Inner {
+    improvement: Mutex<Option<Arc<ImprovementRuntime>>>,
     state: Mutex<State>,
     targets: TargetRegistry,
     pool: Arc<ExecutorPool>,
@@ -363,6 +378,7 @@ impl ComputerUseSupervisor {
             directory.join("computer-use-scopes"),
         );
         let inner = Arc::new(Inner {
+            improvement: Mutex::new(None),
             state: Mutex::new(State::default()),
             targets: TargetRegistry::default(),
             pool,
@@ -452,10 +468,22 @@ impl ComputerUseSupervisor {
             .map(|d| d.iter().cloned().collect())
             .unwrap_or_default()
     }
-    pub fn start(
+    pub(crate) fn set_improvement(&self, runtime: Arc<ImprovementRuntime>) {
+        if let Ok(mut slot) = self.inner.improvement.lock() {
+            *slot = Some(runtime);
+        }
+    }
+    pub(crate) fn is_active(&self) -> bool {
+        self.inner
+            .state
+            .lock()
+            .is_ok_and(|state| state.active.is_some())
+    }
+    pub(crate) fn start_with_harness(
         &self,
         request: ComputerUseRequest,
         channel: Channel<ComputerUseEvent>,
+        harness: HarnessVersion,
     ) -> Result<(), String> {
         policy::validate_request(&request, &self.inner.consent)?;
         if !self.inner.native_stop.load(Ordering::Acquire) {
@@ -465,7 +493,7 @@ impl ComputerUseSupervisor {
             TargetSelection::Window { target_id } => Some(self.inner.targets.resolve(target_id)?),
             _ => None,
         };
-        let run = Run::new(request, channel);
+        let run = Run::with_harness(request, channel, harness);
         {
             let mut state = self
                 .inner
@@ -511,6 +539,43 @@ impl ComputerUseSupervisor {
                 job.take();
             }
             let saved_metrics = run.metrics.lock().ok().map(|m| m.clone());
+            if let Some(metrics) = saved_metrics.as_ref()
+                && let Some(runtime) = inner.improvement.lock().ok().and_then(|slot| slot.clone())
+            {
+                let completed = metrics.terminal == "completed";
+                let cancelled = run.cancel.is_cancelled();
+                let _ = runtime.store.append_trace(&ExecutionTrace {
+                    id: run.run_id.clone(),
+                    at: now_ms(),
+                    tool_id: ToolId::ComputerUsePlan,
+                    model: digest(run.request.model.as_bytes()),
+                    route: format!("computerUse.{}", run.request.provider.id()),
+                    error_code: if completed {
+                        TraceError::None
+                    } else if cancelled {
+                        TraceError::Cancelled
+                    } else if metrics.uncertain {
+                        TraceError::VerificationFailed
+                    } else {
+                        TraceError::UnknownFailure
+                    },
+                    outcome: if completed {
+                        TraceOutcome::Completed
+                    } else if cancelled {
+                        TraceOutcome::Cancelled
+                    } else {
+                        TraceOutcome::Failed
+                    },
+                    verified: completed,
+                    duration_ms: metrics.startup_wall_ms
+                        + metrics.local_execution_ms
+                        + metrics.provider_latency_ms
+                        + metrics.approval_wait_ms,
+                    input_tokens: (metrics.input_tokens > 0).then_some(metrics.input_tokens),
+                    output_tokens: (metrics.output_tokens > 0).then_some(metrics.output_tokens),
+                    harness_version: run.harness.id,
+                });
+            }
             if let Some(metrics) = saved_metrics
                 && let Ok(mut diagnostics) = inner.diagnostics.lock()
             {
@@ -598,6 +663,7 @@ async fn execute(
     run.live(&inner.consent, window)?;
     let start = Instant::now();
     let mut planner = Planner::new(&run.request, &run.cancel).await?;
+    planner.set_supplement(run.harness.computer_use_supplement());
     run.live(&inner.consent, window)?;
     let scope = if let Some(window) = window {
         format!(

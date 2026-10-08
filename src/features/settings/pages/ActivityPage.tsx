@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {ImprovementActivityControls} from '../../improvement/ImprovementControls';
 
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../../design-system/primitives/LumenButton';
@@ -278,6 +279,7 @@ export function ActivityPage({
         ) : <div className="flex flex-wrap gap-[8px] p-[16px]"><LumenText tone="tertiary" variant="meta">No custom game classifications.</LumenText></div>}
       </SettingSection>
       <LumenButton aria-label="Reset classifications" size="small" variant="quiet" onPress={resetAll}>Reset classifications</LumenButton>
+      <ImprovementActivityControls />
     </SettingsPage>
   );
 }

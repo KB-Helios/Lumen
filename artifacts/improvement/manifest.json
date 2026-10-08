@@ -1,0 +1,18 @@
+{
+  "recordedAt": "2026-10-08T12:22:45.744Z",
+  "browser": {
+    "name": "Microsoft Edge",
+    "version": "154.0.4258.62"
+  },
+  "viewport": {
+    "width": 1120,
+    "height": 1040
+  },
+  "reducedMotion": true,
+  "simulated": true,
+  "detail": "Development-only service=memory fixtures. No Docker, Prime or provider execution.",
+  "captures": [
+    "candidate-review.png",
+    "privacy.png"
+  ]
+}

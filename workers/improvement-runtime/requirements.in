@@ -1,0 +1,13 @@
+mcp>=2,<3
+tyro
+requests
+httpx
+pyyaml
+tomli
+python-dotenv
+pandas
+numpy
+scipy
+beautifulsoup4
+lxml
+pydantic

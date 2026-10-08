@@ -292,6 +292,38 @@ impl EnrichmentSupervisor {
             .map_err(|error| error.to_string())
     }
 
+    pub(crate) async fn improvement_request(
+        &self,
+        operation: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let (method, path) = match operation {
+            "enqueue" => (reqwest::Method::POST, "/improvements"),
+            "lease" => (reqwest::Method::POST, "/improvements/lease"),
+            "heartbeat" => (reqwest::Method::POST, "/improvements/heartbeat"),
+            "advance" => (reqwest::Method::POST, "/improvements/advance"),
+            "finish" => (reqwest::Method::POST, "/improvements/finish"),
+            "clear" => (reqwest::Method::DELETE, "/improvements"),
+            _ => return Err("Invalid improvement queue operation.".into()),
+        };
+        reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .map_err(|_| "Improvement queue is unavailable.")?
+            .request(method, self.endpoint(path))
+            .bearer_auth(&self.bearer)
+            .json(body)
+            .send()
+            .await
+            .map_err(|_| "Improvement queue is unavailable.")?
+            .error_for_status()
+            .map_err(|_| "Improvement queue refused the request.")?
+            .json()
+            .await
+            .map_err(|_| "Improvement queue returned invalid data.".into())
+    }
+
     pub async fn resume(&self) -> Result<(), String> {
         reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
@@ -403,6 +435,112 @@ mod tests {
                 .contains(&supervisor.bearer)
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    #[ignore = "requires the compiled Rivet enrichment worker"]
+    fn improvement_worker_recovers_crash_and_fences_old_generation() {
+        let directory =
+            std::env::temp_dir().join(format!("lumen-improvement-rivet-{}", uuid::Uuid::new_v4()));
+        let binaries = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+        let supervisor = EnrichmentSupervisor::new(
+            binaries.join("lumen-enrichment-x86_64-pc-windows-msvc.exe"),
+            binaries.join("lumen-rivet-engine-x86_64-pc-windows-msvc.exe"),
+            directory.clone(),
+        )
+        .unwrap();
+        supervisor.start().unwrap();
+        tauri::async_runtime::block_on(async {
+            let ready = std::time::Instant::now();
+            loop {
+                if supervisor
+                    .improvement_request("clear", &serde_json::json!({}))
+                    .await
+                    .is_ok()
+                {
+                    break;
+                }
+                assert!(ready.elapsed() < Duration::from_secs(20));
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            let job = serde_json::json!({"idempotencyKey":"synthetic-recovery","baseVersion":0,"configDigest":"a".repeat(64),"phase":"analysis","candidateId":null});
+            supervisor
+                .improvement_request("enqueue", &job)
+                .await
+                .unwrap();
+            supervisor
+                .improvement_request("enqueue", &job)
+                .await
+                .unwrap();
+            let first = supervisor
+                .improvement_request("lease", &serde_json::json!({}))
+                .await
+                .unwrap();
+            assert_eq!(first["generation"], 1);
+            let advance = serde_json::json!({"idempotencyKey":"synthetic-recovery","generation":1,"phase":"evaluation","candidateId":"candidate-fixture"});
+            assert_eq!(
+                supervisor
+                    .improvement_request("advance", &advance)
+                    .await
+                    .unwrap()["accepted"],
+                true
+            );
+            supervisor.restart().unwrap();
+            let began = std::time::Instant::now();
+            let recovered = loop {
+                if let Ok(lease) = supervisor
+                    .improvement_request("lease", &serde_json::json!({}))
+                    .await
+                    && !lease.is_null()
+                {
+                    break lease;
+                }
+                assert!(
+                    began.elapsed() < Duration::from_secs(40),
+                    "expired lease was not recovered"
+                );
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            };
+            assert_eq!(recovered["generation"], 2);
+            assert_eq!(recovered["candidateId"], "candidate-fixture");
+            assert_eq!(recovered["phase"], "evaluation");
+            let mut finish = serde_json::json!({"idempotencyKey":"synthetic-recovery","generation":1,"status":"completed"});
+            assert_eq!(
+                supervisor
+                    .improvement_request("finish", &finish)
+                    .await
+                    .unwrap()["accepted"],
+                false
+            );
+            finish["generation"] = serde_json::json!(2);
+            assert_eq!(
+                supervisor
+                    .improvement_request("finish", &finish)
+                    .await
+                    .unwrap()["accepted"],
+                true
+            );
+            assert!(
+                supervisor
+                    .improvement_request("lease", &serde_json::json!({}))
+                    .await
+                    .unwrap()
+                    .is_null()
+            );
+        });
+        drop(supervisor);
+        let resolved = std::fs::canonicalize(&directory).unwrap();
+        let temporary = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        assert!(
+            resolved.starts_with(&temporary)
+                && resolved != temporary
+                && resolved
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("lumen-improvement-rivet-")
+        );
+        std::fs::remove_dir_all(resolved).unwrap();
     }
 
     #[test]

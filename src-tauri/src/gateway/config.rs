@@ -58,7 +58,13 @@ fn render_model(route: &AppliedRoute) -> String {
         route.capability,
         ModelCapability::Answer | ModelCapability::Vision
     )
-    .then(|| "    overrides:\n      max_output_tokens: 1200\n")
+    .then(|| {
+        if route.alias.starts_with("lumen.improvement.") {
+            "    overrides:\n      max_output_tokens: 4096\n"
+        } else {
+            "    overrides:\n      max_output_tokens: 1200\n"
+        }
+    })
     .unwrap_or_default();
     format!(
         "  - name: {alias}\n{provider}    params:\n      model: {model}\n{base_url}      apiKey: {api_key}\n      tokenize: true\n{max_output}"

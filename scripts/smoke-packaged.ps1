@@ -136,6 +136,11 @@ try {
     if (-not $vector) {
         throw "The packaged sqlite-vector runtime was not found."
     }
+    $improvementReadme = Join-Path (Split-Path -Parent $application.FullName) 'improvement-runtime\README.md'
+    $stagedImprovementReadme = Join-Path $repositoryRoot 'src-tauri\resources\improvement\README.md'
+    if (-not (Test-Path -LiteralPath $improvementReadme -PathType Leaf) -or (Get-SmokeSha256 $improvementReadme) -ne (Get-SmokeSha256 $stagedImprovementReadme)) {
+        throw 'The packaged improvement runtime resource is missing or differs from the staged resource.'
+    }
 
     $env:LUMEN_PACKAGED_SMOKE = "1"
     $appProcess = Start-Process -FilePath $application.FullName -WindowStyle Hidden -PassThru
@@ -156,7 +161,7 @@ try {
     }
     $reportText = Get-Content -LiteralPath $reportFile.FullName -Raw
     $report = $reportText | ConvertFrom-Json
-    if (-not $report.passed -or -not $report.exactVector -or -not $report.lexicalFallback -or -not $report.windowShowHide -or -not $report.diagnosticsExport -or -not $report.computerUsePackaged) {
+    if (-not $report.passed -or -not $report.exactVector -or -not $report.lexicalFallback -or -not $report.windowShowHide -or -not $report.diagnosticsExport -or -not $report.computerUsePackaged -or -not $report.improvementDefaults) {
         throw "The native packaged smoke report did not pass every required check."
     }
     if ($reportText.Contains("packaged smoke secret") -or $reportText.Contains($smokeRoot)) {
@@ -207,6 +212,8 @@ try {
         computerUseDesktop = [bool]$report.computerUseDesktop
         computerUseRuntimeInventoryVerified = $true
         computerUseRuntimeFiles = $computerUseRuntimeFiles
+        improvementDefaults = [bool]$report.improvementDefaults
+        improvementRuntimeResourceVerified = $true
         uninstall = $uninstalled
         profileCleanup = $profileCleanup
     }

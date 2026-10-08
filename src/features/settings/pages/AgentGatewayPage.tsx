@@ -1,5 +1,7 @@
 import {useCallback, useEffect, useState} from 'react';
 import {WindowsAgentControls} from '../../windows-ai/WindowsAiControls';
+import {ImprovementGatewayControls} from '../../improvement/ImprovementControls';
+import {useImprovementStore} from '../../improvement/improvement.store';
 
 import {McpIcon} from '../../../design-system/icons/lumen-icons';
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
@@ -42,6 +44,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
   const testProvider = useGatewayStore((state) => state.testProvider);
   const testMcp = useGatewayStore((state) => state.testMcp);
   const cloudConsent = useSettingsStore((state) => state.ai.cloudAnswerConsent);
+  const improvementCloudConsent = useImprovementStore((state) => state.snapshot.settings.cloudConsent);
   const runtimeMode = useSettingsStore((state) => state.ai.runtimeMode);
   const setCloudAnswerConsent = useSettingsStore((state) => state.setCloudAnswerConsent);
   const native = nativeRuntime ?? isNativeRuntime();
@@ -163,7 +166,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
       {nativeMessage || actionMessage ? <SettingsCallout>{nativeMessage || actionMessage}</SettingsCallout> : null}
       <SettingSection title="Virtual model routes" description="Stable aliases keep callers unchanged while providers change underneath.">
         {native ? registry ? (
-          <ProviderRegistryList registry={registry} cloudConsent={cloudConsent} onSet={setNativeRoute} onTest={testNativeRoute} />
+          <ProviderRegistryList registry={registry} cloudConsent={cloudConsent} improvementCloudConsent={improvementCloudConsent} onSet={setNativeRoute} onTest={testNativeRoute} />
         ) : <div className="p-[16px]"><LumenText tone="tertiary" variant="meta">Loading provider registry…</LumenText></div>
           : <ProviderRouteList routes={routes} onChange={setRouteProvider} onTest={(id) => void testProvider(id)} />}
       </SettingSection>
@@ -265,6 +268,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
         </>
       ) : null}
       <WindowsAgentControls />
+      <ImprovementGatewayControls />
     </SettingsPage>
   );
 }

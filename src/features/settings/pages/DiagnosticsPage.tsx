@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {WindowsAiDiagnostics} from '../../windows-ai/WindowsAiControls';
+import {ImprovementDiagnostics} from '../../improvement/ImprovementControls';
 
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../../design-system/primitives/LumenButton';
@@ -112,6 +113,7 @@ export function DiagnosticsPage({
       </div>
       {message ? <SettingsCallout>{message}</SettingsCallout> : lastExport ? <SettingsCallout>{lastExport.filename} is prepared for review.</SettingsCallout> : null}
       <WindowsAiDiagnostics />
+      <ImprovementDiagnostics />
     </SettingsPage>
   );
 }

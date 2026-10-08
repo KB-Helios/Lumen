@@ -228,6 +228,18 @@ fn models() -> Vec<ModelDescriptor> {
             capabilities: EMBEDDING,
         },
         ModelDescriptor {
+            id: "google:gemini-3.8-flash",
+            label: "Gemini 3.8 Flash (verify availability)",
+            provider_id: ProviderId::Google,
+            capabilities: ANSWER_VISION,
+        },
+        ModelDescriptor {
+            id: "openai:gpt-6.1-sol",
+            label: "GPT-6.1 Sol (verify availability)",
+            provider_id: ProviderId::Openai,
+            capabilities: ANSWER_VISION,
+        },
+        ModelDescriptor {
             id: "openai-compatible:custom",
             label: "Custom model",
             provider_id: ProviderId::OpenaiCompatible,
@@ -280,6 +292,18 @@ fn default_routes() -> Vec<AppliedRoute> {
             ProviderId::Openai,
             "openai:gpt-5-mini",
         ),
+        (
+            "lumen.improvement.local",
+            ModelCapability::Answer,
+            ProviderId::Local,
+            "local:qwen3.5:4b",
+        ),
+        (
+            "lumen.improvement.cloud",
+            ModelCapability::Answer,
+            ProviderId::Openai,
+            "openai:gpt-5-mini",
+        ),
     ]
     .into_iter()
     .map(|(alias, capability, provider_id, model_id)| AppliedRoute {
@@ -303,7 +327,7 @@ impl ProviderRegistry {
         let routes = fs::read_to_string(&path)
             .ok()
             .and_then(|contents| serde_json::from_str::<Vec<AppliedRoute>>(&contents).ok())
-            .filter(|routes| validate_route_set(routes).is_ok())
+            .and_then(|routes| migrate_routes(routes).ok())
             .unwrap_or_else(default_routes);
         Self {
             path: Some(path),
@@ -413,6 +437,21 @@ impl ProviderRegistry {
     }
 }
 
+fn migrate_routes(mut routes: Vec<AppliedRoute>) -> Result<Vec<AppliedRoute>, String> {
+    let defaults = default_routes();
+    // Only the known, ordered phase-one schema may be extended. Unknown aliases
+    // and corrupt selections still fail closed; existing valid selections survive.
+    if routes.len() == defaults.len() - 2
+        && routes.iter().zip(&defaults).all(|(route, expected)| {
+            route.alias == expected.alias && route.capability == expected.capability
+        })
+    {
+        routes.extend_from_slice(&defaults[defaults.len() - 2..]);
+    }
+    validate_route_set(&routes)?;
+    Ok(routes)
+}
+
 fn route_descriptor(route: &AppliedRoute, cloud_consent: bool) -> RouteDescriptor {
     let status = if route.provider_id.is_cloud() && !cloud_consent {
         "needsConsent"
@@ -503,8 +542,21 @@ fn validate_upstream_model(value: Option<&str>) -> Result<String, String> {
 pub fn list_provider_registry(
     registry: State<'_, ProviderRegistry>,
     consent: State<'_, PersistedConsent>,
+    improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
 ) -> ProviderRegistrySnapshot {
-    registry.snapshot(consent.answer_granted())
+    let mut snapshot = registry.snapshot(consent.answer_granted());
+    let improvement_consent = improvement.store.settings().is_ok_and(|s| s.cloud_consent);
+    for descriptor in &mut snapshot.routes {
+        if descriptor.alias.starts_with("lumen.improvement.")
+            && let Some(route) = registry
+                .routes()
+                .iter()
+                .find(|r| r.alias == descriptor.alias)
+        {
+            *descriptor = route_descriptor(route, improvement_consent);
+        }
+    }
+    snapshot
 }
 
 #[tauri::command]
@@ -513,9 +565,15 @@ pub fn set_provider_route(
     supervisor: State<'_, GatewaySupervisor>,
     consent: State<'_, PersistedConsent>,
     update: RouteUpdate,
+    improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
 ) -> Result<RouteApplyResult, String> {
+    let granted = if update.alias.starts_with("lumen.improvement.") {
+        improvement.store.settings().is_ok_and(|s| s.cloud_consent)
+    } else {
+        consent.answer_granted()
+    };
     let old_routes = registry.routes();
-    let candidate = registry.propose(update.clone(), consent.answer_granted())?;
+    let candidate = registry.propose(update.clone(), granted)?;
     if let Err(error) = supervisor.apply_routes(&candidate) {
         return Ok(RouteApplyResult {
             applied: false,
@@ -525,7 +583,7 @@ pub fn set_provider_route(
                     .iter()
                     .find(|route| route.alias == update.alias)
                     .ok_or_else(|| "Unknown provider route.".to_owned())?,
-                consent.answer_granted(),
+                granted,
             ),
         });
     }
@@ -539,7 +597,7 @@ pub fn set_provider_route(
                     .iter()
                     .find(|route| route.alias == update.alias)
                     .ok_or_else(|| "Unknown provider route.".to_owned())?,
-                consent.answer_granted(),
+                granted,
             ),
         });
     }
@@ -551,7 +609,7 @@ pub fn set_provider_route(
                 .iter()
                 .find(|route| route.alias == update.alias)
                 .ok_or_else(|| "Unknown provider route.".to_owned())?,
-            consent.answer_granted(),
+            granted,
         ),
     })
 }
@@ -562,13 +620,19 @@ pub fn test_provider_route(
     supervisor: State<'_, GatewaySupervisor>,
     consent: State<'_, PersistedConsent>,
     alias: String,
+    improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
 ) -> Result<RouteTestResult, String> {
     let route = registry
         .routes()
         .into_iter()
         .find(|route| route.alias == alias)
         .ok_or_else(|| "Unknown provider route.".to_owned())?;
-    let descriptor = route_descriptor(&route, consent.answer_granted());
+    let granted = if alias.starts_with("lumen.improvement.") {
+        improvement.store.settings().is_ok_and(|s| s.cloud_consent)
+    } else {
+        consent.answer_granted()
+    };
+    let descriptor = route_descriptor(&route, granted);
     let gateway_ready = supervisor.health().state == "ready";
     let ready = descriptor.status == "ready" && gateway_ready;
     Ok(RouteTestResult {
@@ -608,6 +672,8 @@ mod tests {
                 "lumen.vision.cloud",
                 "lumen.audio.cloud",
                 "lumen.rerank.cloud",
+                "lumen.improvement.local",
+                "lumen.improvement.cloud",
             ]
         );
         assert!(snapshot.models.iter().any(|model| {
@@ -656,5 +722,19 @@ mod tests {
             registry.snapshot(true).routes[1].provider_id,
             ProviderId::Google
         );
+    }
+
+    #[test]
+    fn legacy_route_migration_preserves_user_models_and_adds_improvement_defaults() {
+        let mut legacy = default_routes();
+        legacy.truncate(7);
+        legacy[1].provider_id = ProviderId::Google;
+        legacy[1].model_id = "google:gemini-2.5-flash".into();
+        let migrated = migrate_routes(legacy.clone()).unwrap();
+        assert_eq!(&migrated[..7], legacy.as_slice());
+        assert_eq!(migrated[7].alias, "lumen.improvement.local");
+        assert_eq!(migrated[8].alias, "lumen.improvement.cloud");
+        legacy[0].alias = "unknown".into();
+        assert!(migrate_routes(legacy).is_err());
     }
 }

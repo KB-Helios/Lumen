@@ -24,11 +24,13 @@ function statusLabel(route: ProviderRouteDescriptor) {
 export function ProviderRegistryList({
   registry,
   cloudConsent,
+  improvementCloudConsent = false,
   onSet,
   onTest,
 }: {
   registry: ProviderRegistrySnapshot;
   cloudConsent: boolean;
+  improvementCloudConsent?: boolean;
   onSet(update: ProviderRouteUpdate): Promise<void>;
   onTest(alias: string): Promise<void>;
 }) {
@@ -48,6 +50,7 @@ export function ProviderRegistryList({
   return (
     <div className="min-w-0">
       {registry.routes.map((route) => {
+        const routeConsent = route.alias.startsWith('lumen.improvement.') ? improvementCloudConsent : cloudConsent;
         const compatibleModels = registry.models.filter((model) =>
           model.capabilities.includes(route.capability) &&
           (route.alias.endsWith('.local') ? model.providerId === 'local' : model.providerId !== 'local'),
@@ -72,7 +75,7 @@ export function ProviderRegistryList({
               </div>
               <LumenSelect
                 aria-label={`Model for ${route.alias}`}
-                isDisabled={route.alias.endsWith('.cloud') && !cloudConsent}
+                isDisabled={route.alias.endsWith('.cloud') && !routeConsent}
                 options={compatibleModels.map((model) => ({
                   id: model.id,
                   label: `${providerLabels.get(model.providerId) ?? model.providerId} · ${model.label}`,

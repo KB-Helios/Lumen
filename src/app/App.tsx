@@ -37,6 +37,8 @@ import {
 import {DevelopmentFileSearchService} from '../services/search/development-file-search-service';
 import {DevelopmentSearchService} from '../services/search/development-search-service';
 import {AppProviders} from './AppProviders';
+import {WorkflowServicesContext} from '../features/improvement/workflow-context';
+import type {WorkflowServices} from '../features/improvement/workflow-runner';
 
 declare global {
   interface WindowEventMap {
@@ -125,6 +127,16 @@ const defaultSearchService = new CatalogueSearchService(defaultFileSearchService
   await requestWindowShow(appWindowService, 'settings');
 });
 const defaultAnswerService = new WindowsAiAnswerService(runtimeAnswerService, windowsAiService, () => useWindowsAiStore.getState().snapshot);
+const workflowServices: WorkflowServices = {
+  search: defaultSearchService,
+  answer: runtimeAnswerService,
+  draft: async (task) => {
+    useQueryStore.getState().clear();
+    useQueryStore.getState().setDraft(task);
+    useLauncherStore.setState({intent: 'computer', focusRegion: 'search', externalAgentId: ''});
+    await requestWindowShow(appWindowService, 'expanded');
+  },
+};
 const OnboardingFlow = lazy(async () => {
   const module = await import('../features/onboarding/OnboardingFlow');
   return {default: module.OnboardingFlow};
@@ -391,6 +403,7 @@ export function App({
   }, [windowService]);
 
   return (
+    <WorkflowServicesContext.Provider value={workflowServices}>
     <AppProviders
       appearance={galleryPresentation?.appearance ?? (
         foundationPreview ? foundationAppearances[foundationAppearance] : undefined
@@ -462,5 +475,6 @@ export function App({
         <Suspense fallback={null}><DiagnosticsOverlay /></Suspense>
       ) : null}
     </AppProviders>
+    </WorkflowServicesContext.Provider>
   );
 }

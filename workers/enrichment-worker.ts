@@ -3,6 +3,7 @@ import rivetWasmPath from '@rivetkit/rivetkit-wasm/rivetkit_wasm_bg.wasm' with {
 import {actor, setup} from 'rivetkit';
 import {createClient} from 'rivetkit/client';
 import {db} from 'rivetkit/db';
+import {improvementAdvanceSchema, improvementFinishSchema, improvementJobSchema, improvementLeaseSchema, improvementQueueSql} from './improvement-queue';
 
 interface EnrichmentJob {
   idempotencyKey: string;
@@ -27,6 +28,7 @@ const enrichmentQueue = actor({
           updated_at INTEGER NOT NULL
         )
       `);
+      await database.execute(improvementQueueSql.migrate);
     },
   }),
   actions: {
@@ -76,6 +78,34 @@ const enrichmentQueue = actor({
     status: async (context) => context.db.execute<{status: string; count: number}>(
       'SELECT status, count(*) AS count FROM jobs GROUP BY status ORDER BY status',
     ),
+    enqueueImprovement: async (context, input: unknown) => {
+      const job = improvementJobSchema.parse(input);
+      await context.db.execute(improvementQueueSql.enqueue, job.idempotencyKey, job.baseVersion, job.configDigest, job.phase, job.candidateId, Date.now());
+      return {accepted: true};
+    },
+    leaseImprovement: async (context) => {
+      const now = Date.now();
+      await context.db.execute(improvementQueueSql.resumeExpired, now, now);
+      const rows = await context.db.execute(improvementQueueSql.lease, now, now);
+      return rows[0] ?? null;
+    },
+    heartbeatImprovement: async (context, input: unknown) => {
+      const lease = improvementLeaseSchema.parse(input); const now = Date.now();
+      const rows = await context.db.execute(improvementQueueSql.heartbeat, now, now, lease.idempotencyKey, lease.generation, now);
+      return {accepted: rows.length === 1};
+    },
+    advanceImprovement: async (context, input: unknown) => {
+      const job = improvementAdvanceSchema.parse(input); const now = Date.now();
+      const rows = await context.db.execute(improvementQueueSql.advance, job.phase, job.candidateId, now, job.idempotencyKey, job.generation, now);
+      return {accepted: rows.length === 1};
+    },
+    finishImprovement: async (context, input: unknown) => {
+      const job = improvementFinishSchema.parse(input);
+      const now = Date.now();
+      const rows = await context.db.execute(improvementQueueSql.finish, job.status, now, job.idempotencyKey, job.generation, now);
+      return {accepted: rows.length === 1};
+    },
+    clearImprovements: async (context) => {await context.db.execute(improvementQueueSql.clear); return {cleared: true};},
   },
 });
 
@@ -119,6 +149,12 @@ Bun.serve({
       if (request.method === 'GET' && path === '/health') {
         return Response.json({status: 'ready'});
       }
+      if (path === '/improvements' && request.method === 'POST') return Response.json(await queue.enqueueImprovement(await request.json()));
+      if (path === '/improvements/lease' && request.method === 'POST') return Response.json(await queue.leaseImprovement());
+      if (path === '/improvements/heartbeat' && request.method === 'POST') return Response.json(await queue.heartbeatImprovement(await request.json()));
+      if (path === '/improvements/advance' && request.method === 'POST') return Response.json(await queue.advanceImprovement(await request.json()));
+      if (path === '/improvements/finish' && request.method === 'POST') return Response.json(await queue.finishImprovement(await request.json()));
+      if (path === '/improvements' && request.method === 'DELETE') return Response.json(await queue.clearImprovements());
       if (request.method === 'GET' && path === '/jobs') {
         return Response.json(await queue.status());
       }
@@ -138,8 +174,8 @@ Bun.serve({
         return Response.json({completed: true});
       }
       return Response.json({error: 'not_found'}, {status: 404});
-    } catch (error) {
-      return Response.json({error: error instanceof Error ? error.message : 'worker_failed'}, {status: 500});
+    } catch {
+      return Response.json({error: 'worker_failed'}, {status: 500});
     }
   },
 });
