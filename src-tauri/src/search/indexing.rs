@@ -166,6 +166,55 @@ pub struct HybridHit {
     pub pinned: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SemanticPhase {
+    Disabled,
+    Ready,
+    Degraded,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticRetrievalStatus {
+    pub phase: SemanticPhase,
+    pub reason: Option<String>,
+}
+
+impl SemanticRetrievalStatus {
+    fn disabled() -> Self {
+        Self {
+            phase: SemanticPhase::Disabled,
+            reason: None,
+        }
+    }
+
+    fn degraded() -> Self {
+        Self {
+            phase: SemanticPhase::Degraded,
+            reason: Some(
+                "Semantic search unavailable; filename and content search remain available.".into(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridSearchResponse {
+    pub items: Vec<HybridHit>,
+    pub semantic: SemanticRetrievalStatus,
+}
+
+impl HybridSearchResponse {
+    fn lexical(items: Vec<HybridHit>) -> Self {
+        Self {
+            items,
+            semantic: SemanticRetrievalStatus::disabled(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SemanticSearchStatus {
@@ -361,6 +410,7 @@ impl IndexRuntime {
             "all",
             &[],
         )
+        .map(|response| response.items)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -373,9 +423,9 @@ impl IndexRuntime {
         weights: ranking::RankingWeights,
         scope: &str,
         filters: &[SearchFilterRequest],
-    ) -> Result<Vec<HybridHit>, SearchFailure> {
+    ) -> Result<HybridSearchResponse, SearchFailure> {
         if limit == 0 {
-            return Ok(Vec::new());
+            return Ok(HybridSearchResponse::lexical(Vec::new()));
         }
         // All filename and content candidates share stored metadata and one native ordering.
         // Apply policy filters before limiting candidates, including files with no text chunks.
@@ -394,12 +444,23 @@ impl IndexRuntime {
             .database
             .search(query, 250_000)
             .map_err(|error| search_failure("search the local index", error))?;
-        let semantic = match query_vector {
-            Some(vector) => self
-                .database
-                .search_embeddings(embedding_model, vector.len(), vector, 250_000)
-                .map_err(|error| search_failure("search semantic vectors", error))?,
-            None => Vec::new(),
+        let (semantic, semantic_status) = match query_vector {
+            Some(vector) => match self.database.search_embeddings(
+                embedding_model,
+                vector.len(),
+                vector,
+                250_000,
+            ) {
+                Ok(hits) => (
+                    hits,
+                    SemanticRetrievalStatus {
+                        phase: SemanticPhase::Ready,
+                        reason: None,
+                    },
+                ),
+                Err(_) => (Vec::new(), SemanticRetrievalStatus::degraded()),
+            },
+            None => (Vec::new(), SemanticRetrievalStatus::disabled()),
         };
         let mut signals = HashMap::<String, (f64, Option<f64>)>::new();
         for hit in lexical {
@@ -442,7 +503,7 @@ impl IndexRuntime {
             .collect::<Vec<_>>();
         // Stable input also gives equal-score results deterministic path ordering.
         candidates.sort_by(|left, right| left.id.0.hit.path.cmp(&right.id.0.hit.path));
-        Ok(ranking::rank_candidates(query, candidates, weights)
+        let items = ranking::rank_candidates(query, candidates, weights)
             .into_iter()
             .take(limit)
             .map(|ranked| {
@@ -464,7 +525,11 @@ impl IndexRuntime {
                     pinned: item.pinned,
                 }
             })
-            .collect())
+            .collect();
+        Ok(HybridSearchResponse {
+            items,
+            semantic: semantic_status,
+        })
     }
 
     #[cfg(test)]
@@ -849,7 +914,7 @@ impl IndexRuntime {
     }
 }
 
-fn matches_metadata_scope(metadata: &FileRecord, scope: &str) -> bool {
+pub(super) fn matches_metadata_scope(metadata: &FileRecord, scope: &str) -> bool {
     match scope {
         "all" | "recent" | "related" => true,
         "files" => metadata.kind != FileKind::Folder,
@@ -869,7 +934,7 @@ fn matches_scope(hit: &HybridHit, scope: &str) -> bool {
     matches_metadata_scope(&hit.metadata, scope)
 }
 
-fn validate_search_options(
+pub(super) fn validate_search_options(
     scope: &str,
     filters: &[SearchFilterRequest],
     filename_priority: u8,
@@ -896,7 +961,10 @@ fn validate_search_options(
     Ok(())
 }
 
-fn matches_metadata_filters(metadata: &FileRecord, filters: &[SearchFilterRequest]) -> bool {
+pub(super) fn matches_metadata_filters(
+    metadata: &FileRecord,
+    filters: &[SearchFilterRequest],
+) -> bool {
     filters.iter().all(|filter| match filter.id.as_str() {
         "extension" => metadata
             .extension
@@ -1022,7 +1090,7 @@ pub async fn search_hybrid(
     show_pinned: bool,
     semantic_enabled: bool,
     reranking_enabled: bool,
-) -> Result<Vec<HybridHit>, SearchFailure> {
+) -> Result<HybridSearchResponse, SearchFailure> {
     let version = improvement.capture(&registry);
     let began = std::time::Instant::now();
     let result = async {
@@ -1037,8 +1105,9 @@ pub async fn search_hybrid(
             None
         };
         if !runtime.search_is_current(request_id) {
-            return Ok(Vec::new());
+            return Ok(HybridSearchResponse::lexical(Vec::new()));
         }
+        let embedding_unavailable = semantic_enabled && scope != "recent" && query_vector.is_none();
         let worker_runtime = runtime.clone();
         let worker_query = query.clone();
         let embedding_model = embedding::active_model_key(registry.inner());
@@ -1053,11 +1122,9 @@ pub async fn search_hybrid(
         let worker_filters = filters;
         let mut hits = tauri::async_runtime::spawn_blocking(move || {
             if worker_scope == "recent" {
-                worker_runtime.recent_search_filtered(
-                    &worker_query,
-                    limit.min(10_000),
-                    &worker_filters,
-                )
+                worker_runtime
+                    .recent_search_filtered(&worker_query, limit.min(10_000), &worker_filters)
+                    .map(HybridSearchResponse::lexical)
             } else {
                 worker_runtime.hybrid_search_filtered(
                     &worker_query,
@@ -1073,10 +1140,13 @@ pub async fn search_hybrid(
         .await
         .map_err(|error| search_failure("join the index search", error))??;
         if !runtime.search_is_current(request_id) {
-            return Ok(Vec::new());
+            return Ok(HybridSearchResponse::lexical(Vec::new()));
         }
-        hits.truncate(limit.min(10_000));
-        runtime.record_user_query(&query, !hits.is_empty())?;
+        if embedding_unavailable {
+            hits.semantic = SemanticRetrievalStatus::degraded();
+        }
+        hits.items.truncate(limit.min(10_000));
+        runtime.record_user_query(&query, !hits.items.is_empty())?;
         Ok(hits)
     }
     .await;
@@ -1288,6 +1358,78 @@ mod tests {
     use crate::search::test_support::SearchFixture;
 
     #[test]
+    fn missing_vector_extension_preserves_content_only_and_filename_hits() {
+        let fixture = SearchFixture::new("missing-vector-lexical");
+        fixture.file("notes.md", b"quasar is only in this document body");
+        fixture.file("quasar.md", b"unrelated body");
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            &fixture.root().parent().unwrap().join("missing-vector.dll"),
+            false,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let response = runtime
+            .hybrid_search_filtered(
+                "quasar",
+                Some(&[0.5, 0.5]),
+                "missing",
+                10,
+                ranking::RankingWeights::default(),
+                "all",
+                &[],
+            )
+            .unwrap();
+        assert_eq!(response.semantic.phase, SemanticPhase::Degraded);
+        assert!(
+            response
+                .semantic
+                .reason
+                .as_deref()
+                .unwrap()
+                .contains("filename and content")
+        );
+        let hits = response.items;
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<HashSet<_>>(),
+            HashSet::from(["notes.md", "quasar.md"])
+        );
+        assert_eq!(
+            hits.iter()
+                .find(|hit| hit.hit.name == "notes.md")
+                .unwrap()
+                .match_source,
+            "content"
+        );
+        let empty = runtime
+            .hybrid_search_filtered(
+                "nevermatches",
+                Some(&[0.5, 0.5]),
+                "missing",
+                10,
+                ranking::RankingWeights::default(),
+                "all",
+                &[],
+            )
+            .unwrap();
+        assert!(empty.items.is_empty());
+        assert_eq!(empty.semantic.phase, SemanticPhase::Degraded);
+    }
+
+    #[test]
     fn recency_uses_file_modification_and_open_history_instead_of_index_time() {
         let fixture = SearchFixture::new("meaningful-recency");
         let old = fixture.file("old-report.md", b"report");
@@ -1463,8 +1605,8 @@ mod tests {
                 &filters,
             )
             .unwrap();
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].hit.name, "z-report.md");
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.items[0].hit.name, "z-report.md");
         let folders = runtime
             .hybrid_search_filtered(
                 "report",
@@ -1476,7 +1618,7 @@ mod tests {
                 &[],
             )
             .unwrap();
-        assert_eq!(folders[0].metadata.kind, FileKind::Folder);
+        assert_eq!(folders.items[0].metadata.kind, FileKind::Folder);
     }
 
     #[test]

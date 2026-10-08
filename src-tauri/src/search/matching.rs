@@ -1,6 +1,9 @@
 use std::path::Path;
 use std::time::Instant;
 
+use super::indexing::{
+    SearchFilterRequest, matches_metadata_filters, matches_metadata_scope, validate_search_options,
+};
 use super::traversal::{MAX_RESPONSE_ITEMS, TraversalPolicy, traverse_with_policy};
 use super::types::{FilenameMatch, FilenameSearchResponse, SearchFailure};
 
@@ -68,6 +71,7 @@ pub(super) fn filename_score(name: &str, query: &str) -> Option<f64> {
     filename_match(name, query).map(|quality| quality.score)
 }
 
+#[cfg(test)]
 pub fn search_filenames_impl(
     root: &Path,
     query: &str,
@@ -75,16 +79,31 @@ pub fn search_filenames_impl(
     search_filenames_with_policy(root, query, &TraversalPolicy::default())
 }
 
+#[cfg(test)]
 pub fn search_filenames_with_policy(
     root: &Path,
     query: &str,
     policy: &TraversalPolicy,
 ) -> Result<FilenameSearchResponse, SearchFailure> {
+    search_filenames_filtered(root, query, policy, "all", &[])
+}
+
+pub fn search_filenames_filtered(
+    root: &Path,
+    query: &str,
+    policy: &TraversalPolicy,
+    scope: &str,
+    filters: &[SearchFilterRequest],
+) -> Result<FilenameSearchResponse, SearchFailure> {
+    validate_search_options(scope, filters, 82, "balanced")?;
     let started = Instant::now();
     let outcome = traverse_with_policy(root, policy)?;
     let mut items = outcome
         .records
         .into_iter()
+        .filter(|file| {
+            matches_metadata_scope(file, scope) && matches_metadata_filters(file, filters)
+        })
         .filter_map(|file| {
             filename_match(&file.name, query).map(|quality| FilenameMatch {
                 file,
@@ -128,6 +147,52 @@ pub fn search_filenames_with_policy(
 mod tests {
     use super::*;
     use crate::search::test_support::SearchFixture;
+
+    #[test]
+    fn fallback_filters_admit_eligible_files_below_ten_thousand_matches() {
+        let fixture = SearchFixture::new("fallback-filter-cap");
+        for index in 0..10_001 {
+            fixture.file(&format!("report-{index:05}.tmp"), b"");
+        }
+        fixture.file("z-long-report.md", b"");
+        for (scope, filters) in [
+            (
+                "all",
+                vec![SearchFilterRequest {
+                    id: "extension".into(),
+                    value: ".MD".into(),
+                }],
+            ),
+            (
+                "all",
+                vec![SearchFilterRequest {
+                    id: "kind".into(),
+                    value: "document".into(),
+                }],
+            ),
+            ("documents", vec![]),
+        ] {
+            let response = search_filenames_filtered(
+                fixture.root(),
+                "report",
+                &TraversalPolicy::default(),
+                scope,
+                &filters,
+            )
+            .unwrap();
+            assert_eq!(
+                response
+                    .items
+                    .iter()
+                    .take(1)
+                    .map(|item| item.file.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["z-long-report.md"]
+            );
+            assert_eq!(response.total, 1);
+            assert!(!response.truncated);
+        }
+    }
 
     #[test]
     fn ranks_exact_prefix_substring_and_fuzzy_matches_in_order() {

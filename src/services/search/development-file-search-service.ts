@@ -61,6 +61,13 @@ const rustIndexedHitSchema = z.object({
   pinned: z.boolean(),
 });
 const rustIndexedHitsSchema = z.array(rustIndexedHitSchema);
+const rustHybridResponseSchema = z.object({
+  items: rustIndexedHitsSchema,
+  semantic: z.object({
+    phase: z.enum(['disabled', 'ready', 'degraded']),
+    reason: z.string().min(1).max(256).nullable(),
+  }).refine(status => status.phase === 'degraded' ? status.reason !== null : status.reason === null),
+});
 const pinUpdateSchema = z.object({applied: z.boolean(), pinned: z.boolean()});
 
 const rustPreviewSchema = z.object({
@@ -233,6 +240,7 @@ export class DevelopmentFileSearchService implements SearchService {
     let raw: unknown;
     let fallback: unknown;
     let usedFallback = false;
+    let degradationMessage: string | undefined;
     for (const [id, known] of this.knownFiles) {
       if (!roots.some(root => normalizedPath(displayPath(root)) === normalizedPath(displayPath(known.root)))) this.knownFiles.delete(id);
     }
@@ -275,14 +283,19 @@ export class DevelopmentFileSearchService implements SearchService {
     throwIfAborted(signal);
     let mapped: SearchResult[];
     if (!usedFallback) {
-      const parsed = rustIndexedHitsSchema.safeParse(raw);
+      const parsed = request.scope === 'related'
+        ? rustIndexedHitsSchema.transform(items => ({items, semantic: {phase: 'disabled' as const, reason: null}})).safeParse(raw)
+        : rustHybridResponseSchema.safeParse(raw);
       if (!parsed.success) throw {code: 'invalid-response', message: 'The local index returned an invalid response.', recoverable: true} satisfies SearchError;
+      if (parsed.data.semantic.phase === 'degraded') degradationMessage = parsed.data.semantic.reason ?? undefined;
       const seen = new Set<string>();
-      mapped = parsed.data.filter(item => {
+      const currentRoots = uniqueRoots(this.getRoots());
+      mapped = parsed.data.items.filter(item => {
+        if (!currentRoots.some(root => normalizedPath(displayPath(root)) === normalizedPath(displayPath(item.rootPath)))) return false;
         const path = normalizedPath(displayPath(item.path));
         if (seen.has(path)) return false;
         seen.add(path);
-        return uniqueRoots(this.getRoots()).some(root => normalizedPath(displayPath(root)) === normalizedPath(displayPath(item.rootPath)));
+        return true;
       }).map(item => {
         this.knownFiles.set(item.stableId, {root: item.rootPath, path: item.path});
         return {
@@ -301,15 +314,17 @@ export class DevelopmentFileSearchService implements SearchService {
       const configurations = this.rootConfigurations(roots);
       const settled = await abortable(Promise.allSettled(configurations.map(root => this.invoke('search_filenames', {
         root: root.path, query: request.query,
+        scope: request.scope, filters: args.filters,
         policy: {exclusions: root.exclusions, includeHidden: root.includeHidden, maxFileSizeMb: root.maxFileSizeMb},
       }))), signal);
       throwIfAborted(signal);
       mapped = [];
       let usable = 0;
+      let malformed = 0;
       for (const [index, response] of settled.entries()) {
         if (response.status === 'rejected') continue;
         const parsed = rustSearchResponseSchema.safeParse(response.value);
-        if (!parsed.success) continue;
+        if (!parsed.success) {malformed++; continue;}
         usable++;
         const root = configurations[index]!.path;
         if (!uniqueRoots(this.getRoots()).some(current => normalizedPath(displayPath(current)) === normalizedPath(displayPath(root)))) continue;
@@ -325,13 +340,16 @@ export class DevelopmentFileSearchService implements SearchService {
               modifiedAt: item.modifiedMs == null ? undefined : new Date(item.modifiedMs).toISOString()}, availability: 'available'});
         }
       }
+      if (!usable && malformed) throw {code: 'invalid-response', message: 'The local filename adapter returned an invalid response.', recoverable: true} satisfies SearchError;
       if (!usable) throw commandFailure(fallback, 'Local search failed.');
+      degradationMessage = 'Local index unavailable; using policy-aware filename search';
+      if (malformed) degradationMessage += `; ${malformed} roots returned an invalid response`;
       mapped.sort((left, right) => (right.match.score ?? 0) - (left.match.score ?? 0) || left.path.localeCompare(right.path));
       const seen = new Set<string>();
       mapped = mapped.filter(item => {const path = normalizedPath(item.path); if (seen.has(path)) return false; seen.add(path); return true;});
     }
-    this.publishStatus({phase: usedFallback ? 'degraded' : 'ready', indexedItems: mapped.length,
-      message: usedFallback ? 'Local index unavailable; using policy-aware filename search' : `${uniqueRoots(this.getRoots()).length} local roots ready`,
+    this.publishStatus({phase: degradationMessage ? 'degraded' : 'ready', indexedItems: mapped.length,
+      message: degradationMessage ?? `${uniqueRoots(this.getRoots()).length} local roots ready`,
       updatedAt: new Date().toISOString()});
     const visible = mapped.slice(0, request.limit);
     return {requestId: request.requestId, groups: visible.length ? [{id: 'local-files', label: 'Local files', items: visible}] : [],

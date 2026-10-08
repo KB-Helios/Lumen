@@ -64,6 +64,8 @@ pub async fn search_filenames(
     root: String,
     query: String,
     policy: Option<types::FilenamePolicyRequest>,
+    scope: Option<String>,
+    filters: Option<Vec<indexing::SearchFilterRequest>>,
     improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
     registry: State<'_, crate::gateway::registry::ProviderRegistry>,
 ) -> Result<FilenameSearchResponse, SearchFailure> {
@@ -82,9 +84,21 @@ pub async fn search_filenames(
                 policy.include_hidden,
                 max_bytes,
             )?;
-            matching::search_filenames_with_policy(Path::new(&root), &query, &policy)
+            matching::search_filenames_filtered(
+                Path::new(&root),
+                &query,
+                &policy,
+                scope.as_deref().unwrap_or("all"),
+                filters.as_deref().unwrap_or_default(),
+            )
         } else {
-            matching::search_filenames_impl(Path::new(&root), &query)
+            matching::search_filenames_filtered(
+                Path::new(&root),
+                &query,
+                &traversal::TraversalPolicy::default(),
+                scope.as_deref().unwrap_or("all"),
+                filters.as_deref().unwrap_or_default(),
+            )
         }
     })
     .await

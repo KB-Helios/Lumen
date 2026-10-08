@@ -37,7 +37,9 @@ Every Tauri response is parsed with Zod before entering UI state. Invalid payloa
 
 Normal queries use one native metadata/content inventory. Files without extractable text and folders remain searchable with their stored kind, extension, size, and modification time. Scope and extension/kind filters apply before the result limit. React preserves the native order and bounded rank instead of appending a separately ranked traversal. A revoked root is checked again when pending results arrive.
 
-Filename traversal is an explicitly degraded fallback when the index is unavailable. It receives the same exclusions, hidden-file policy, and file-size bound. Recent and Related failures remain errors; they cannot be replaced by ordinary filename results. An empty root configuration still reconciles the native inventory and clears cached admission.
+Filename traversal is an explicitly degraded fallback when the index is unavailable. It receives the same exclusions, hidden-file policy, file-size bound, scope, and extension/kind filters. Native filtering precedes the 10,000 response cap. Malformed fallback payloads reject with `invalid-response` when no root returns a valid contract; partial malformed roots are identified in the degraded status while usable results remain available. Recent and Related failures remain errors; they cannot be replaced by ordinary filename results. An empty root configuration still reconciles the native inventory and clears cached admission.
+
+`search_hybrid` returns `{items: HybridHit[], semantic: {phase: 'disabled' | 'ready' | 'degraded', reason: string | null}}`, including empty searches. `search_related` retains its `HybridHit[]` response. The adapter Zod-parses both contracts and preserves native identity, metadata, rank, provenance, and pin state. Semantic embedding or vector lookup failure keeps working filename/content retrieval and reports `degraded` with a fixed sanitized reason; a successful vector lookup reports `ready`, even when it has no matches. Recent and requests without semantic retrieval report `disabled`. Admission under current roots precedes duplicate-path suppression.
 
 ## Native local-file commands
 

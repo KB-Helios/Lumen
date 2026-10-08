@@ -37,7 +37,65 @@ function indexedHit(name: string, rank = 0.1) {
     metadata: {...rustResponse().items[0], name, path: `C:\\Projects\\${name}`, relativePath: name}};
 }
 
+function nativeResponse(items: unknown[]) {
+  return {items, semantic: {phase: 'disabled', reason: null}};
+}
+
 describe('DevelopmentFileSearchService', () => {
+  it.each([false, true])('surfaces semantic degradation with empty results=%s', async empty => {
+    const statuses: {phase: string; message?: string}[] = [];
+    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'search_hybrid') return {items: empty ? [] : [{...indexedHit('notes.md'), matchSource: 'content'}],
+        semantic: {phase: 'degraded', reason: 'Semantic vectors unavailable; filename and content search remain available.'}};
+    }});
+    service.subscribeToStatus(status => statuses.push(status));
+    const response = await service.search(request);
+    expect(response.total).toBe(empty ? 0 : 1);
+    expect(statuses[statuses.length - 1]).toMatchObject({phase: 'degraded', message: expect.stringMatching(/semantic/i)});
+    if (!empty) expect(response.groups[0]?.items[0]?.match.source).toBe('content');
+  });
+  it('reports invalid-response when every fallback root payload is malformed', async () => {
+    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'search_hybrid') throw new Error('index offline');
+      if (command === 'search_filenames') return {items: [{score: Number.NaN}]};
+    }});
+    await expect(service.search(request)).rejects.toMatchObject({code: 'invalid-response', recoverable: true});
+  });
+
+  it('reports partial malformed fallback roots while retaining usable matches', async () => {
+    const statuses: string[] = [];
+    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects', 'C:\\Other'], invoke: async (command, args) => {
+      if (command === 'search_hybrid') throw new Error('index offline');
+      if (command === 'search_filenames') return args?.root === 'C:\\Other' ? {items: []} : rustResponse();
+    }});
+    service.subscribeToStatus(status => statuses.push(status.message ?? ''));
+    await expect(service.search(request)).resolves.toMatchObject({total: 1});
+    expect(statuses[statuses.length - 1]).toMatch(/invalid response/i);
+  });
+
+  it('admits a current-root duplicate after rejecting a revoked-root copy', async () => {
+    const current = indexedHit('Readme.md');
+    const revoked = {...current, stableId: 'indexed:revoked', rootPath: 'C:\\Revoked'};
+    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'search_hybrid') return nativeResponse([revoked, current]);
+    }});
+    expect((await service.search(request)).groups[0]?.items.map(item => item.id)).toEqual(['indexed:Readme.md']);
+  });
+
+  it('forwards fallback scope and filters before native response limits', async () => {
+    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command, args) => {
+      if (command === 'search_hybrid') throw new Error('index offline');
+      if (command === 'search_filenames') {
+        // IPC is unavailable in jsdom; the real cap case is covered in matching.rs.
+        if (args?.scope === 'documents' && JSON.stringify(args.filters) === '[{"id":"extension","value":".md"},{"id":"kind","value":"document"}]') return rustResponse();
+        return {...rustResponse(), items: [], total: 0};
+      }
+    }});
+    const response = await service.search({...request, scope: 'documents', limit: 1, filters: [
+      {id: 'extension', label: '.md', value: '.md'}, {id: 'kind', label: 'Documents', value: 'document'},
+    ]});
+    expect(response.groups[0]?.items.map(item => item.name)).toEqual(['Readme.md']);
+  });
   it('discards native results when their root is revoked while search is pending', async () => {
     let roots = ['C:\\Projects'];
     let completeSearch!: (value: unknown) => void;
@@ -48,7 +106,7 @@ describe('DevelopmentFileSearchService', () => {
     const pending = service.search(request);
     await vi.waitFor(() => expect(completeSearch).toBeDefined());
     roots = [];
-    completeSearch([indexedHit('Readme.md')]);
+    completeSearch(nativeResponse([indexedHit('Readme.md')]));
     await expect(pending).resolves.toMatchObject({groups: [], total: 0});
     roots = ['C:\\Projects'];
     await expect(service.getPreview('indexed:Readme.md')).rejects.toMatchObject({code: 'unavailable'});
@@ -78,7 +136,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('uses the native ranked inventory without adding unfiltered traversal results', async () => {
     const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
-      if (command === 'search_hybrid') return [indexedHit('report.md')];
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('report.md')]);
       if (command === 'search_filenames') return {...rustResponse(), items: [{...rustResponse().items[0], name: 'report.tmp'}]};
     }});
     const response = await service.search({...request, filters: [{id: 'extension', label: '.md', value: '.md'}]});
@@ -87,7 +145,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('preserves native order, metadata and identity when filename candidates overlap', async () => {
     const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
-      if (command === 'search_hybrid') return [indexedHit('z-report.md', 0.05), indexedHit('Readme.md', 0.2)];
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('z-report.md', 0.05), indexedHit('Readme.md', 0.2)]);
       if (command === 'search_filenames') return rustResponse();
     }});
     const response = await service.search(request);
@@ -104,7 +162,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('rejects invalid native index payloads instead of masking them with filename results', async () => {
     const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
-      if (command === 'search_hybrid') return [{rank: Number.NaN}];
+      if (command === 'search_hybrid') return nativeResponse([{rank: Number.NaN}]);
       if (command === 'search_filenames') return rustResponse();
     }});
     await expect(service.search(request)).rejects.toMatchObject({code: 'invalid-response', recoverable: true});
@@ -129,7 +187,7 @@ describe('DevelopmentFileSearchService', () => {
     let roots = ['C:\\Projects'];
     const synchronized: unknown[] = [];
     const service = new DevelopmentFileSearchService({getRoots: () => roots, invoke: async (command, args) => {
-      if (command === 'search_hybrid') return [indexedHit('Readme.md')];
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Readme.md')]);
       if (command === 'search_filenames') return rustResponse();
       if (command === 'synchronize_index_roots') synchronized.push(args?.roots);
     }});
@@ -145,7 +203,7 @@ describe('DevelopmentFileSearchService', () => {
     let finishPreview!: (value: unknown) => void;
     const service = new DevelopmentFileSearchService({getRoots: () => roots, invoke: async (command) => {
       if (command === 'search_filenames') return rustResponse();
-      if (command === 'search_hybrid') return [indexedHit('Readme.md')];
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Readme.md')]);
       if (command === 'get_basic_preview') return new Promise((resolve) => {finishPreview = resolve;});
       return undefined;
     }});
@@ -164,7 +222,7 @@ describe('DevelopmentFileSearchService', () => {
       getRoots: () => roots,
       invoke: async (command) => {
         if (command === 'search_filenames') return rustResponse();
-        if (command === 'search_hybrid') return [indexedHit('Readme.md')];
+        if (command === 'search_hybrid') return nativeResponse([indexedHit('Readme.md')]);
         if (command !== 'synchronize_index_roots') nativeActions.push(command);
         return undefined;
       },
@@ -180,7 +238,7 @@ describe('DevelopmentFileSearchService', () => {
   it('maps indexed content hits with their native provenance', async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === 'search_filenames') return {...rustResponse(), items: [], total: 0};
-      if (command === 'search_hybrid') return [{
+      if (command === 'search_hybrid') return nativeResponse([{
         stableId: 'indexed:report',
         rootPath: 'C:\\Projects',
         path: 'C:\\Projects\\Report.pdf',
@@ -197,7 +255,7 @@ describe('DevelopmentFileSearchService', () => {
         semanticScore: 0.91,
         embeddingModel: 'lumen.embed.local',
         pinned: true,
-      }];
+      }]);
       return {phase: 'ready', indexedItems: 1, queuedEnrichment: 0, skippedItems: 0, message: 'ready'};
     });
     const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
@@ -226,7 +284,7 @@ describe('DevelopmentFileSearchService', () => {
         return new Promise<void>((resolve) => { finishSynchronization = resolve; });
       }
       if (command === 'search_filenames') return Promise.resolve({...rustResponse(), items: [], total: 0});
-      if (command === 'search_hybrid') return Promise.resolve([]);
+      if (command === 'search_hybrid') return Promise.resolve(nativeResponse([]));
       return Promise.resolve(undefined);
     });
     const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
@@ -250,7 +308,7 @@ describe('DevelopmentFileSearchService', () => {
   it('sends every configured root policy to native synchronization', async () => {
     const invoke = vi.fn(async (command: string) => command === 'search_filenames'
       ? {...rustResponse(), items: [], total: 0}
-      : command === 'search_hybrid' ? [] : undefined);
+      : command === 'search_hybrid' ? nativeResponse([]) : undefined);
     const service = new DevelopmentFileSearchService({
       getRoots: () => ['C:\\Projects'],
       getRootConfigurations: () => [{
@@ -297,7 +355,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('sends persisted ranking preferences to the native ranker', async () => {
     const invoke = vi.fn(async (command: string) => {
-      if (command === 'search_hybrid') return [indexedHit('Older exact.md', 0.05), indexedHit('Recent readme.md', 0.18)];
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Older exact.md', 0.05), indexedHit('Recent readme.md', 0.18)]);
       return undefined;
     });
     const service = new DevelopmentFileSearchService({
@@ -327,7 +385,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('maps previews and opener commands through the known confined file', async () => {
     const invoke = vi.fn(async (command: string) => {
-      if (command === 'search_hybrid') return [indexedHit('Readme.md')];
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Readme.md')]);
       if (command === 'get_basic_preview') return {
         kind: 'markdown',
         title: 'Readme.md',
@@ -397,7 +455,7 @@ describe('DevelopmentFileSearchService', () => {
     response.path = canonicalPath;
     response.metadata.path = canonicalPath;
     const invoke = vi.fn(async (command: string) => {
-      if (command === 'search_hybrid') return [response];
+      if (command === 'search_hybrid') return nativeResponse([response]);
       if (command === 'get_basic_preview') return {
         kind: 'markdown',
         title: 'Readme.md',
