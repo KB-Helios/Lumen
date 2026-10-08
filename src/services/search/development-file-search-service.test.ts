@@ -51,6 +51,38 @@ function nativeResponse(items: unknown[]) {
 }
 
 describe('DevelopmentFileSearchService', () => {
+  it.each([false, true])('orders already-issued admission mutations and discards superseded queued roots=%s', async queueSuperseded => {
+    let roots = ['C:\\Old'];
+    let nativeRoots: string[] = [];
+    const completed: string[][] = [];
+    let releaseOld!: () => void;
+    const service = createService({getRoots: () => roots, invoke: async (command, args) => {
+      if (command === 'synchronize_index_roots') {
+        const admitted = (args?.roots as {path: string}[]).map(root => root.path);
+        if (admitted[0] === 'C:\\Old') await new Promise<void>(resolve => {releaseOld = resolve;});
+        nativeRoots = admitted;
+        completed.push(admitted);
+        return {...readyStatus, generation: completed.length};
+      }
+      if (command === 'search_hybrid') return nativeResponse([]);
+      return {...readyStatus, generation: completed.length};
+    }});
+    const older = service.search(request);
+    await vi.waitFor(() => expect(releaseOld).toBeDefined());
+    const searches = [older];
+    if (queueSuperseded) {
+      roots = ['C:\\Middle'];
+      searches.push(service.search({...request, requestId: 8}));
+    }
+    roots = ['C:\\New'];
+    searches.push(service.search({...request, requestId: 9}));
+    // Allow already-issued New IPCs to finish before Old at the broken boundary.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    releaseOld();
+    await Promise.all(searches);
+    expect(nativeRoots).toEqual(['C:\\New']);
+    expect(completed).toEqual([['C:\\Old'], ['C:\\New']]);
+  });
   it('publishes recovery after a failed poll even when healthy native status is unchanged', async () => {
     vi.useFakeTimers();
     let failPoll = true;

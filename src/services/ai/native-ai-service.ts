@@ -61,6 +61,31 @@ export interface IndexRootInput {
   maxFileSizeMb: number;
 }
 
+type NativeCommand = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+let rootAdmissionTail: Promise<void> | undefined;
+let latestRootAdmission = 0;
+
+// Every supported root mutation shares this lane; reads and content work never enter it.
+export function admitIndexRoots(
+  roots: IndexRootInput[],
+  command: NativeCommand = invoke,
+  isCurrent: () => boolean = () => true,
+): Promise<IndexStatus | undefined> {
+  const admission = ++latestRootAdmission;
+  const captured = roots.map(root => ({...root, exclusions: [...root.exclusions]}));
+  const run = async () => {
+    if (admission !== latestRootAdmission || !isCurrent()) return undefined;
+    return indexStatusSchema.parse(await command('synchronize_index_roots', {roots: captured}));
+  };
+  const result = rootAdmissionTail ? rootAdmissionTail.then(run) : run();
+  const tail = result.then(() => undefined, () => undefined);
+  rootAdmissionTail = tail;
+  void tail.then(() => {
+    if (rootAdmissionTail === tail) rootAdmissionTail = undefined;
+  });
+  return result;
+}
+
 export function isNativeRuntime() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
@@ -78,5 +103,6 @@ export const nativeAiService = {
   resumeEnrichment: () => invoke<void>('resume_enrichment'),
   restartEnrichment: () => invoke<void>('restart_enrichment'),
   indexStatus: async () => indexStatusSchema.parse(await invoke<unknown>('get_index_status')),
-  synchronizeRoots: async (roots: IndexRootInput[]) => indexStatusSchema.parse(await invoke<unknown>('synchronize_index_roots', {roots})),
+  synchronizeRoots: async (roots: IndexRootInput[]) => await admitIndexRoots(roots)
+    ?? indexStatusSchema.parse(await invoke<unknown>('get_index_status')),
 };

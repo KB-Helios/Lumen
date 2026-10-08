@@ -786,10 +786,12 @@ impl IndexRuntime {
                             if runtime
                                 .enrichment_dispatch_is_admitted(&job)
                                 .unwrap_or(false)
-                            {
-                                app.state::<crate::gateway::EnrichmentSupervisor>()
+                                && !app
+                                    .state::<crate::gateway::EnrichmentSupervisor>()
                                     .sync_jobs(std::slice::from_ref(&job))
-                                    .await;
+                                    .await
+                            {
+                                break;
                             }
                         }
                     }

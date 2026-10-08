@@ -1,6 +1,6 @@
 import {invoke as tauriInvoke} from '@tauri-apps/api/core';
 import {z} from 'zod';
-import {indexStatusSchema, type IndexStatus} from '../ai/native-ai-service';
+import {admitIndexRoots, indexStatusSchema, type IndexStatus} from '../ai/native-ai-service';
 
 import type {SearchService} from './search-service';
 import {
@@ -499,8 +499,9 @@ export class DevelopmentFileSearchService implements SearchService {
       maxFileSizeMb: root.maxFileSizeMb,
     })));
     const signature = signatureOf(configuredRoots);
+    const stillDesired = () => signature === signatureOf(this.rootConfigurations(uniqueRoots(this.getRoots())));
     const current = () => operation === this.configurationOperation
-      && signature === signatureOf(this.rootConfigurations(uniqueRoots(this.getRoots())));
+      && stillDesired();
     if (signature === this.synchronizedRootSignature && !this.pendingRootSignature) {
       const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
       if (!current()) return;
@@ -515,24 +516,21 @@ export class DevelopmentFileSearchService implements SearchService {
     }
     if (!current()) return;
     this.pendingRootSignature = signature;
-    const synchronization = (async () => {
-      const status = indexStatusSchema.parse(await this.invoke('synchronize_index_roots', {
-        roots: configuredRoots.map((root) => ({
-          path: root.path,
-          cloudEnrichment: root.cloudEnrichment,
-          exclusions: root.exclusions,
-          includeHidden: root.includeHidden,
-          maxFileSizeMb: root.maxFileSizeMb,
-        })),
-      }));
-      if (this.pendingRootSignature === signature) {
+    const synchronization: Promise<void> = admitIndexRoots(configuredRoots.map((root) => ({
+      path: root.path,
+      cloudEnrichment: root.cloudEnrichment,
+      exclusions: root.exclusions,
+      includeHidden: root.includeHidden,
+      maxFileSizeMb: root.maxFileSizeMb,
+    })), this.invoke, stillDesired).then(status => {
+      if (status && this.rootSynchronization === synchronization && stillDesired()) {
         this.nativeStatus = status;
         this.synchronizedRootSignature = signature;
       }
-    })();
+    });
     this.rootSynchronization = synchronization;
     return synchronization.finally(() => {
-      if (this.pendingRootSignature === signature) {
+      if (this.rootSynchronization === synchronization) {
         this.pendingRootSignature = '';
       }
     });
