@@ -1,6 +1,7 @@
 mod embedding;
 mod extraction;
 mod index;
+mod index_worker;
 pub mod indexing;
 mod matching;
 mod metadata;

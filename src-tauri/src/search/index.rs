@@ -1182,6 +1182,27 @@ impl IndexDatabase {
             )
             .optional()?;
         if let Some((file_id, revision)) = existing {
+            let previous: Option<String> = transaction
+                .query_row(
+                    "SELECT metadata FROM file_inventory WHERE file_id = ?1",
+                    [file_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if previous.as_deref() != Some(metadata.as_str()) {
+                transaction.execute("DELETE FROM vector_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)", [file_id])?;
+                transaction.execute("DELETE FROM enrichment_jobs WHERE file_id = ?1", [file_id])?;
+                transaction.execute(
+                    "DELETE FROM enrichment_artifacts WHERE file_id = ?1",
+                    [file_id],
+                )?;
+                transaction.execute("DELETE FROM answer_cache WHERE file_id = ?1", [file_id])?;
+                transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
+                transaction.execute("DELETE FROM chunks WHERE file_id = ?1", [file_id])?;
+                transaction.execute("UPDATE files SET content_hash = ?2, extraction_version = 'metadata-v1', index_revision = index_revision + 1 WHERE id = ?1", params![file_id, metadata_hash])?;
+                transaction.execute("INSERT INTO chunks (file_id, ordinal, text, extraction_kind, content_hash, index_revision) VALUES (?1, 0, '', 'metadata', ?2, ?3)", params![file_id, metadata_hash, revision + 1])?;
+                transaction.execute("INSERT INTO search_fts(file_id, chunk_id, name, path, body) VALUES (?1, ?2, ?3, ?4, '')", params![file_id, transaction.last_insert_rowid(), name, path])?;
+            }
             store_inventory(&transaction, file_id, &metadata)?;
             transaction.execute(
                 "UPDATE files SET root_path = ?2, path = ?3, name = ?4 WHERE id = ?1",
@@ -1412,6 +1433,44 @@ impl IndexDatabase {
             })?;
         transaction.commit()?;
         Ok(removed)
+    }
+
+    pub fn remove_inventory_path(&self, root: &Path, path: &Path) -> IndexResult<Vec<String>> {
+        let inventory = self.inventory()?;
+        let mut retained = HashMap::<String, HashSet<String>>::new();
+        let mut removed = Vec::new();
+        for item in inventory {
+            if Path::new(&item.hit.root_path) != root
+                || !Path::new(&item.hit.path).starts_with(path)
+            {
+                retained
+                    .entry(item.hit.root_path.to_string_lossy().into_owned())
+                    .or_default()
+                    .insert(item.hit.stable_id);
+            } else {
+                removed.push(item.hit.stable_id);
+            }
+        }
+        self.retain_inventory(&retained)?;
+        Ok(removed)
+    }
+
+    pub fn retain_enrichment_roots(&self, roots: &HashSet<String>) -> IndexResult<()> {
+        let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        let rows = {
+            let mut statement = connection.prepare("SELECT enrichment_jobs.id, files.root_path FROM enrichment_jobs JOIN files ON files.id = enrichment_jobs.file_id")?;
+            statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for (id, root) in rows {
+            if !roots.contains(&root) {
+                connection.execute("DELETE FROM enrichment_jobs WHERE id = ?1", [id])?;
+            }
+        }
+        Ok(())
     }
 
     pub fn counts(&self) -> IndexResult<(u64, u64)> {

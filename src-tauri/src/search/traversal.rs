@@ -135,9 +135,68 @@ pub fn traverse(root: &Path) -> Result<TraversalOutcome, SearchFailure> {
     traverse_with_policy(root, &TraversalPolicy::default())
 }
 
+pub(super) fn policy_record(
+    root: &Path,
+    path: &Path,
+    policy: &TraversalPolicy,
+) -> Result<Option<FileRecord>, SearchFailure> {
+    if !fs::symlink_metadata(root)
+        .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+    {
+        return Ok(None);
+    }
+    let Ok(relative) = path.strip_prefix(root) else {
+        return Ok(None);
+    };
+    let normalized = normalized_relative(root, path);
+    if is_excluded(&normalized, &policy.exclusions)
+        || (!policy.include_hidden && is_hidden(&normalized))
+    {
+        return Ok(None);
+    }
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        if !matches!(component, std::path::Component::Normal(_)) {
+            return Ok(None);
+        }
+        current.push(component);
+        let Ok(metadata) = fs::symlink_metadata(&current) else {
+            return Ok(None);
+        };
+        if metadata.file_type().is_symlink()
+            || (metadata.is_dir() && is_generated_directory(&current))
+        {
+            return Ok(None);
+        }
+    }
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return Ok(None);
+    };
+    if metadata.is_file() && metadata.len() > policy.max_file_size_bytes {
+        return Ok(None);
+    }
+    file_record(root, path).map(Some)
+}
+
+pub(super) fn record_matches_policy(record: &FileRecord, policy: &TraversalPolicy) -> bool {
+    let relative = record.relative_path.replace('\\', "/").to_ascii_lowercase();
+    !is_excluded(&relative, &policy.exclusions)
+        && (policy.include_hidden || !is_hidden(&relative))
+        && (record.kind == super::types::FileKind::Folder
+            || record.size_bytes <= policy.max_file_size_bytes)
+}
+
 pub fn traverse_with_policy(
     root: &Path,
     policy: &TraversalPolicy,
+) -> Result<TraversalOutcome, SearchFailure> {
+    traverse_with_policy_until(root, policy, || false)
+}
+
+pub(super) fn traverse_with_policy_until(
+    root: &Path,
+    policy: &TraversalPolicy,
+    cancelled: impl Fn() -> bool,
 ) -> Result<TraversalOutcome, SearchFailure> {
     let root = canonicalize_root(root)?;
     let mut records = Vec::new();
@@ -147,6 +206,9 @@ pub fn traverse_with_policy(
     let mut truncated = false;
 
     'walk: while let Some(directory) = directories.pop() {
+        if cancelled() {
+            break;
+        }
         let canonical_directory = match fs::canonicalize(&directory) {
             Ok(value) if value.starts_with(&root) => value,
             Ok(_) => continue,
@@ -177,6 +239,9 @@ pub fn traverse_with_policy(
         };
         let mut entries = Vec::new();
         for entry in read_directory {
+            if cancelled() {
+                break 'walk;
+            }
             match entry {
                 Ok(value) => entries.push(value),
                 Err(error) => push_warning(
@@ -191,6 +256,9 @@ pub fn traverse_with_policy(
         entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_lowercase());
 
         for entry in entries {
+            if cancelled() {
+                break 'walk;
+            }
             if records.len() >= MAX_TRAVERSED_ITEMS {
                 truncated = true;
                 break 'walk;

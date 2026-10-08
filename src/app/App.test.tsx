@@ -21,6 +21,7 @@ import {DevelopmentFileSearchService} from '../services/search/development-file-
 vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tauri-apps/api/core')>(),
   invoke: async (command: string) => {
+    if (command === 'synchronize_index_roots' || command === 'get_index_status') return {phase: 'ready', generation: 1, pendingItems: 0, indexedItems: 0, queuedEnrichment: 0, skippedItems: 0, message: 'Ready'};
     if (command === 'search_hybrid') return {items: [], semantic: {phase: 'disabled', reason: null}};
     if (command === 'search_filenames') return {
       items: [{path: 'C:\\Projects\\Readme.md', relativePath: 'Readme.md', name: 'Readme.md',

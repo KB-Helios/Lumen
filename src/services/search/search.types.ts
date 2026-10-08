@@ -138,6 +138,8 @@ export const searchResponseSchema = z.object({
 export const searchStatusSchema = z.object({
   phase: z.enum(['idle', 'indexing', 'ready', 'paused', 'degraded']),
   indexedItems: z.number().int().nonnegative().optional(),
+  generation: z.number().int().nonnegative().optional(),
+  pendingItems: z.number().int().nonnegative().optional(),
   message: z.string().optional(),
   updatedAt: z.iso.datetime(),
 });

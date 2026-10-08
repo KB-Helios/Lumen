@@ -24,12 +24,17 @@ use super::index::{
     DeletedIndexData, HistoryClearResult, HistoryStatus, IndexDatabase, IndexedDocument,
     IndexedHit, VectorStatus,
 };
+use super::index_worker;
 use super::root_policy::canonicalize_root;
 use super::traversal;
 use super::types::{FileKind, FileRecord, SearchFailure};
 use super::{embedding, ranking};
 
-#[derive(Clone, Debug, Deserialize)]
+#[cfg(test)]
+#[path = "freshness_tests.rs"]
+mod freshness_tests;
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexRootRequest {
     pub path: String,
@@ -51,6 +56,8 @@ fn default_max_file_size_mb() -> u64 {
 #[serde(rename_all = "camelCase")]
 pub struct IndexStatus {
     pub phase: String,
+    pub generation: u64,
+    pub pending_items: u64,
     pub indexed_items: u64,
     pub queued_enrichment: u64,
     pub skipped_items: u64,
@@ -243,12 +250,22 @@ pub struct PinUpdateResult {
 #[derive(Clone)]
 pub struct IndexRuntime {
     database: Arc<IndexDatabase>,
+    owned_database_path: Arc<PathBuf>,
     status: Arc<Mutex<IndexStatus>>,
     generation: Arc<AtomicU64>,
     synchronization: Arc<Mutex<()>>,
+    pub(super) work: Arc<index_worker::WorkState>,
+    worker: Option<Arc<index_worker::IndexWorker>>,
     embedding_worker_running: Arc<AtomicBool>,
     latest_search_request: Arc<AtomicU64>,
+    #[cfg(test)]
+    extraction_gate: Arc<Mutex<Option<ExtractionGate>>>,
+    #[cfg(test)]
+    commit_gate: Arc<Mutex<Option<ExtractionGate>>>,
 }
+
+#[cfg(test)]
+type ExtractionGate = Arc<dyn Fn(&Path) + Send + Sync>;
 
 fn search_failure(operation: &str, error: impl std::fmt::Display) -> SearchFailure {
     SearchFailure::new(
@@ -285,10 +302,15 @@ impl IndexRuntime {
         let (indexed_items, queued_enrichment) = database
             .counts()
             .map_err(|error| search_failure("read index status", error))?;
-        Ok(Self {
+        let mut runtime = Self {
             database: Arc::new(database),
+            owned_database_path: Arc::new(
+                std::fs::canonicalize(path).map_err(|e| search_failure("locate owned index", e))?,
+            ),
             status: Arc::new(Mutex::new(IndexStatus {
                 phase: "ready".to_owned(),
+                generation: 0,
+                pending_items: 0,
                 indexed_items,
                 queued_enrichment,
                 skipped_items: 0,
@@ -296,9 +318,17 @@ impl IndexRuntime {
             })),
             generation: Arc::new(AtomicU64::new(0)),
             synchronization: Arc::new(Mutex::new(())),
+            work: Arc::new(index_worker::WorkState::default()),
+            worker: None,
             embedding_worker_running: Arc::new(AtomicBool::new(false)),
             latest_search_request: Arc::new(AtomicU64::new(0)),
-        })
+            #[cfg(test)]
+            extraction_gate: Arc::new(Mutex::new(None)),
+            #[cfg(test)]
+            commit_gate: Arc::new(Mutex::new(None)),
+        };
+        runtime.worker = Some(index_worker::IndexWorker::start(runtime.clone()));
+        Ok(runtime)
     }
 
     fn snapshot(&self) -> IndexStatus {
@@ -320,10 +350,6 @@ impl IndexRuntime {
         query: &str,
         limit: usize,
     ) -> Result<Vec<IndexedHit>, SearchFailure> {
-        let _synchronization = self
-            .synchronization
-            .lock()
-            .map_err(|error| search_failure("lock the indexing worker", error))?;
         self.database
             .search(query, limit)
             .map_err(|error| search_failure("build answer context", error))
@@ -373,13 +399,12 @@ impl IndexRuntime {
         job: &super::index::EmbeddingJobRecord,
         values: &[f32],
     ) -> Result<bool, SearchFailure> {
-        let _synchronization = self
-            .synchronization
-            .lock()
-            .map_err(|error| search_failure("lock the indexing worker", error))?;
-        self.database
-            .complete_embedding_job(job, values)
-            .map_err(|error| search_failure("store an embedding", error))
+        self.with_current_generation(self.current_generation(), || {
+            self.database
+                .complete_embedding_job(job, values)
+                .map_err(|error| search_failure("store an embedding", error))
+        })
+        .map(|applied| applied.unwrap_or(false))
     }
 
     pub(crate) fn defer_embedding_job(
@@ -693,6 +718,30 @@ impl IndexRuntime {
             .map_err(|error| search_failure("prepare related search", error))
     }
 
+    pub(crate) fn start_index_lifecycle(&self, app: AppHandle) {
+        let runtime = self.clone();
+        tauri::async_runtime::spawn(async move {
+            while !runtime.work.stop.load(Ordering::SeqCst) {
+                let enabled = app.state::<ActivityRuntime>().snapshot().background_policy
+                    == BackgroundPolicy::Normal;
+                runtime.set_content_enabled(enabled);
+                if enabled {
+                    let model =
+                        embedding::active_model_key(app.state::<ProviderRegistry>().inner());
+                    if runtime.queue_embedding_jobs(&model).is_ok() {
+                        schedule_embedding_worker(app.clone(), runtime.clone());
+                    }
+                    if let Ok(jobs) = runtime.pending_enrichment() {
+                        app.state::<crate::gateway::EnrichmentSupervisor>()
+                            .sync_jobs(&jobs)
+                            .await;
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        });
+    }
+
     fn begin_embedding_worker(&self) -> bool {
         self.embedding_worker_running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -766,12 +815,33 @@ impl IndexRuntime {
             .lock()
             .map_err(|error| search_failure("lock the indexing worker", error))?;
         self.generation.fetch_add(1, Ordering::SeqCst);
+        self.work
+            .roots
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.work
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.work
+            .completed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.work.reconcile.store(true, Ordering::SeqCst);
+        if let Some(worker) = &self.worker {
+            worker.wake();
+        }
         let deleted = self
             .database
             .delete_indexed_content()
             .map_err(|error| search_failure("delete generated index data", error))?;
         self.set_status(IndexStatus {
             phase: "ready".to_owned(),
+            generation: self.generation.load(Ordering::SeqCst),
+            pending_items: 0,
             indexed_items: 0,
             queued_enrichment: 0,
             skipped_items: 0,
@@ -780,129 +850,583 @@ impl IndexRuntime {
         Ok(deleted)
     }
 
+    pub(crate) fn configure_roots(
+        &self,
+        roots: Vec<IndexRootRequest>,
+        content_enabled: bool,
+    ) -> Result<IndexStatus, SearchFailure> {
+        let mut canonical = Vec::with_capacity(roots.len());
+        let mut policies = HashMap::new();
+        for mut root in roots {
+            root.path = canonicalize_root(Path::new(&root.path))?
+                .to_string_lossy()
+                .into_owned();
+            policies.insert(root.path.clone(), Self::root_traversal_policy(&root)?);
+            canonical.push(root);
+        }
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("admit roots", e))?;
+        let mut configured = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+        if !self.work.configured.load(Ordering::SeqCst) || *configured != canonical {
+            self.work.configured.store(false, Ordering::SeqCst);
+            self.generation.fetch_add(1, Ordering::SeqCst);
+            *configured = canonical;
+            self.work
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
+            self.work
+                .completed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
+            let inventory = self
+                .database
+                .inventory()
+                .map_err(|e| search_failure("read root inventory", e))?;
+            let mut retained = HashMap::<String, HashSet<String>>::new();
+            for item in inventory {
+                if policies
+                    .get(item.hit.root_path.to_string_lossy().as_ref())
+                    .is_some_and(|policy| traversal::record_matches_policy(&item.metadata, policy))
+                {
+                    retained
+                        .entry(item.hit.root_path.to_string_lossy().into_owned())
+                        .or_default()
+                        .insert(item.hit.stable_id);
+                }
+            }
+            self.database
+                .retain_inventory(&retained)
+                .map_err(|e| search_failure("prune revoked roots", e))?;
+            let cloud_roots = configured
+                .iter()
+                .filter(|root| root.cloud_enrichment)
+                .map(|root| root.path.clone())
+                .collect::<HashSet<_>>();
+            self.database
+                .retain_enrichment_roots(&cloud_roots)
+                .map_err(|e| search_failure("invalidate revoked cloud jobs", e))?;
+            self.work.reconcile.store(true, Ordering::SeqCst);
+            self.work.configured.store(true, Ordering::SeqCst);
+        }
+        drop(configured);
+        self.work
+            .content_enabled
+            .store(content_enabled, Ordering::SeqCst);
+        self.refresh_worker_status()?;
+        if let Some(worker) = &self.worker {
+            worker.wake();
+        }
+        Ok(self.snapshot())
+    }
+
+    pub(crate) fn set_content_enabled(&self, enabled: bool) {
+        self.work.content_enabled.store(enabled, Ordering::SeqCst);
+        let _ = self.refresh_worker_status();
+        if let Some(worker) = &self.worker {
+            worker.wake();
+        }
+    }
+
+    pub(crate) fn stop_index_worker(&self) {
+        let _commit = self
+            .synchronization
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Some(worker) = &self.worker {
+            worker.stop();
+        }
+    }
+
+    /// Capture before asynchronous enrichment. Admit its returned result under
+    /// `with_current_generation`, then check its current file hash and root grant.
+    pub fn current_generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    /// The operation must be a short synchronous database commit, never provider I/O.
+    pub fn with_current_generation<T>(
+        &self,
+        generation: u64,
+        operation: impl FnOnce() -> Result<T, SearchFailure>,
+    ) -> Result<Option<T>, SearchFailure> {
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("admit current index generation", e))?;
+        if self.current_generation() != generation || self.work.stop.load(Ordering::SeqCst) {
+            return Ok(None);
+        }
+        operation().map(Some)
+    }
+
+    fn root_traversal_policy(
+        root: &IndexRootRequest,
+    ) -> Result<traversal::TraversalPolicy, SearchFailure> {
+        let maximum = root
+            .max_file_size_mb
+            .checked_mul(1024 * 1024)
+            .ok_or_else(|| search_failure("admit root policy", "invalid file size"))?;
+        traversal::TraversalPolicy::new(root.exclusions.clone(), root.include_hidden, maximum)
+    }
+
+    pub(super) fn worker_failed(&self, _detail: &str) {
+        let mut status = self.snapshot();
+        status.phase = "degraded".into();
+        status.message =
+            "Some local indexing work could not finish; pending content will retry.".into();
+        status.skipped_items = status.skipped_items.saturating_add(1);
+        self.set_status(status);
+    }
+
+    fn refresh_worker_status(&self) -> Result<(), SearchFailure> {
+        let (indexed_items, queued_enrichment) = self
+            .database
+            .counts()
+            .map_err(|e| search_failure("read index status", e))?;
+        let pending = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let pending_items = pending.len() as u64;
+        let retries = pending
+            .values()
+            .filter(|item| item.retry_at > Instant::now())
+            .count() as u64;
+        drop(pending);
+        let indexing = self.work.inventory_running.load(Ordering::SeqCst)
+            || self.work.reconcile.load(Ordering::SeqCst);
+        let paused = !self.work.content_enabled.load(Ordering::SeqCst) && pending_items > 0;
+        let degraded = self.work.watcher_degraded.load(Ordering::SeqCst);
+        let inventory_failed = self.work.inventory_failed.load(Ordering::SeqCst);
+        self.set_status(IndexStatus {
+            phase: if paused {
+                "paused"
+            } else if retries > 0 || inventory_failed {
+                "degraded"
+            } else if indexing || pending_items > 0 {
+                "indexing"
+            } else if degraded {
+                "degraded"
+            } else {
+                "ready"
+            }
+            .into(),
+            generation: self.generation.load(Ordering::SeqCst),
+            pending_items,
+            indexed_items,
+            queued_enrichment,
+            skipped_items: retries,
+            message: if paused {
+                "Content indexing paused; filenames remain searchable"
+            } else if retries > 0 {
+                "Some content could not be extracted; pending work will retry"
+            } else if inventory_failed {
+                "Local inventory reconciliation could not finish; bounded retry remains active"
+            } else if indexing || pending_items > 0 {
+                "Updating local inventory and pending content"
+            } else if degraded {
+                "File watching unavailable; bounded reconciliation remains active"
+            } else {
+                "Local index ready"
+            }
+            .into(),
+        });
+        Ok(())
+    }
+
+    fn inventory_record(
+        &self,
+        root: &IndexRootRequest,
+        record: &FileRecord,
+        generation: u64,
+        force_content: bool,
+    ) -> Result<(), SearchFailure> {
+        let path = PathBuf::from(&record.path);
+        if self.is_owned_index_path(&path) {
+            return Ok(());
+        }
+        let root_path = PathBuf::from(&root.path);
+        let id = stable_id(&root_path, &path);
+        let signature = format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("commit inventory", e))?;
+        if self.generation.load(Ordering::SeqCst) != generation
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(());
+        }
+        // Revalidate policy and symlink ancestors at the commit boundary.
+        if traversal::policy_record(&root_path, &path, &Self::root_traversal_policy(root)?)?
+            .is_none()
+        {
+            return Ok(());
+        }
+        self.database
+            .upsert_metadata(&root_path, &id, &path, &signature)
+            .map_err(|e| search_failure("update inventory", e))?;
+        if force_content && record.kind != FileKind::Folder {
+            self.work
+                .completed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+            self.database
+                .upsert_document(
+                    &root_path,
+                    &IndexedDocument {
+                        stable_id: id.clone(),
+                        path: path.clone(),
+                        content_hash: signature.clone(),
+                        extraction_version: "metadata-v1".into(),
+                        chunks: Vec::new(),
+                    },
+                )
+                .map_err(|e| search_failure("invalidate dirty content", e))?;
+        }
+        if record.kind != FileKind::Folder
+            && self
+                .work
+                .completed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&id)
+                != Some(&signature)
+        {
+            let mut pending = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
+            if force_content
+                || !pending.get(&id).is_some_and(|item| {
+                    item.signature == signature && item.generation == generation
+                })
+            {
+                pending.insert(
+                    id,
+                    index_worker::PendingContent {
+                        root: root_path,
+                        path,
+                        signature,
+                        generation,
+                        admission: self.work.next_admission.fetch_add(1, Ordering::SeqCst),
+                        cloud_enrichment: root.cloud_enrichment,
+                        retry_at: Instant::now(),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn reconcile_inventory(&self, force_content: bool) -> Result<(), SearchFailure> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let roots = self
+            .work
+            .roots
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let mut inventory = HashMap::<String, HashSet<String>>::new();
+        let mut truncated = false;
+        for root in roots {
+            if self.generation.load(Ordering::SeqCst) != generation {
+                return Ok(());
+            }
+            let root_path = PathBuf::from(&root.path);
+            if !std::fs::symlink_metadata(&root_path)
+                .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+            {
+                inventory.entry(root.path.clone()).or_default();
+                truncated = true;
+                continue;
+            }
+            let outcome = traversal::traverse_with_policy_until(
+                &root_path,
+                &Self::root_traversal_policy(&root)?,
+                || {
+                    self.generation.load(Ordering::SeqCst) != generation
+                        || self.work.stop.load(Ordering::SeqCst)
+                },
+            )?;
+            truncated |= outcome.truncated || !outcome.warnings.is_empty();
+            let observed = inventory.entry(root.path.clone()).or_default();
+            for record in outcome.records {
+                if self.is_owned_index_path(Path::new(&record.path)) {
+                    continue;
+                }
+                if self.generation.load(Ordering::SeqCst) != generation
+                    || self.work.stop.load(Ordering::SeqCst)
+                {
+                    return Ok(());
+                }
+                observed.insert(stable_id(&root_path, Path::new(&record.path)));
+                self.inventory_record(&root, &record, generation, force_content)?;
+            }
+        }
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("reconcile inventory", e))?;
+        if self.generation.load(Ordering::SeqCst) != generation {
+            return Ok(());
+        }
+        self.database
+            .retain_inventory(&inventory)
+            .map_err(|e| search_failure("remove stale inventory", e))?;
+        let current = inventory.values().flatten().collect::<HashSet<_>>();
+        self.work
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|id, _| current.contains(id));
+        self.work
+            .completed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|id, _| current.contains(id));
+        if truncated {
+            self.work.watcher_degraded.store(true, Ordering::SeqCst);
+        }
+        self.work.inventory_running.store(false, Ordering::SeqCst);
+        self.work.inventory_failed.store(false, Ordering::SeqCst);
+        self.refresh_worker_status()
+    }
+
+    pub(super) fn refresh_paths(&self, paths: Vec<PathBuf>) -> Result<(), SearchFailure> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let roots = self
+            .work
+            .roots
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        for event in paths {
+            for root in &roots {
+                let root_path = PathBuf::from(&root.path);
+                let Some(path) = index_worker::event_path(&root_path, &event) else {
+                    continue;
+                };
+                if self.is_owned_index_path(&path) {
+                    continue;
+                }
+                if path == root_path || path.is_dir() {
+                    return self.reconcile_inventory(true);
+                }
+                if let Some(record) = traversal::policy_record(
+                    &root_path,
+                    &path,
+                    &Self::root_traversal_policy(root)?,
+                )? {
+                    self.inventory_record(root, &record, generation, true)?;
+                } else {
+                    let _commit = self
+                        .synchronization
+                        .lock()
+                        .map_err(|e| search_failure("remove changed inventory", e))?;
+                    if self.generation.load(Ordering::SeqCst) != generation {
+                        return Ok(());
+                    }
+                    let removed = self
+                        .database
+                        .remove_inventory_path(&root_path, &path)
+                        .map_err(|e| search_failure("remove changed inventory", e))?;
+                    self.work
+                        .pending
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .retain(|_, pending| {
+                            pending.root != root_path || !pending.path.starts_with(&path)
+                        });
+                    let mut completed = self
+                        .work
+                        .completed
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    for id in removed {
+                        completed.remove(&id);
+                    }
+                }
+            }
+        }
+        self.work.inventory_running.store(false, Ordering::SeqCst);
+        self.refresh_worker_status()
+    }
+
+    fn is_owned_index_path(&self, path: &Path) -> bool {
+        let owned = self.owned_database_path.to_string_lossy().to_lowercase();
+        let path = path.to_string_lossy().to_lowercase();
+        path == owned
+            || path == format!("{owned}-wal")
+            || path == format!("{owned}-shm")
+            || path == format!("{owned}-journal")
+    }
+
+    pub(super) fn extract_pending(&self) -> Result<(), SearchFailure> {
+        let next = self
+            .work
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|(_, item)| item.retry_at <= Instant::now())
+            .min_by(|a, b| a.1.path.cmp(&b.1.path))
+            .map(|(id, item)| (id.clone(), item.clone()));
+        let Some((id, pending)) = next else {
+            return Ok(());
+        };
+        {
+            let _admission = self
+                .synchronization
+                .lock()
+                .map_err(|e| search_failure("admit pending extraction", e))?;
+            if self.current_generation() != pending.generation
+                || !self.work.content_enabled.load(Ordering::SeqCst)
+                || self.work.stop.load(Ordering::SeqCst)
+            {
+                return Ok(());
+            }
+            let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+            let Some(root) = roots
+                .iter()
+                .find(|root| Path::new(&root.path) == pending.root)
+            else {
+                return Ok(());
+            };
+            if traversal::policy_record(
+                &pending.root,
+                &pending.path,
+                &Self::root_traversal_policy(root)?,
+            )?
+            .is_none()
+            {
+                self.work
+                    .pending
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&id);
+                return Ok(());
+            }
+        }
+        #[cfg(test)]
+        let gate = self.extraction_gate.lock().unwrap().clone();
+        #[cfg(test)]
+        if let Some(gate) = gate {
+            gate(&pending.path);
+        }
+        let extracted = extract_document(&pending.path);
+        #[cfg(test)]
+        let gate = self.commit_gate.lock().unwrap().clone();
+        #[cfg(test)]
+        if let Some(gate) = gate {
+            gate(&pending.path);
+        }
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("commit content", e))?;
+        if self.generation.load(Ordering::SeqCst) != pending.generation
+            || !self.work.content_enabled.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(());
+        }
+        let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(root) = roots
+            .iter()
+            .find(|root| Path::new(&root.path) == pending.root)
+        else {
+            return Ok(());
+        };
+        let Some(record) = traversal::policy_record(
+            &pending.root,
+            &pending.path,
+            &Self::root_traversal_policy(root)?,
+        )?
+        else {
+            return Ok(());
+        };
+        let signature = format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
+        if signature != pending.signature {
+            self.work.reconcile.store(true, Ordering::SeqCst);
+            return Ok(());
+        }
+        let mut jobs = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
+        if !jobs.get(&id).is_some_and(|item| {
+            item.generation == pending.generation
+                && item.signature == pending.signature
+                && item.admission == pending.admission
+        }) {
+            return Ok(());
+        }
+        let extracted = match extracted {
+            Ok(extracted) => extracted,
+            Err(_) => {
+                if let Some(job) = jobs.get_mut(&id) {
+                    job.retry_at = Instant::now() + std::time::Duration::from_secs(5);
+                }
+                drop(jobs);
+                drop(roots);
+                self.worker_failed("extraction failed");
+                return Ok(());
+            }
+        };
+        let document = IndexedDocument {
+            stable_id: id.clone(),
+            path: pending.path,
+            content_hash: extracted.content_hash,
+            extraction_version: extracted.extraction_version,
+            chunks: extracted.chunks,
+        };
+        self.database
+            .upsert_document(&pending.root, &document)
+            .map_err(|e| search_failure("store content", e))?;
+        if pending.cloud_enrichment
+            && let Some(kind) = extracted.pending_enrichment
+        {
+            self.database
+                .enqueue_enrichment(
+                    &id,
+                    &kind,
+                    if kind == "ocr" {
+                        "lumen.vision.cloud"
+                    } else {
+                        "lumen.audio.cloud"
+                    },
+                )
+                .map_err(|e| search_failure("queue enrichment", e))?;
+        }
+        self.work
+            .completed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.clone(), signature);
+        jobs.remove(&id);
+        drop(jobs);
+        drop(roots);
+        self.refresh_worker_status()
+    }
+
+    #[cfg(test)]
     fn synchronize_with_content(
         &self,
         roots: Vec<IndexRootRequest>,
         content_enabled: bool,
     ) -> Result<IndexStatus, SearchFailure> {
-        let _synchronization = self
-            .synchronization
-            .lock()
-            .map_err(|error| search_failure("lock the indexing worker", error))?;
-        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
-        self.set_status(IndexStatus {
-            phase: "indexing".to_owned(),
-            indexed_items: self.snapshot().indexed_items,
-            queued_enrichment: self.snapshot().queued_enrichment,
-            skipped_items: 0,
-            message: "Updating local content index".to_owned(),
-        });
-
-        let mut indexed_items = 0_u64;
-        let mut skipped_items = 0_u64;
-        let mut inventory = HashMap::<String, HashSet<String>>::new();
-        for requested_root in roots {
-            if self.generation.load(Ordering::SeqCst) != generation {
-                return Ok(self.snapshot());
+        self.configure_roots(roots, content_enabled)?;
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        while Instant::now() < deadline {
+            let status = self.snapshot();
+            if matches!(status.phase.as_str(), "ready" | "degraded" | "paused")
+                && !self.work.inventory_running.load(Ordering::SeqCst)
+                && !self.work.reconcile.load(Ordering::SeqCst)
+            {
+                return Ok(status);
             }
-            let root = canonicalize_root(Path::new(&requested_root.path))?;
-            let root_key = root.to_string_lossy().into_owned();
-            inventory.entry(root_key.clone()).or_default();
-            let max_file_size_bytes = requested_root
-                .max_file_size_mb
-                .checked_mul(1024 * 1024)
-                .ok_or_else(|| {
-                    SearchFailure::new(
-                        "invalid-root",
-                        "The maximum indexed file size is invalid.",
-                        None,
-                    )
-                })?;
-            let policy = traversal::TraversalPolicy::new(
-                requested_root.exclusions,
-                requested_root.include_hidden,
-                max_file_size_bytes,
-            )?;
-            let outcome = traversal::traverse_with_policy(&root, &policy)?;
-            skipped_items = skipped_items.saturating_add(outcome.warnings.len() as u64);
-            for record in outcome.records {
-                if self.generation.load(Ordering::SeqCst) != generation {
-                    return Ok(self.snapshot());
-                }
-                let path = PathBuf::from(&record.path);
-                let id = stable_id(&root, &path);
-                inventory
-                    .entry(root_key.clone())
-                    .or_default()
-                    .insert(id.clone());
-                let metadata_hash =
-                    format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
-                self.database
-                    .upsert_metadata(&root, &id, &path, &metadata_hash)
-                    .map_err(|error| search_failure("update filename inventory", error))?;
-                indexed_items = indexed_items.saturating_add(1);
-                if !content_enabled || record.kind == FileKind::Folder {
-                    continue;
-                }
-                let extracted = match extract_document(&path) {
-                    Ok(value) => value,
-                    Err(_) => {
-                        skipped_items = skipped_items.saturating_add(1);
-                        continue;
-                    }
-                };
-                let document = IndexedDocument {
-                    stable_id: id.clone(),
-                    path,
-                    content_hash: extracted.content_hash,
-                    extraction_version: extracted.extraction_version,
-                    chunks: extracted.chunks,
-                };
-                self.database
-                    .upsert_document(&root, &document)
-                    .map_err(|error| search_failure("update the index", error))?;
-                if requested_root.cloud_enrichment
-                    && let Some(kind) = extracted.pending_enrichment
-                {
-                    let route = if kind == "ocr" {
-                        "lumen.vision.cloud"
-                    } else {
-                        "lumen.audio.cloud"
-                    };
-                    self.database
-                        .enqueue_enrichment(&id, &kind, route)
-                        .map_err(|error| search_failure("queue enrichment", error))?;
-                }
-            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        if self.generation.load(Ordering::SeqCst) != generation {
-            return Ok(self.snapshot());
-        }
-        self.database
-            .retain_inventory(&inventory)
-            .map_err(|error| search_failure("remove stale index inventory", error))?;
-        let (stored_items, queued_enrichment) = self
-            .database
-            .counts()
-            .map_err(|error| search_failure("read index status", error))?;
-        let status = IndexStatus {
-            phase: if skipped_items > 0 {
-                "degraded"
-            } else {
-                "ready"
-            }
-            .to_owned(),
-            indexed_items: stored_items,
-            queued_enrichment,
-            skipped_items,
-            message: if content_enabled {
-                format!("Indexed {indexed_items} local items")
-            } else {
-                format!("Updated {indexed_items} filenames; content work remains paused")
-            },
-        };
-        self.set_status(status.clone());
-        Ok(status)
+        Err(search_failure("finish test indexing", "timed out"))
     }
 
     #[cfg(test)]
@@ -1045,31 +1569,14 @@ pub fn get_index_status(state: State<'_, IndexRuntime>) -> IndexStatus {
 
 #[tauri::command]
 pub async fn synchronize_index_roots(
-    app: AppHandle,
     state: State<'_, IndexRuntime>,
-    enrichment: State<'_, crate::gateway::EnrichmentSupervisor>,
     activity: State<'_, crate::activity::ActivityRuntime>,
     roots: Vec<IndexRootRequest>,
 ) -> Result<IndexStatus, SearchFailure> {
-    let activity_snapshot = activity.snapshot();
-    let content_enabled =
-        activity_snapshot.background_policy == crate::activity::BackgroundPolicy::Normal;
-    let runtime = state.inner().clone();
-    let worker_runtime = runtime.clone();
-    let status = tauri::async_runtime::spawn_blocking(move || {
-        worker_runtime.synchronize_with_content(roots, content_enabled)
-    })
-    .await
-    .map_err(|error| search_failure("join the indexing worker", error))??;
-    if content_enabled && let Ok(jobs) = runtime.pending_enrichment() {
-        enrichment.inner().sync_jobs(&jobs).await;
-    }
-    if content_enabled {
-        let registry = app.state::<crate::gateway::registry::ProviderRegistry>();
-        runtime.queue_embedding_jobs(&embedding::active_model_key(registry.inner()))?;
-        schedule_embedding_worker(app, runtime);
-    }
-    Ok(status)
+    state.configure_roots(
+        roots,
+        activity.snapshot().background_policy == crate::activity::BackgroundPolicy::Normal,
+    )
 }
 
 #[tauri::command]

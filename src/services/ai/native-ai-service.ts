@@ -1,4 +1,5 @@
 import {invoke} from '@tauri-apps/api/core';
+import {z} from 'zod';
 
 import type {RuntimeMode} from '../answer/answer.types';
 
@@ -41,13 +42,16 @@ export interface EnrichmentHealth {
   detail?: string;
 }
 
-export interface IndexStatus {
-  phase: string;
-  indexedItems: number;
-  queuedEnrichment: number;
-  skippedItems: number;
-  message: string;
-}
+export const indexStatusSchema = z.object({
+  phase: z.enum(['indexing', 'ready', 'paused', 'degraded']),
+  generation: z.number().int().nonnegative(),
+  pendingItems: z.number().int().nonnegative(),
+  indexedItems: z.number().int().nonnegative(),
+  queuedEnrichment: z.number().int().nonnegative(),
+  skippedItems: z.number().int().nonnegative(),
+  message: z.string(),
+});
+export type IndexStatus = z.infer<typeof indexStatusSchema>;
 
 export interface IndexRootInput {
   path: string;
@@ -73,6 +77,6 @@ export const nativeAiService = {
   pauseEnrichment: () => invoke<void>('pause_enrichment'),
   resumeEnrichment: () => invoke<void>('resume_enrichment'),
   restartEnrichment: () => invoke<void>('restart_enrichment'),
-  indexStatus: () => invoke<IndexStatus>('get_index_status'),
-  synchronizeRoots: (roots: IndexRootInput[]) => invoke<IndexStatus>('synchronize_index_roots', {roots}),
+  indexStatus: async () => indexStatusSchema.parse(await invoke<unknown>('get_index_status')),
+  synchronizeRoots: async (roots: IndexRootInput[]) => indexStatusSchema.parse(await invoke<unknown>('synchronize_index_roots', {roots})),
 };

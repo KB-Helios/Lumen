@@ -215,6 +215,7 @@ pub fn run() {
                 &vector_extension,
                 history_enabled,
             )?);
+            app.state::<search::IndexRuntime>().start_index_lifecycle(app.handle().clone());
             app.manage(std::sync::Arc::new(windows_ai::WindowsAiRuntime::new(
                 &data_directory,
                 &app.path().resource_dir()?,
@@ -437,6 +438,11 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<search::IndexRuntime>().stop_index_worker();
+            }
+        });
 }

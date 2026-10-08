@@ -376,32 +376,38 @@ fn observe_activity() -> ObservedActivity {
 #[tauri::command]
 pub fn get_activity_status(
     state: State<'_, ActivityRuntime>,
+    index: State<'_, crate::search::IndexRuntime>,
     enrichment: State<'_, crate::gateway::EnrichmentSupervisor>,
 ) -> ActivitySnapshot {
     let snapshot = state.snapshot();
     enrichment.set_activity_paused(snapshot.background_policy != BackgroundPolicy::Normal);
+    index.set_content_enabled(snapshot.background_policy == BackgroundPolicy::Normal);
     snapshot
 }
 
 #[tauri::command]
 pub fn set_activity_policy(
     state: State<'_, ActivityRuntime>,
+    index: State<'_, crate::search::IndexRuntime>,
     enrichment: State<'_, crate::gateway::EnrichmentSupervisor>,
     policy: ActivityPolicy,
 ) -> Result<ActivitySnapshot, String> {
     let snapshot = state.set_policy(policy)?;
     enrichment.set_activity_paused(snapshot.background_policy != BackgroundPolicy::Normal);
+    index.set_content_enabled(snapshot.background_policy == BackgroundPolicy::Normal);
     Ok(snapshot)
 }
 
 #[tauri::command]
 pub fn set_user_pause(
     state: State<'_, ActivityRuntime>,
+    index: State<'_, crate::search::IndexRuntime>,
     enrichment: State<'_, crate::gateway::EnrichmentSupervisor>,
     paused: bool,
 ) -> Result<ActivitySnapshot, String> {
     let snapshot = state.set_user_paused(paused)?;
     enrichment.set_activity_paused(snapshot.background_policy != BackgroundPolicy::Normal);
+    index.set_content_enabled(snapshot.background_policy == BackgroundPolicy::Normal);
     Ok(snapshot)
 }
 

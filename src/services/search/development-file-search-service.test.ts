@@ -2,6 +2,15 @@ import {describe, expect, it, vi} from 'vitest';
 
 import {DevelopmentFileSearchService} from './development-file-search-service';
 
+const readyStatus = {phase: 'ready', generation: 1, pendingItems: 0, indexedItems: 1, queuedEnrichment: 0, skippedItems: 0, message: 'Ready'};
+
+function createService(options: ConstructorParameters<typeof DevelopmentFileSearchService>[0]) {
+  return new DevelopmentFileSearchService({...options, invoke: async (command, args) => {
+    const value = await options.invoke?.(command, args);
+    return value === undefined && (command === 'synchronize_index_roots' || command === 'get_index_status') ? readyStatus : value;
+  }});
+}
+
 const request = {
   requestId: 7,
   query: 'read',
@@ -42,9 +51,52 @@ function nativeResponse(items: unknown[]) {
 }
 
 describe('DevelopmentFileSearchService', () => {
+  it('updates subscribed native progress after asynchronous work completes without another query', async () => {
+    vi.useFakeTimers();
+    let phase = 'indexing';
+    const phases: string[] = [];
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'synchronize_index_roots' || command === 'get_index_status') return {...readyStatus, phase, pendingItems: phase === 'indexing' ? 1 : 0};
+      if (command === 'search_hybrid') return nativeResponse([]);
+    }});
+    const unsubscribe = service.subscribeToStatus(status => phases.push(status.phase));
+    try {
+      await service.search(request);
+      phase = 'ready';
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(phases[phases.length - 1]).toBe('ready');
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+  it.each(['indexing', 'paused'] as const)('keeps native %s status after usable inventory search', async phase => {
+    const statuses: string[] = [];
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'synchronize_index_roots' || command === 'get_index_status') return {phase, generation: 1, pendingItems: 2, indexedItems: 5, queuedEnrichment: 0, skippedItems: 0, message: 'Pending native content'};
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Readme.md')]);
+    }});
+    service.subscribeToStatus(status => statuses.push(status.phase));
+    expect((await service.search(request)).total).toBe(1);
+    expect(statuses[statuses.length - 1]).toBe(phase);
+  });
+
+  it('re-admits unchanged roots after index deletion invalidates the native generation', async () => {
+    let generation = 1;
+    let admissions = 0;
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'synchronize_index_roots') {admissions++; return {phase: 'ready', generation, pendingItems: 0, indexedItems: 1, queuedEnrichment: 0, skippedItems: 0, message: 'Ready'};}
+      if (command === 'get_index_status') return {phase: 'ready', generation, pendingItems: 0, indexedItems: 0, queuedEnrichment: 0, skippedItems: 0, message: 'Deleted'};
+      if (command === 'search_hybrid') return nativeResponse([]);
+    }});
+    await service.search(request);
+    generation++;
+    await service.search({...request, requestId: 8});
+    expect(admissions).toBe(2);
+  });
   it.each([false, true])('surfaces semantic degradation with empty results=%s', async empty => {
     const statuses: {phase: string; message?: string}[] = [];
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
       if (command === 'search_hybrid') return {items: empty ? [] : [{...indexedHit('notes.md'), matchSource: 'content'}],
         semantic: {phase: 'degraded', reason: 'Semantic vectors unavailable; filename and content search remain available.'}};
     }});
@@ -55,7 +107,7 @@ describe('DevelopmentFileSearchService', () => {
     if (!empty) expect(response.groups[0]?.items[0]?.match.source).toBe('content');
   });
   it('reports invalid-response when every fallback root payload is malformed', async () => {
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
       if (command === 'search_hybrid') throw new Error('index offline');
       if (command === 'search_filenames') return {items: [{score: Number.NaN}]};
     }});
@@ -64,7 +116,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('reports partial malformed fallback roots while retaining usable matches', async () => {
     const statuses: string[] = [];
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects', 'C:\\Other'], invoke: async (command, args) => {
+    const service = createService({getRoots: () => ['C:\\Projects', 'C:\\Other'], invoke: async (command, args) => {
       if (command === 'search_hybrid') throw new Error('index offline');
       if (command === 'search_filenames') return args?.root === 'C:\\Other' ? {items: []} : rustResponse();
     }});
@@ -76,14 +128,14 @@ describe('DevelopmentFileSearchService', () => {
   it('admits a current-root duplicate after rejecting a revoked-root copy', async () => {
     const current = indexedHit('Readme.md');
     const revoked = {...current, stableId: 'indexed:revoked', rootPath: 'C:\\Revoked'};
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
       if (command === 'search_hybrid') return nativeResponse([revoked, current]);
     }});
     expect((await service.search(request)).groups[0]?.items.map(item => item.id)).toEqual(['indexed:Readme.md']);
   });
 
   it('forwards fallback scope and filters before native response limits', async () => {
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command, args) => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async (command, args) => {
       if (command === 'search_hybrid') throw new Error('index offline');
       if (command === 'search_filenames') {
         // IPC is unavailable in jsdom; the real cap case is covered in matching.rs.
@@ -102,7 +154,7 @@ describe('DevelopmentFileSearchService', () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === 'search_hybrid') return new Promise(resolve => {completeSearch = resolve;});
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => roots, invoke});
+    const service = createService({getRoots: () => roots, invoke});
     const pending = service.search(request);
     await vi.waitFor(() => expect(completeSearch).toBeDefined());
     roots = [];
@@ -114,7 +166,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('treats a rejected undefined index response as a genuine fallback failure', async () => {
     const statuses: string[] = [];
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
       if (command === 'search_hybrid') return Promise.reject(undefined);
       if (command === 'search_filenames') return rustResponse();
     }});
@@ -128,14 +180,14 @@ describe('DevelopmentFileSearchService', () => {
       if (command === 'synchronize_index_roots') throw new Error('Index database unavailable');
       if (command === 'search_filenames') return rustResponse();
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
     await expect(service.search(request)).resolves.toMatchObject({total: 1});
     expect(invoke).not.toHaveBeenCalledWith('search_hybrid', expect.anything());
     await expect(service.search({...request, scope: 'recent'})).rejects.toMatchObject({code: 'search-failed'});
   });
 
   it('uses the native ranked inventory without adding unfiltered traversal results', async () => {
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
       if (command === 'search_hybrid') return nativeResponse([indexedHit('report.md')]);
       if (command === 'search_filenames') return {...rustResponse(), items: [{...rustResponse().items[0], name: 'report.tmp'}]};
     }});
@@ -144,7 +196,7 @@ describe('DevelopmentFileSearchService', () => {
   });
 
   it('preserves native order, metadata and identity when filename candidates overlap', async () => {
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
       if (command === 'search_hybrid') return nativeResponse([indexedHit('z-report.md', 0.05), indexedHit('Readme.md', 0.2)]);
       if (command === 'search_filenames') return rustResponse();
     }});
@@ -154,14 +206,14 @@ describe('DevelopmentFileSearchService', () => {
   });
 
   it.each(['recent', 'related'] as const)('rejects %s index failures', async (scope) => {
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
       if (command.startsWith('search_')) throw new Error('index unavailable');
     }});
     await expect(service.search({...request, scope, relatedTo: 'indexed:source'})).rejects.toMatchObject({recoverable: true});
   });
 
   it('rejects invalid native index payloads instead of masking them with filename results', async () => {
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async (command) => {
       if (command === 'search_hybrid') return nativeResponse([{rank: Number.NaN}]);
       if (command === 'search_filenames') return rustResponse();
     }});
@@ -171,7 +223,7 @@ describe('DevelopmentFileSearchService', () => {
   it('reports filename fallback as degraded and forwards root exclusions', async () => {
     const statuses: string[] = [];
     const policies: unknown[] = [];
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'],
+    const service = createService({getRoots: () => ['C:\\Projects'],
       getRootConfigurations: () => [{id: 'root', path: 'C:\\Projects', cloudEnrichment: false, exclusions: ['cache'], includeHidden: false, maxFileSizeMb: 256}],
       invoke: async (command, args) => {
         if (command === 'search_hybrid') throw new Error('index offline');
@@ -186,7 +238,7 @@ describe('DevelopmentFileSearchService', () => {
   it('synchronizes empty roots and permanently clears previously cached admission', async () => {
     let roots = ['C:\\Projects'];
     const synchronized: unknown[] = [];
-    const service = new DevelopmentFileSearchService({getRoots: () => roots, invoke: async (command, args) => {
+    const service = createService({getRoots: () => roots, invoke: async (command, args) => {
       if (command === 'search_hybrid') return nativeResponse([indexedHit('Readme.md')]);
       if (command === 'search_filenames') return rustResponse();
       if (command === 'synchronize_index_roots') synchronized.push(args?.roots);
@@ -201,7 +253,7 @@ describe('DevelopmentFileSearchService', () => {
   it('rejects a preview whose root is revoked while the native read is pending', async () => {
     let roots = ['C:\\Projects'];
     let finishPreview!: (value: unknown) => void;
-    const service = new DevelopmentFileSearchService({getRoots: () => roots, invoke: async (command) => {
+    const service = createService({getRoots: () => roots, invoke: async (command) => {
       if (command === 'search_filenames') return rustResponse();
       if (command === 'search_hybrid') return nativeResponse([indexedHit('Readme.md')]);
       if (command === 'get_basic_preview') return new Promise((resolve) => {finishPreview = resolve;});
@@ -218,7 +270,7 @@ describe('DevelopmentFileSearchService', () => {
   it.each(['preview', 'open', 'folder'] as const)('rejects cached %s admission after its root is revoked', async (action) => {
     let roots = ['C:\\Projects'];
     const nativeActions: string[] = [];
-    const service = new DevelopmentFileSearchService({
+    const service = createService({
       getRoots: () => roots,
       invoke: async (command) => {
         if (command === 'search_filenames') return rustResponse();
@@ -256,9 +308,9 @@ describe('DevelopmentFileSearchService', () => {
         embeddingModel: 'lumen.embed.local',
         pinned: true,
       }]);
-      return {phase: 'ready', indexedItems: 1, queuedEnrichment: 0, skippedItems: 0, message: 'ready'};
+      return readyStatus;
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
 
     const response = await service.search(request);
 
@@ -287,7 +339,7 @@ describe('DevelopmentFileSearchService', () => {
       if (command === 'search_hybrid') return Promise.resolve(nativeResponse([]));
       return Promise.resolve(undefined);
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
 
     const search = service.search(request);
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('synchronize_index_roots', expect.anything()));
@@ -309,7 +361,7 @@ describe('DevelopmentFileSearchService', () => {
     const invoke = vi.fn(async (command: string) => command === 'search_filenames'
       ? {...rustResponse(), items: [], total: 0}
       : command === 'search_hybrid' ? nativeResponse([]) : undefined);
-    const service = new DevelopmentFileSearchService({
+    const service = createService({
       getRoots: () => ['C:\\Projects'],
       getRootConfigurations: () => [{
         id: 'projects',
@@ -338,7 +390,7 @@ describe('DevelopmentFileSearchService', () => {
       if (command === 'search_hybrid') throw new Error('Index unavailable');
       if (command === 'search_filenames') return rustResponse();
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
 
     const first = await service.search(request);
     const second = await service.search({...request, requestId: 8});
@@ -358,7 +410,7 @@ describe('DevelopmentFileSearchService', () => {
       if (command === 'search_hybrid') return nativeResponse([indexedHit('Older exact.md', 0.05), indexedHit('Recent readme.md', 0.18)]);
       return undefined;
     });
-    const service = new DevelopmentFileSearchService({
+    const service = createService({
       getRoots: () => ['C:\\Projects'],
       getSearchPreferences: () => ({
         filenamePriority: 20,
@@ -398,7 +450,7 @@ describe('DevelopmentFileSearchService', () => {
       };
       return undefined;
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
     const response = await service.search(request);
     const id = response.groups[0]?.items[0]?.id ?? '';
 
@@ -434,7 +486,7 @@ describe('DevelopmentFileSearchService', () => {
       if (command === 'set_indexed_file_pinned') return {applied: true, pinned: true};
       return undefined;
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
 
     const response = await service.search({...request, scope: 'related', relatedTo: 'indexed:source'});
     expect(response.groups[0]?.items[0]).toMatchObject({
@@ -468,7 +520,7 @@ describe('DevelopmentFileSearchService', () => {
       };
       return undefined;
     });
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
     const search = await service.search(request);
     const result = search.groups[0]?.items[0];
 
@@ -487,7 +539,7 @@ describe('DevelopmentFileSearchService', () => {
 
   it('returns the no-root state without invoking native traversal', async () => {
     const invoke = vi.fn();
-    const service = new DevelopmentFileSearchService({getRoots: () => [], invoke});
+    const service = createService({getRoots: () => [], invoke});
     const statuses: string[] = [];
     service.subscribeToStatus((status) => statuses.push(status.message ?? ''));
 
@@ -503,7 +555,7 @@ describe('DevelopmentFileSearchService', () => {
       message: 'Root access was denied.',
       recoverable: true,
     }));
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Private'], invoke});
+    const service = createService({getRoots: () => ['C:\\Private'], invoke});
 
     await expect(service.search(request)).rejects.toMatchObject({
       code: 'permission-denied',
@@ -514,7 +566,7 @@ describe('DevelopmentFileSearchService', () => {
   it('honors aborts around non-cancellable invoke calls', async () => {
     let resolveInvoke: ((value: unknown) => void) | undefined;
     const invoke = vi.fn(() => new Promise((resolve) => { resolveInvoke = resolve; }));
-    const service = new DevelopmentFileSearchService({getRoots: () => ['C:\\Projects'], invoke});
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
     const controller = new AbortController();
     const pending = service.search(request, controller.signal);
     controller.abort();

@@ -1,5 +1,6 @@
 import {invoke as tauriInvoke} from '@tauri-apps/api/core';
 import {z} from 'zod';
+import {indexStatusSchema, type IndexStatus} from '../ai/native-ai-service';
 
 import type {SearchService} from './search-service';
 import {
@@ -225,6 +226,10 @@ export class DevelopmentFileSearchService implements SearchService {
   private synchronizedRootSignature = '';
   private pendingRootSignature = '';
   private rootSynchronization: Promise<void> = Promise.resolve();
+  private nativeStatus?: IndexStatus;
+  private searchDegradation?: string;
+  private statusTimer?: ReturnType<typeof setInterval>;
+  private statusPollRunning = false;
 
   constructor({getRoots, getRootConfigurations, getSearchPreferences = () => defaultSearchPreferences, invoke = defaultInvoke}: DevelopmentFileSearchServiceOptions) {
     this.getRoots = getRoots;
@@ -348,8 +353,10 @@ export class DevelopmentFileSearchService implements SearchService {
       const seen = new Set<string>();
       mapped = mapped.filter(item => {const path = normalizedPath(item.path); if (seen.has(path)) return false; seen.add(path); return true;});
     }
-    this.publishStatus({phase: degradationMessage ? 'degraded' : 'ready', indexedItems: mapped.length,
-      message: degradationMessage ?? `${uniqueRoots(this.getRoots()).length} local roots ready`,
+    this.searchDegradation = degradationMessage;
+    this.publishStatus({phase: degradationMessage ? 'degraded' : this.nativeStatus?.phase ?? 'indexing', indexedItems: this.nativeStatus?.indexedItems,
+      generation: this.nativeStatus?.generation, pendingItems: this.nativeStatus?.pendingItems,
+      message: degradationMessage ?? this.nativeStatus?.message ?? 'Preparing local inventory',
       updatedAt: new Date().toISOString()});
     const visible = mapped.slice(0, request.limit);
     return {requestId: request.requestId, groups: visible.length ? [{id: 'local-files', label: 'Local files', items: visible}] : [],
@@ -425,14 +432,38 @@ export class DevelopmentFileSearchService implements SearchService {
   subscribeToStatus(listener: (status: SearchStatus) => void): () => void {
     this.listeners.add(listener);
     listener(this.createStatus());
-    return () => this.listeners.delete(listener);
+    this.statusTimer ??= setInterval(() => {void this.pollStatus();}, 1000);
+    return () => {
+      this.listeners.delete(listener);
+      if (!this.listeners.size && this.statusTimer !== undefined) {
+        clearInterval(this.statusTimer);
+        this.statusTimer = undefined;
+      }
+    };
+  }
+
+  private async pollStatus() {
+    if (this.statusPollRunning || !this.listeners.size || !this.getRoots().length) return;
+    this.statusPollRunning = true;
+    try {
+      const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
+      if (JSON.stringify(status) === JSON.stringify(this.nativeStatus)) return;
+      if (status.generation !== this.nativeStatus?.generation) this.synchronizedRootSignature = '';
+      this.nativeStatus = status;
+      this.publishStatus({...status, phase: this.searchDegradation ? 'degraded' : status.phase,
+        message: this.searchDegradation ?? status.message, updatedAt: new Date().toISOString()});
+    } catch {
+      this.publishStatus({phase: 'degraded', message: 'Local index status is unavailable.', updatedAt: new Date().toISOString()});
+    } finally {
+      this.statusPollRunning = false;
+    }
   }
 
   private createStatus(): SearchStatus {
     const roots = uniqueRoots(this.getRoots());
     return roots.length > 0
       ? {
-          phase: 'ready',
+          phase: this.nativeStatus?.phase ?? 'indexing',
           message: `${roots.length} local ${roots.length === 1 ? 'root' : 'roots'} configured`,
           updatedAt: new Date().toISOString(),
         }
@@ -453,7 +484,7 @@ export class DevelopmentFileSearchService implements SearchService {
     }))).filter(configuration => roots.some(root => normalizedPath(root) === normalizedPath(configuration.path)));
   }
 
-  private synchronizeRoots(roots: readonly string[]): Promise<void> {
+  private async synchronizeRoots(roots: readonly string[]): Promise<void> {
     const configuredRoots = this.rootConfigurations(roots);
     const signature = JSON.stringify(configuredRoots.map((root) => ({
       path: normalizedPath(root.path),
@@ -463,16 +494,19 @@ export class DevelopmentFileSearchService implements SearchService {
       maxFileSizeMb: root.maxFileSizeMb,
     })));
     if (signature === this.synchronizedRootSignature && !this.pendingRootSignature) {
-      return Promise.resolve();
+      const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
+      if (status.generation === this.nativeStatus?.generation) {
+        this.nativeStatus = status;
+        return;
+      }
+      this.synchronizedRootSignature = '';
     }
     if (signature === this.pendingRootSignature) {
       return this.rootSynchronization;
     }
     this.pendingRootSignature = signature;
-    const previous = this.rootSynchronization.catch(() => undefined);
-    const synchronization = previous.then(async () => {
-      if (signature === this.synchronizedRootSignature) return;
-      await this.invoke('synchronize_index_roots', {
+    const synchronization = (async () => {
+      const status = indexStatusSchema.parse(await this.invoke('synchronize_index_roots', {
         roots: configuredRoots.map((root) => ({
           path: root.path,
           cloudEnrichment: root.cloudEnrichment,
@@ -480,9 +514,12 @@ export class DevelopmentFileSearchService implements SearchService {
           includeHidden: root.includeHidden,
           maxFileSizeMb: root.maxFileSizeMb,
         })),
-      });
-      this.synchronizedRootSignature = signature;
-    });
+      }));
+      if (this.pendingRootSignature === signature) {
+        this.nativeStatus = status;
+        this.synchronizedRootSignature = signature;
+      }
+    })();
     this.rootSynchronization = synchronization;
     return synchronization.finally(() => {
       if (this.pendingRootSignature === signature) {
