@@ -128,6 +128,73 @@ fn worker_same_size_same_mtime_event_forces_content_refresh() {
 }
 
 #[test]
+fn periodic_reconciliation_preserves_delivered_dirty_content_events() {
+    let (fixture, runtime, roots) = setup("fresh-periodic-dirty");
+    let path = fixture.file("notes.txt", b"firstquasar");
+    admit(&runtime, roots, true);
+    eventually("initial content indexed", || {
+        !runtime
+            .answer_context("firstquasar", 10)
+            .unwrap()
+            .is_empty()
+    });
+    runtime.set_content_enabled(false);
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (done_tx, done_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Mutex::new(release_rx);
+    let stage = std::sync::atomic::AtomicU64::new(0);
+    *runtime.work.inventory_cycle_gate.lock().unwrap() = Some(Arc::new(move |dirty, before| {
+        if before
+            && dirty
+            && stage
+                .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        {
+            entered_tx.send(()).unwrap();
+            let _ = release_rx.lock().unwrap().recv();
+        } else if !before
+            && stage
+                .compare_exchange(1, 2, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        {
+            done_tx.send(()).unwrap();
+            let _ = release_rx.lock().unwrap().recv();
+        }
+    }));
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, b"nextnebulaa").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    entered_rx.recv_timeout(Duration::from_secs(4)).unwrap();
+    runtime.work.periodic_due.store(true, Ordering::SeqCst);
+    release_tx.send(()).unwrap();
+    done_rx.recv_timeout(Duration::from_secs(4)).unwrap();
+    let old = runtime.answer_context("firstquasar", 10).unwrap();
+    let pending = runtime.work.pending.lock().unwrap().len();
+    release_tx.send(()).unwrap();
+    assert!(
+        old.is_empty(),
+        "periodic reconciliation must invalidate the delivered dirty body"
+    );
+    assert_eq!(
+        pending, 1,
+        "delivered dirty content remains pending while paused"
+    );
+    runtime.set_content_enabled(true);
+    eventually("dirty body extracted after resume", || {
+        !runtime
+            .answer_context("nextnebulaa", 10)
+            .unwrap()
+            .is_empty()
+    });
+}
+
+#[test]
 fn worker_paused_content_stays_pending_and_resumes() {
     let (fixture, runtime, roots) = setup("fresh-pause");
     fixture.file("notes.txt", b"pendingnebula");
@@ -534,4 +601,168 @@ fn worker_excluded_changes_are_never_admitted() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn durable_enrichment_is_not_dispatchable_before_current_root_admission() {
+    for first_admission in ["consented", "revoked", "empty"] {
+        let (fixture, runtime, mut roots) = setup("fresh-startup-consent");
+        fixture.file("scan.png", &[0, 1, 2]);
+        roots[0].cloud_enrichment = true;
+        admit(&runtime, roots.clone(), true);
+        eventually("consented durable job created", || {
+            runtime.database.queued_jobs().unwrap().len() == 1
+        });
+        drop(runtime);
+        let reopened = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            Path::new("missing-vector.dll"),
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            reopened.database.queued_jobs().unwrap().len(),
+            1,
+            "fixture must reopen a real persisted queue"
+        );
+        assert!(
+            reopened.pending_enrichment().unwrap().is_empty(),
+            "startup may not dispatch durable jobs before current root admission"
+        );
+        if first_admission != "consented" {
+            roots[0].cloud_enrichment = false;
+            admit(
+                &reopened,
+                if first_admission == "empty" {
+                    Vec::new()
+                } else {
+                    roots
+                },
+                false,
+            );
+            assert!(
+                reopened.pending_enrichment().unwrap().is_empty(),
+                "first empty/revoked admission must not dispatch durable work"
+            );
+            assert!(
+                reopened.database.queued_jobs().unwrap().is_empty(),
+                "revoked durable jobs are pruned at admission"
+            );
+            continue;
+        }
+        admit(&reopened, roots.clone(), false);
+        assert_eq!(
+            reopened.pending_enrichment().unwrap().len(),
+            1,
+            "current explicit consent admits the queued job"
+        );
+        let captured = reopened.pending_enrichment().unwrap().remove(0);
+        assert!(reopened.enrichment_dispatch_is_admitted(&captured).unwrap());
+        roots[0].cloud_enrichment = false;
+        admit(&reopened, roots, false);
+        assert!(
+            reopened.pending_enrichment().unwrap().is_empty(),
+            "revoked root cloud grant must not dispatch"
+        );
+        assert!(
+            !reopened.enrichment_dispatch_is_admitted(&captured).unwrap(),
+            "previously captured jobs must be revalidated before dispatch"
+        );
+        admit(&reopened, Vec::new(), false);
+        assert!(
+            reopened.pending_enrichment().unwrap().is_empty(),
+            "empty configuration must not dispatch"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn replaced_ancestor_cannot_redirect_pending_extraction() {
+    ancestor_replacement(false);
+}
+
+#[cfg(windows)]
+#[test]
+fn replaced_ancestor_cannot_redirect_content_commit() {
+    ancestor_replacement(true);
+}
+
+#[cfg(windows)]
+fn ancestor_replacement(replace_at_commit: bool) {
+    let (fixture, mut runtime, mut roots) = setup("fresh-ancestor");
+    let path = fixture.file("parent/root/notes.txt", b"firstquasar");
+    let ancestor = fixture.root().join("parent");
+    let admitted_root = ancestor.join("root");
+    roots[0].path = admitted_root.to_string_lossy().into_owned();
+    let redirected = fixture.outside_file("redirect/root/notes.txt", b"nextnebulaa");
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&redirected)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    admit(&runtime, roots, false);
+    eventually("pending inventory prepared", || {
+        runtime.snapshot().pending_items == 1 && runtime.snapshot().phase == "paused"
+    });
+    // Windows' live watch handle prevents ancestor rename. Detach the owned OS watcher,
+    // retain actual pending work, and exercise its production extraction/commit core directly.
+    drop(runtime.worker.take());
+    runtime.work.stop.store(false, Ordering::SeqCst);
+    let extraction_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let count = extraction_count.clone();
+    *runtime.extraction_gate.lock().unwrap() = Some(Arc::new(move |_| {
+        count.fetch_add(1, Ordering::SeqCst);
+    }));
+    let (commit_tx, commit_rx) = mpsc::channel();
+    let (release_commit_tx, release_commit_rx) = mpsc::channel();
+    let release_commit_rx = Mutex::new(release_commit_rx);
+    if replace_at_commit {
+        *runtime.commit_gate.lock().unwrap() = Some(Arc::new(move |_| {
+            commit_tx.send(()).unwrap();
+            let _ = release_commit_rx.lock().unwrap().recv();
+        }));
+    }
+    runtime.work.content_enabled.store(true, Ordering::SeqCst);
+    let extract = if replace_at_commit {
+        let cloned = runtime.clone();
+        let task = std::thread::spawn(move || cloned.extract_pending());
+        commit_rx.recv_timeout(Duration::from_secs(4)).unwrap();
+        Some(task)
+    } else {
+        None
+    };
+    let saved = fixture.root().join("saved-parent");
+    std::fs::rename(&ancestor, &saved).unwrap();
+    std::os::windows::fs::symlink_dir(redirected.parent().unwrap().parent().unwrap(), &ancestor)
+        .unwrap();
+    if let Some(extract) = extract {
+        release_commit_tx.send(()).unwrap();
+        extract.join().unwrap().unwrap();
+    } else {
+        runtime.extract_pending().unwrap();
+    }
+    let outside_body = runtime.answer_context("nextnebulaa", 10).unwrap();
+    let original_body = runtime.answer_context("firstquasar", 10).unwrap();
+    runtime.work.content_enabled.store(false, Ordering::SeqCst);
+    // Restore the fixture before assertions/unblocking so teardown only touches its owned tree.
+    std::fs::remove_dir(&ancestor).unwrap();
+    std::fs::rename(saved, ancestor).unwrap();
+    assert!(
+        outside_body.is_empty(),
+        "redirected outside content must never be committed"
+    );
+    assert!(
+        original_body.is_empty(),
+        "a changed admitted boundary must reject a pending commit"
+    );
+    if !replace_at_commit {
+        assert_eq!(
+            extraction_count.load(Ordering::SeqCst),
+            0,
+            "reject the redirected boundary before actual extraction"
+        );
+    }
 }

@@ -51,6 +51,52 @@ function nativeResponse(items: unknown[]) {
 }
 
 describe('DevelopmentFileSearchService', () => {
+  it('publishes recovery after a failed poll even when healthy native status is unchanged', async () => {
+    vi.useFakeTimers();
+    let failPoll = true;
+    const phases: string[] = [];
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'get_index_status' && failPoll) throw new Error('temporarily unavailable');
+      if (command === 'search_hybrid') return nativeResponse([]);
+      return readyStatus;
+    }});
+    const unsubscribe = service.subscribeToStatus(status => phases.push(status.phase));
+    try {
+      await service.search(request);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(phases[phases.length - 1]).toBe('degraded');
+      failPoll = false;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(phases[phases.length - 1]).toBe('ready');
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+  it('does not re-admit revoked roots when an older status read finishes after a new admission', async () => {
+    let roots = ['C:\\Old'];
+    let releaseStatus!: (value: unknown) => void;
+    const admissions: string[][] = [];
+    let delayStatus = false;
+    const service = createService({getRoots: () => roots, invoke: async (command, args) => {
+      if (command === 'synchronize_index_roots') {
+        admissions.push((args?.roots as {path: string}[]).map(root => root.path));
+        return {...readyStatus, generation: admissions.length};
+      }
+      if (command === 'get_index_status' && delayStatus) return new Promise(resolve => {releaseStatus = resolve;});
+      if (command === 'search_hybrid') return nativeResponse([]);
+      return readyStatus;
+    }});
+    await service.search(request);
+    delayStatus = true;
+    const olderSearch = service.search({...request, requestId: 8});
+    await vi.waitFor(() => expect(releaseStatus).toBeDefined());
+    roots = ['C:\\New'];
+    await service.search({...request, requestId: 9});
+    releaseStatus({...readyStatus, generation: 1});
+    await olderSearch;
+    expect(admissions).toEqual([['C:\\Old'], ['C:\\New']]);
+  });
   it('updates subscribed native progress after asynchronous work completes without another query', async () => {
     vi.useFakeTimers();
     let phase = 'indexing';

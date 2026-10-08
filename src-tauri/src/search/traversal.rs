@@ -135,14 +135,21 @@ pub fn traverse(root: &Path) -> Result<TraversalOutcome, SearchFailure> {
     traverse_with_policy(root, &TraversalPolicy::default())
 }
 
+// `root` is the immutable canonical path captured at configuration admission.
+pub(super) fn admitted_root_is_current(root: &Path) -> bool {
+    fs::canonicalize(root).is_ok_and(|canonical| canonical == root)
+        && root.ancestors().all(|ancestor| {
+            fs::symlink_metadata(ancestor)
+                .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+        })
+}
+
 pub(super) fn policy_record(
     root: &Path,
     path: &Path,
     policy: &TraversalPolicy,
 ) -> Result<Option<FileRecord>, SearchFailure> {
-    if !fs::symlink_metadata(root)
-        .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
-    {
+    if !admitted_root_is_current(root) {
         return Ok(None);
     }
     let Ok(relative) = path.strip_prefix(root) else {
@@ -173,6 +180,9 @@ pub(super) fn policy_record(
         return Ok(None);
     };
     if metadata.is_file() && metadata.len() > policy.max_file_size_bytes {
+        return Ok(None);
+    }
+    if !fs::canonicalize(path).is_ok_and(|canonical| canonical.starts_with(root)) {
         return Ok(None);
     }
     file_record(root, path).map(Some)

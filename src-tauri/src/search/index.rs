@@ -1542,6 +1542,18 @@ impl IndexDatabase {
             .map_err(IndexError::from)
     }
 
+    pub fn enrichment_job_is_queued(&self, job: &EnrichmentJobRecord) -> IndexResult<bool> {
+        let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM enrichment_jobs JOIN files ON files.id = enrichment_jobs.file_id
+             WHERE files.stable_id = ?1 AND files.content_hash = ?2
+               AND enrichment_jobs.content_hash = ?2 AND enrichment_jobs.kind = ?3
+               AND enrichment_jobs.route = ?4 AND enrichment_jobs.status = 'queued')",
+            params![job.file_id, job.content_hash, job.kind, job.route],
+            |row| row.get(0),
+        ).map_err(IndexError::from)
+    }
+
     pub fn delete_indexed_content(&self) -> IndexResult<DeletedIndexData> {
         let mut connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
         let transaction = connection.transaction()?;

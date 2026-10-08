@@ -225,11 +225,13 @@ export class DevelopmentFileSearchService implements SearchService {
   private readonly listeners = new Set<(status: SearchStatus) => void>();
   private synchronizedRootSignature = '';
   private pendingRootSignature = '';
+  private configurationOperation = 0;
   private rootSynchronization: Promise<void> = Promise.resolve();
   private nativeStatus?: IndexStatus;
   private searchDegradation?: string;
   private statusTimer?: ReturnType<typeof setInterval>;
   private statusPollRunning = false;
+  private statusPollFailed = false;
 
   constructor({getRoots, getRootConfigurations, getSearchPreferences = () => defaultSearchPreferences, invoke = defaultInvoke}: DevelopmentFileSearchServiceOptions) {
     this.getRoots = getRoots;
@@ -447,12 +449,14 @@ export class DevelopmentFileSearchService implements SearchService {
     this.statusPollRunning = true;
     try {
       const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
-      if (JSON.stringify(status) === JSON.stringify(this.nativeStatus)) return;
+      if (!this.statusPollFailed && JSON.stringify(status) === JSON.stringify(this.nativeStatus)) return;
+      this.statusPollFailed = false;
       if (status.generation !== this.nativeStatus?.generation) this.synchronizedRootSignature = '';
       this.nativeStatus = status;
       this.publishStatus({...status, phase: this.searchDegradation ? 'degraded' : status.phase,
         message: this.searchDegradation ?? status.message, updatedAt: new Date().toISOString()});
     } catch {
+      this.statusPollFailed = true;
       this.publishStatus({phase: 'degraded', message: 'Local index status is unavailable.', updatedAt: new Date().toISOString()});
     } finally {
       this.statusPollRunning = false;
@@ -485,16 +489,21 @@ export class DevelopmentFileSearchService implements SearchService {
   }
 
   private async synchronizeRoots(roots: readonly string[]): Promise<void> {
+    const operation = ++this.configurationOperation;
     const configuredRoots = this.rootConfigurations(roots);
-    const signature = JSON.stringify(configuredRoots.map((root) => ({
+    const signatureOf = (configurations: ReturnType<NonNullable<DevelopmentFileSearchServiceOptions['getRootConfigurations']>>) => JSON.stringify(configurations.map((root) => ({
       path: normalizedPath(root.path),
       cloudEnrichment: root.cloudEnrichment,
       exclusions: root.exclusions,
       includeHidden: root.includeHidden,
       maxFileSizeMb: root.maxFileSizeMb,
     })));
+    const signature = signatureOf(configuredRoots);
+    const current = () => operation === this.configurationOperation
+      && signature === signatureOf(this.rootConfigurations(uniqueRoots(this.getRoots())));
     if (signature === this.synchronizedRootSignature && !this.pendingRootSignature) {
       const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
+      if (!current()) return;
       if (status.generation === this.nativeStatus?.generation) {
         this.nativeStatus = status;
         return;
@@ -504,6 +513,7 @@ export class DevelopmentFileSearchService implements SearchService {
     if (signature === this.pendingRootSignature) {
       return this.rootSynchronization;
     }
+    if (!current()) return;
     this.pendingRootSignature = signature;
     const synchronization = (async () => {
       const status = indexStatusSchema.parse(await this.invoke('synchronize_index_roots', {

@@ -13,6 +13,9 @@ const MAX_DIRTY_PATHS: usize = 1024;
 const DEBOUNCE: Duration = Duration::from_millis(150);
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 
+#[cfg(test)]
+type InventoryCycleGate = Arc<dyn Fn(bool, bool) + Send + Sync>;
+
 #[derive(Clone)]
 pub(super) struct PendingContent {
     pub root: PathBuf,
@@ -26,6 +29,10 @@ pub(super) struct PendingContent {
 
 #[derive(Default)]
 pub(super) struct WorkState {
+    #[cfg(test)]
+    pub inventory_cycle_gate: Mutex<Option<InventoryCycleGate>>,
+    #[cfg(test)]
+    pub periodic_due: AtomicBool,
     pub roots: Mutex<Vec<IndexRootRequest>>,
     pub configured: AtomicBool,
     pub pending: Mutex<HashMap<String, PendingContent>>,
@@ -162,10 +169,20 @@ fn inventory_loop(
                 dirty.clear();
             }
         }
+        #[cfg(test)]
+        let cycle_gate = runtime.work.inventory_cycle_gate.lock().unwrap().clone();
+        #[cfg(test)]
+        if let Some(gate) = cycle_gate {
+            gate(!dirty.is_empty(), true);
+        }
+        let periodic_reconcile = last_reconcile.elapsed() >= RECONCILE_INTERVAL;
+        #[cfg(test)]
+        let periodic_reconcile =
+            periodic_reconcile || runtime.work.periodic_due.swap(false, Ordering::SeqCst);
         let missed_events = overflow.swap(false, Ordering::SeqCst);
         let reconcile = runtime.work.reconcile.swap(false, Ordering::SeqCst)
             || missed_events
-            || last_reconcile.elapsed() >= RECONCILE_INTERVAL;
+            || periodic_reconcile;
         if reconcile {
             let roots = runtime
                 .work
@@ -207,9 +224,13 @@ fn inventory_loop(
                 runtime.work.inventory_failed.store(true, Ordering::SeqCst);
                 runtime.worker_failed(&error.message);
             }
-            dirty.clear();
+            if missed_events {
+                dirty.clear();
+            }
             last_reconcile = Instant::now();
-        } else if !dirty.is_empty() && Instant::now() >= due {
+        }
+        // Metadata reconciliation does not establish content freshness for delivered events.
+        if !dirty.is_empty() && (reconcile || Instant::now() >= due) {
             runtime.work.inventory_running.store(true, Ordering::SeqCst);
             let result = runtime.refresh_paths(dirty.drain().collect());
             runtime
@@ -220,6 +241,12 @@ fn inventory_loop(
                 runtime.work.inventory_failed.store(true, Ordering::SeqCst);
                 runtime.worker_failed(&error.message);
             }
+        }
+        #[cfg(test)]
+        let cycle_gate = runtime.work.inventory_cycle_gate.lock().unwrap().clone();
+        #[cfg(test)]
+        if let Some(gate) = cycle_gate {
+            gate(!dirty.is_empty(), false);
         }
     }
     // Dropping the owned watcher closes OS subscriptions, including all removed roots.

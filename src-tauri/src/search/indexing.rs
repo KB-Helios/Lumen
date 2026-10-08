@@ -373,9 +373,57 @@ impl IndexRuntime {
     pub(crate) fn pending_enrichment(
         &self,
     ) -> Result<Vec<super::EnrichmentJobRecord>, SearchFailure> {
-        self.database
+        if !self.work.configured.load(Ordering::SeqCst) {
+            return Ok(Vec::new());
+        }
+        let jobs = self
+            .database
             .queued_jobs()
-            .map_err(|error| search_failure("read enrichment jobs", error))
+            .map_err(|error| search_failure("read enrichment jobs", error))?;
+        let mut admitted = Vec::new();
+        for job in jobs {
+            if self.enrichment_dispatch_is_admitted(&job)? {
+                admitted.push(job);
+            }
+        }
+        Ok(admitted)
+    }
+
+    fn enrichment_dispatch_is_admitted(
+        &self,
+        job: &super::EnrichmentJobRecord,
+    ) -> Result<bool, SearchFailure> {
+        let _admission = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("admit enrichment dispatch", e))?;
+        if !self.work.configured.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+            || !self
+                .database
+                .enrichment_job_is_queued(job)
+                .map_err(|e| search_failure("validate queued enrichment", e))?
+        {
+            return Ok(false);
+        }
+        let Some((root_path, path)) = self
+            .database
+            .file_location(&job.file_id)
+            .map_err(|e| search_failure("locate enrichment source", e))?
+        else {
+            return Ok(false);
+        };
+        let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(root) = roots
+            .iter()
+            .find(|root| root.cloud_enrichment && Path::new(&root.path) == root_path)
+        else {
+            return Ok(false);
+        };
+        Ok(
+            traversal::policy_record(&root_path, &path, &Self::root_traversal_policy(root)?)?
+                .is_some(),
+        )
     }
 
     pub(crate) fn queue_embedding_jobs(&self, model: &str) -> Result<u64, SearchFailure> {
@@ -725,16 +773,25 @@ impl IndexRuntime {
                 let enabled = app.state::<ActivityRuntime>().snapshot().background_policy
                     == BackgroundPolicy::Normal;
                 runtime.set_content_enabled(enabled);
-                if enabled {
+                if enabled && runtime.work.configured.load(Ordering::SeqCst) {
                     let model =
                         embedding::active_model_key(app.state::<ProviderRegistry>().inner());
                     if runtime.queue_embedding_jobs(&model).is_ok() {
                         schedule_embedding_worker(app.clone(), runtime.clone());
                     }
                     if let Ok(jobs) = runtime.pending_enrichment() {
-                        app.state::<crate::gateway::EnrichmentSupervisor>()
-                            .sync_jobs(&jobs)
-                            .await;
+                        for job in jobs {
+                            // Earlier submissions may await HTTP; revalidate each remaining job's
+                            // current grant and queued hash immediately before its own dispatch.
+                            if runtime
+                                .enrichment_dispatch_is_admitted(&job)
+                                .unwrap_or(false)
+                            {
+                                app.state::<crate::gateway::EnrichmentSupervisor>()
+                                    .sync_jobs(std::slice::from_ref(&job))
+                                    .await;
+                            }
+                        }
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1135,9 +1192,7 @@ impl IndexRuntime {
                 return Ok(());
             }
             let root_path = PathBuf::from(&root.path);
-            if !std::fs::symlink_metadata(&root_path)
-                .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
-            {
+            if !traversal::admitted_root_is_current(&root_path) {
                 inventory.entry(root.path.clone()).or_default();
                 truncated = true;
                 continue;
