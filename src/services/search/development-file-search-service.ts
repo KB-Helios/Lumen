@@ -53,7 +53,8 @@ const rustIndexedHitSchema = z.object({
   page: z.number().int().positive().nullable().optional(),
   timeStartMs: z.number().int().nonnegative().nullable().optional(),
   timeEndMs: z.number().int().nonnegative().nullable().optional(),
-  rank: z.number(),
+  rank: z.number().min(0).max(1),
+  metadata: rustFileSchema,
   matchSource: z.enum(['filename', 'content', 'metadata', 'ocr', 'semantic', 'related']),
   semanticScore: z.number().min(0).max(1).nullable().optional(),
   embeddingModel: z.string().min(1).nullable().optional(),
@@ -170,19 +171,6 @@ function isInScope(kind: SearchResult['kind'], scope: SearchScope) {
   }
 }
 
-function indexedKind(path: string): SearchResult['kind'] {
-  const extension = path.split('.').pop()?.toLocaleLowerCase() ?? '';
-  if (extension === 'pdf') return 'pdf';
-  if (['doc', 'docx', 'odt', 'rtf', 'txt', 'md'].includes(extension)) return 'document';
-  if (['csv', 'ods', 'xls', 'xlsx'].includes(extension)) return 'spreadsheet';
-  if (['odp', 'ppt', 'pptx'].includes(extension)) return 'presentation';
-  if (['c', 'cc', 'cpp', 'cs', 'css', 'go', 'h', 'hpp', 'html', 'java', 'js', 'jsx', 'json', 'kt', 'kts', 'lua', 'php', 'py', 'rb', 'rs', 'scss', 'sh', 'sql', 'swift', 'toml', 'ts', 'tsx', 'vue', 'xml', 'yaml', 'yml'].includes(extension)) return 'source';
-  if (['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'webp'].includes(extension)) return 'image';
-  if (['avi', 'm4v', 'mkv', 'mov', 'mp4', 'webm', 'wmv'].includes(extension)) return 'video';
-  if (['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav', 'wma'].includes(extension)) return 'audio';
-  return 'unknown';
-}
-
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new DOMException('Request aborted.', 'AbortError');
@@ -202,7 +190,7 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 function commandFailure(error: unknown, fallbackMessage: string): SearchError {
   if (error && typeof error === 'object') {
     const candidate = error as {code?: unknown; message?: unknown; recoverable?: unknown};
-    const code = candidate.code === 'permission-denied'
+    const code = candidate.code === 'invalid-response' ? 'invalid-response' : candidate.code === 'permission-denied'
       ? 'permission-denied'
       : fallbackMessage.toLocaleLowerCase().includes('preview')
         ? 'preview-failed'
@@ -241,168 +229,113 @@ export class DevelopmentFileSearchService implements SearchService {
   async search(request: SearchRequest, signal?: AbortSignal): Promise<SearchResponse> {
     throwIfAborted(signal);
     const roots = uniqueRoots(this.getRoots());
-    if (roots.length === 0) {
-      this.publishStatus(this.createStatus());
-      return {requestId: request.requestId, groups: [], elapsedMs: 0, total: 0};
-    }
-
     const startedAt = performance.now();
-    await abortable(this.synchronizeRoots(roots), signal);
+    let raw: unknown;
+    let fallback: unknown;
+    let usedFallback = false;
+    for (const [id, known] of this.knownFiles) {
+      if (!roots.some(root => normalizedPath(displayPath(root)) === normalizedPath(displayPath(known.root)))) this.knownFiles.delete(id);
+    }
+    if (!roots.length) this.knownFiles.clear();
+    try {
+      await abortable(this.synchronizeRoots(roots), signal);
+    } catch (error) {
+      throwIfAborted(signal);
+      const failure = commandFailure(error, 'Local root synchronization failed.');
+      if (failure.code === 'permission-denied' || request.scope === 'recent' || request.scope === 'related') throw failure;
+      fallback = error;
+      usedFallback = true;
+    }
     throwIfAborted(signal);
+    if (!roots.length) {
+      this.publishStatus(this.createStatus());
+      return {requestId: request.requestId, groups: [], elapsedMs: performance.now() - startedAt, total: 0};
+    }
     if (request.scope === 'related' && !request.relatedTo) {
       return {requestId: request.requestId, groups: [], elapsedMs: performance.now() - startedAt, total: 0};
     }
     const preferences = this.getSearchPreferences();
-    const indexedRequest = request.scope === 'related'
-      ? this.invoke('search_related', {stableId: request.relatedTo, limit: request.limit})
-      : this.invoke('search_hybrid', {
-          requestId: request.requestId,
-          query: request.query,
-          scope: request.scope,
-          filters: request.filters.map(({id, value}) => ({id, value})),
-          limit: request.limit,
-          filenamePriority: preferences.filenamePriority,
-          recency: preferences.recency,
-          showPinned: preferences.showPinned,
-          semanticEnabled: preferences.semanticEnabled,
-          rerankingEnabled: preferences.rerankingEnabled,
-        });
-    const filenameRequests = request.scope === 'recent' || request.scope === 'related'
-      ? []
-      : roots.map((root) => this.invoke('search_filenames', {root, query: request.query}));
-    const [settled, indexedSettled] = await abortable(Promise.all([
-      Promise.allSettled(filenameRequests),
-      Promise.allSettled([indexedRequest]),
-    ]), signal);
+    const args = {
+      requestId: request.requestId, query: request.query, scope: request.scope,
+      filters: request.filters.map(({id, value}) => ({id, value})), limit: request.limit,
+      ...preferences,
+    };
+    if (!usedFallback) {
+      try {
+        raw = await abortable(request.scope === 'related'
+          ? this.invoke('search_related', {...args, stableId: request.relatedTo})
+          : this.invoke('search_hybrid', args), signal);
+      } catch (error) {
+        throwIfAborted(signal);
+        if (request.scope === 'recent' || request.scope === 'related') throw commandFailure(error, 'Local index search failed.');
+        fallback = error;
+        usedFallback = true;
+      }
+    }
     throwIfAborted(signal);
-
-    const responses: Array<{root: string; data: z.infer<typeof rustSearchResponseSchema>}> = [];
-    let firstFailure: unknown;
-    settled.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        firstFailure ??= result.reason;
-        return;
-      }
-      const parsed = rustSearchResponseSchema.safeParse(result.value);
-      if (!parsed.success) {
-        firstFailure ??= {
-          code: 'invalid-response',
-          message: 'The local filename adapter returned an invalid response.',
-          recoverable: true,
-        };
-        return;
-      }
-      responses.push({root: roots[index] ?? '', data: parsed.data});
-    });
-
-    const filenameMatches = responses
-      .flatMap(({root, data}) => data.items.map((item) => ({root, item})))
-      .map(({root, item}) => {
-        const id = stableFileId(root, item.relativePath);
-        this.knownFiles.set(id, {root, path: item.path});
-        return {
-          id,
-          name: item.name,
-          path: displayPath(item.path),
-          kind: item.kind,
-          match: {
-            source: 'filename' as const,
-            fragment: item.relativePath,
-            ranges: item.ranges,
-            score: item.score,
-          },
-          metadata: {
-            extension: item.extension ?? undefined,
-            modifiedAt: item.modifiedMs == null ? undefined : new Date(item.modifiedMs).toISOString(),
-            sizeBytes: item.sizeBytes,
-          },
-          availability: 'available' as const,
-        } satisfies SearchResult;
-      })
-      .filter((item) => isInScope(item.kind, request.scope))
-      .sort((left, right) =>
-        (right.match.score ?? 0) - (left.match.score ?? 0) ||
-        left.name.length - right.name.length ||
-        left.path.localeCompare(right.path),
-      );
-    let indexedFailure: unknown;
-    const indexedMatches = indexedSettled.flatMap((result) => {
-      if (result.status === 'rejected') {
-        indexedFailure = result.reason;
-        return [];
-      }
-      const parsed = rustIndexedHitsSchema.safeParse(result.value);
-      if (!parsed.success) {
-        indexedFailure = {message: 'The local content index returned an invalid response.'};
-        return [];
-      }
-      return parsed.data.map((item) => {
+    let mapped: SearchResult[];
+    if (!usedFallback) {
+      const parsed = rustIndexedHitsSchema.safeParse(raw);
+      if (!parsed.success) throw {code: 'invalid-response', message: 'The local index returned an invalid response.', recoverable: true} satisfies SearchError;
+      const seen = new Set<string>();
+      mapped = parsed.data.filter(item => {
+        const path = normalizedPath(displayPath(item.path));
+        if (seen.has(path)) return false;
+        seen.add(path);
+        return uniqueRoots(this.getRoots()).some(root => normalizedPath(displayPath(root)) === normalizedPath(displayPath(item.rootPath)));
+      }).map(item => {
         this.knownFiles.set(item.stableId, {root: item.rootPath, path: item.path});
         return {
-          id: item.stableId,
-          name: item.name,
-          path: displayPath(item.path),
-          kind: indexedKind(item.path),
-          match: {
-            source: item.matchSource,
-            score: item.semanticScore ?? 1 / (1 + Math.abs(item.rank)),
-          },
-          metadata: {},
+          id: item.stableId, name: item.name, path: displayPath(item.path), kind: item.metadata.kind,
+          match: {source: item.matchSource, score: 1 - item.rank},
+          metadata: {extension: item.metadata.extension ?? undefined, sizeBytes: item.metadata.sizeBytes,
+            modifiedAt: item.metadata.modifiedMs == null ? undefined : new Date(item.metadata.modifiedMs).toISOString()},
           pinned: item.pinned,
-          provenance: {
-            extractionKind: item.extractionKind,
-            fileHash: item.contentHash,
-            page: item.page ?? undefined,
-            timeStartMs: item.timeStartMs ?? undefined,
-            timeEndMs: item.timeEndMs ?? undefined,
-            embeddingModel: item.embeddingModel ?? undefined,
-            indexRevision: item.indexRevision,
-          },
-          availability: 'available' as const,
+          provenance: {extractionKind: item.extractionKind, fileHash: item.contentHash,
+            page: item.page ?? undefined, timeStartMs: item.timeStartMs ?? undefined,
+            timeEndMs: item.timeEndMs ?? undefined, embeddingModel: item.embeddingModel ?? undefined,
+            indexRevision: item.indexRevision}, availability: 'available',
         } satisfies SearchResult;
-      }).filter((item) => isInScope(item.kind, request.scope));
-    });
-    if (responses.length === 0 && firstFailure && indexedMatches.length === 0) {
-      throw commandFailure(firstFailure ?? indexedFailure, 'Local filename search failed.');
+      });
+    } else {
+      const configurations = this.rootConfigurations(roots);
+      const settled = await abortable(Promise.allSettled(configurations.map(root => this.invoke('search_filenames', {
+        root: root.path, query: request.query,
+        policy: {exclusions: root.exclusions, includeHidden: root.includeHidden, maxFileSizeMb: root.maxFileSizeMb},
+      }))), signal);
+      throwIfAborted(signal);
+      mapped = [];
+      let usable = 0;
+      for (const [index, response] of settled.entries()) {
+        if (response.status === 'rejected') continue;
+        const parsed = rustSearchResponseSchema.safeParse(response.value);
+        if (!parsed.success) continue;
+        usable++;
+        const root = configurations[index]!.path;
+        if (!uniqueRoots(this.getRoots()).some(current => normalizedPath(displayPath(current)) === normalizedPath(displayPath(root)))) continue;
+        for (const item of parsed.data.items) {
+          if (!isInScope(item.kind, request.scope) || !request.filters.every(filter =>
+            filter.id === 'extension' ? item.extension?.toLowerCase() === filter.value.replace(/^\./, '').toLowerCase()
+              : filter.id === 'kind' && item.kind === filter.value.toLowerCase())) continue;
+          const id = stableFileId(root, item.relativePath);
+          this.knownFiles.set(id, {root, path: item.path});
+          mapped.push({id, name: item.name, path: displayPath(item.path), kind: item.kind,
+            match: {source: 'filename', fragment: item.relativePath, ranges: item.ranges, score: item.score},
+            metadata: {extension: item.extension ?? undefined, sizeBytes: item.sizeBytes,
+              modifiedAt: item.modifiedMs == null ? undefined : new Date(item.modifiedMs).toISOString()}, availability: 'available'});
+        }
+      }
+      if (!usable) throw commandFailure(fallback, 'Local search failed.');
+      mapped.sort((left, right) => (right.match.score ?? 0) - (left.match.score ?? 0) || left.path.localeCompare(right.path));
+      const seen = new Set<string>();
+      mapped = mapped.filter(item => {const path = normalizedPath(item.path); if (seen.has(path)) return false; seen.add(path); return true;});
     }
-    const indexedByPath = new Map(indexedMatches.map((item) => [normalizedPath(item.path), item]));
-    const mergedFilenameMatches = filenameMatches.map((item) => {
-      const indexed = indexedByPath.get(normalizedPath(item.path));
-      if (!indexed) return item;
-      this.knownFiles.set(indexed.id, {root: this.knownFiles.get(item.id)?.root ?? '', path: this.knownFiles.get(item.id)?.path ?? item.path});
-      return {
-        ...item,
-        id: indexed.id,
-        pinned: indexed.pinned,
-        provenance: indexed.provenance,
-      } satisfies SearchResult;
-    });
-    const seenPaths = new Set(mergedFilenameMatches.map((item) => normalizedPath(item.path)));
-    const mapped = [
-      ...mergedFilenameMatches,
-      ...indexedMatches.filter((item) => !seenPaths.has(normalizedPath(item.path))),
-    ];
-    const total = mapped.length;
+    this.publishStatus({phase: usedFallback ? 'degraded' : 'ready', indexedItems: mapped.length,
+      message: usedFallback ? 'Local index unavailable; using policy-aware filename search' : `${uniqueRoots(this.getRoots()).length} local roots ready`,
+      updatedAt: new Date().toISOString()});
     const visible = mapped.slice(0, request.limit);
-    const warningCount = responses.reduce((count, response) => count + response.data.warnings.length, 0);
-    const failedCount = settled.length - responses.length;
-    this.publishStatus({
-      phase: failedCount > 0 || warningCount > 0 ? 'degraded' : 'ready',
-      indexedItems: total,
-      message: failedCount > 0
-        ? `${roots.length - failedCount} of ${roots.length} local roots searched`
-        : warningCount > 0
-          ? `Local search ready with ${warningCount} skipped paths`
-          : `${roots.length} local ${roots.length === 1 ? 'root' : 'roots'} ready`,
-      updatedAt: new Date().toISOString(),
-    });
-
-    return {
-      requestId: request.requestId,
-      groups: visible.length ? [{id: 'local-files', label: 'Local files', items: visible}] : [],
-      elapsedMs: Math.max(0, performance.now() - startedAt),
-      total,
-    };
+    return {requestId: request.requestId, groups: visible.length ? [{id: 'local-files', label: 'Local files', items: visible}] : [],
+      elapsedMs: Math.max(0, performance.now() - startedAt), total: mapped.length};
   }
 
   async getPreview(fileId: string, signal?: AbortSignal): Promise<FilePreview> {
@@ -496,15 +429,14 @@ export class DevelopmentFileSearchService implements SearchService {
     this.listeners.forEach((listener) => listener(status));
   }
 
+  private rootConfigurations(roots: readonly string[]) {
+    return (this.getRootConfigurations?.() ?? roots.map(path => ({
+      id: normalizedPath(path), path, cloudEnrichment: false, exclusions: [], includeHidden: false, maxFileSizeMb: 256,
+    }))).filter(configuration => roots.some(root => normalizedPath(root) === normalizedPath(configuration.path)));
+  }
+
   private synchronizeRoots(roots: readonly string[]): Promise<void> {
-    const configuredRoots = this.getRootConfigurations?.() ?? roots.map((path) => ({
-      id: normalizedPath(path),
-      path,
-      cloudEnrichment: false,
-      exclusions: [],
-      includeHidden: false,
-      maxFileSizeMb: 256,
-    }));
+    const configuredRoots = this.rootConfigurations(roots);
     const signature = JSON.stringify(configuredRoots.map((root) => ({
       path: normalizedPath(root.path),
       cloudEnrichment: root.cloudEnrichment,

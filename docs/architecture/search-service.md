@@ -35,6 +35,10 @@ The browser-only preview uses the file adapter without Tauri IPC; deterministic 
 
 Every Tauri response is parsed with Zod before entering UI state. Invalid payloads become structured recoverable errors.
 
+Normal queries use one native metadata/content inventory. Files without extractable text and folders remain searchable with their stored kind, extension, size, and modification time. Scope and extension/kind filters apply before the result limit. React preserves the native order and bounded rank instead of appending a separately ranked traversal. A revoked root is checked again when pending results arrive.
+
+Filename traversal is an explicitly degraded fallback when the index is unavailable. It receives the same exclusions, hidden-file policy, and file-size bound. Recent and Related failures remain errors; they cannot be replaced by ordinary filename results. An empty root configuration still reconciles the native inventory and clears cached admission.
+
 ## Native local-file commands
 
 The confined file lane exposes:
@@ -69,6 +73,8 @@ Generated dependency and build directories are skipped by name: `.git`, `.next`,
 SQLite owns files, chunks, FTS rows, query/file-open history, pins, enrichment jobs, answer cache, and ordinary `vector_embeddings` rows. The checksum-pinned `@sqliteai/sqlite-vector` 1.0.0 DLL is loaded only from Lumen's fixed development or packaged resource path; extension loading is disabled immediately afterward. Vector rows are keyed by model, dimension, content hash, and index revision. A model/dimension change rebuilds only vector rows and preserves lexical data.
 
 Hybrid ranking combines lexical, semantic, recency, and pin signals using bounded candidate sets. `Recent` is backed by durable file-open history. `Related` appears only when the active embedding route has usable vectors. Invalid or missing vector artifacts return a sanitized availability state instead of failing exact filename or FTS search.
+
+Schema version 4 adds a durable `file_inventory` metadata row for every admitted item. Recency uses file modification and actual open-history timestamps, so rebuilding the index does not make old files artificially recent. Metadata queries do not copy stored document text into filename candidates.
 
 ## Backend evolution rule
 

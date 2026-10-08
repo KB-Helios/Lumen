@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use super::traversal::{MAX_RESPONSE_ITEMS, traverse};
+use super::traversal::{MAX_RESPONSE_ITEMS, TraversalPolicy, traverse_with_policy};
 use super::types::{FilenameMatch, FilenameSearchResponse, SearchFailure};
 
 #[derive(Debug, PartialEq)]
@@ -64,12 +64,24 @@ fn filename_match(name: &str, query: &str) -> Option<MatchQuality> {
     })
 }
 
+pub(super) fn filename_score(name: &str, query: &str) -> Option<f64> {
+    filename_match(name, query).map(|quality| quality.score)
+}
+
 pub fn search_filenames_impl(
     root: &Path,
     query: &str,
 ) -> Result<FilenameSearchResponse, SearchFailure> {
+    search_filenames_with_policy(root, query, &TraversalPolicy::default())
+}
+
+pub fn search_filenames_with_policy(
+    root: &Path,
+    query: &str,
+    policy: &TraversalPolicy,
+) -> Result<FilenameSearchResponse, SearchFailure> {
     let started = Instant::now();
-    let outcome = traverse(root)?;
+    let outcome = traverse_with_policy(root, policy)?;
     let mut items = outcome
         .records
         .into_iter()

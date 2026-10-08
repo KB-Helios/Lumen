@@ -26,7 +26,7 @@ use super::index::{
 };
 use super::root_policy::canonicalize_root;
 use super::traversal;
-use super::types::SearchFailure;
+use super::types::{FileKind, FileRecord, SearchFailure};
 use super::{embedding, ranking};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -159,6 +159,7 @@ pub struct NativeDiagnostics {
 pub struct HybridHit {
     #[serde(flatten)]
     pub hit: IndexedHit,
+    pub metadata: FileRecord,
     pub match_source: String,
     pub semantic_score: Option<f64>,
     pub embedding_model: Option<String>,
@@ -342,6 +343,7 @@ impl IndexRuntime {
             .map_err(|error| search_failure("defer an embedding", error))
     }
 
+    #[cfg(test)]
     fn hybrid_search(
         &self,
         query: &str,
@@ -350,86 +352,122 @@ impl IndexRuntime {
         limit: usize,
         weights: ranking::RankingWeights,
     ) -> Result<Vec<HybridHit>, SearchFailure> {
+        self.hybrid_search_filtered(
+            query,
+            query_vector,
+            embedding_model,
+            limit,
+            weights,
+            "all",
+            &[],
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn hybrid_search_filtered(
+        &self,
+        query: &str,
+        query_vector: Option<&[f32]>,
+        embedding_model: &str,
+        limit: usize,
+        weights: ranking::RankingWeights,
+        scope: &str,
+        filters: &[SearchFilterRequest],
+    ) -> Result<Vec<HybridHit>, SearchFailure> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        // All filename and content candidates share stored metadata and one native ordering.
+        // Apply policy filters before limiting candidates, including files with no text chunks.
+        let mut inventory = self
+            .database
+            .inventory()
+            .map_err(|error| search_failure("read filename inventory", error))?
+            .into_iter()
+            .filter(|item| {
+                matches_metadata_scope(&item.metadata, scope)
+                    && matches_metadata_filters(&item.metadata, filters)
+            })
+            .map(|item| (item.hit.stable_id.clone(), item))
+            .collect::<HashMap<_, _>>();
         let lexical = self
             .database
-            .search(query, limit.saturating_mul(3).max(20))
+            .search(query, 250_000)
             .map_err(|error| search_failure("search the local index", error))?;
         let semantic = match query_vector {
             Some(vector) => self
                 .database
-                .search_embeddings(
-                    embedding_model,
-                    vector.len(),
-                    vector,
-                    limit.saturating_mul(3).max(20),
-                )
-                .unwrap_or_default(),
+                .search_embeddings(embedding_model, vector.len(), vector, 250_000)
+                .map_err(|error| search_failure("search semantic vectors", error))?,
             None => Vec::new(),
         };
-        let mut candidates = HashMap::<String, (IndexedHit, f64, Option<f64>)>::new();
+        let mut signals = HashMap::<String, (f64, Option<f64>)>::new();
         for hit in lexical {
-            let lexical_score = 1.0 / (1.0 + hit.rank.abs());
-            candidates.insert(hit.stable_id.clone(), (hit, lexical_score, None));
-        }
-        for semantic_hit in semantic {
-            let semantic_score = (1.0 - semantic_hit.distance / 2.0).clamp(0.0, 1.0);
-            if let Some(candidate) = candidates.get_mut(&semantic_hit.stable_id) {
-                candidate.2 = Some(semantic_score);
-            } else if let Some(hit) = self
-                .database
-                .representative_hit(&semantic_hit.stable_id)
-                .map_err(|error| search_failure("resolve a semantic result", error))?
-            {
-                candidates.insert(semantic_hit.stable_id, (hit, 0.0, Some(semantic_score)));
+            if let Some(item) = inventory.get_mut(&hit.stable_id) {
+                signals
+                    .entry(hit.stable_id.clone())
+                    .or_insert((0.0, None))
+                    .0 = 1.0 / (1.0 + hit.rank.abs());
+                item.hit = hit;
             }
         }
-        let ranked = ranking::rank_candidates(
-            query,
-            candidates
-                .into_values()
-                .map(|(hit, lexical, semantic)| {
-                    let (recency, pinned) = self
-                        .database
-                        .ranking_signals(&hit.stable_id)
-                        .unwrap_or((0.0, false));
-                    let name = hit.name.clone();
-                    ranking::RankingCandidate {
-                        id: (hit, semantic),
-                        name,
-                        lexical,
-                        semantic,
-                        recency,
-                        pinned,
-                    }
+        for hit in semantic {
+            if inventory.contains_key(&hit.stable_id) {
+                let score = (1.0 - hit.distance / 2.0).clamp(0.0, 1.0);
+                let signal = signals.entry(hit.stable_id).or_insert((0.0, None));
+                signal.1 = Some(signal.1.unwrap_or(0.0).max(score));
+            }
+        }
+        let mut candidates = inventory
+            .into_values()
+            .filter_map(|item| {
+                let filename = super::matching::filename_score(&item.hit.name, query);
+                let (lexical, semantic) =
+                    signals.remove(&item.hit.stable_id).unwrap_or((0.0, None));
+                if filename.is_none() && lexical == 0.0 && semantic.is_none() {
+                    return None;
+                }
+                let name = item.hit.name.clone();
+                let recency = item.recency;
+                let pinned = item.pinned;
+                Some(ranking::RankingCandidate {
+                    id: (item, semantic, filename.is_some()),
+                    name,
+                    lexical: lexical.max(filename.unwrap_or(0.0)),
+                    semantic,
+                    recency,
+                    pinned,
                 })
-                .collect(),
-            weights,
-        );
-        Ok(ranked
+            })
+            .collect::<Vec<_>>();
+        // Stable input also gives equal-score results deterministic path ordering.
+        candidates.sort_by(|left, right| left.id.0.hit.path.cmp(&right.id.0.hit.path));
+        Ok(ranking::rank_candidates(query, candidates, weights)
             .into_iter()
             .take(limit)
             .map(|ranked| {
-                let (mut hit, semantic) = ranked.candidate.id;
-                let pinned = ranked.candidate.pinned;
-                hit.rank = 1.0 - ranked.score;
+                let (mut item, semantic, filename) = ranked.candidate.id;
+                item.hit.rank = 1.0 - ranked.score;
                 HybridHit {
-                    match_source: if ranked.exact_filename {
+                    hit: item.hit,
+                    metadata: item.metadata,
+                    match_source: if filename {
                         "filename"
                     } else if semantic.is_some() {
                         "semantic"
                     } else {
                         "content"
                     }
-                    .to_owned(),
+                    .into(),
                     semantic_score: semantic,
                     embedding_model: semantic.map(|_| embedding_model.to_owned()),
-                    pinned,
-                    hit,
+                    pinned: item.pinned,
                 }
             })
             .collect())
     }
 
+    #[cfg(test)]
     fn related_search(
         &self,
         source_id: &str,
@@ -437,77 +475,106 @@ impl IndexRuntime {
         embedding_model: &str,
         limit: usize,
     ) -> Result<Vec<HybridHit>, SearchFailure> {
+        self.related_search_filtered(source_id, query_vector, embedding_model, limit, &[])
+    }
+
+    fn related_search_filtered(
+        &self,
+        source_id: &str,
+        query_vector: &[f32],
+        embedding_model: &str,
+        limit: usize,
+        filters: &[SearchFilterRequest],
+    ) -> Result<Vec<HybridHit>, SearchFailure> {
         let semantic = self
             .database
-            .search_embeddings(
-                embedding_model,
-                query_vector.len(),
-                query_vector,
-                limit.saturating_mul(4).max(20),
-            )
+            .search_embeddings(embedding_model, query_vector.len(), query_vector, 250_000)
             .map_err(|error| search_failure("search related files", error))?;
         let mut candidates = HashMap::<String, f64>::new();
         for hit in semantic {
-            if hit.stable_id == source_id {
-                continue;
+            if hit.stable_id != source_id {
+                let score = (1.0 - hit.distance / 2.0).clamp(0.0, 1.0);
+                candidates
+                    .entry(hit.stable_id)
+                    .and_modify(|current| *current = current.max(score))
+                    .or_insert(score);
             }
-            let score = (1.0 - hit.distance / 2.0).clamp(0.0, 1.0);
-            candidates
-                .entry(hit.stable_id)
-                .and_modify(|current| *current = current.max(score))
-                .or_insert(score);
         }
-        let mut related = candidates
-            .into_iter()
-            .filter_map(|(stable_id, score)| {
-                let mut hit = self.database.representative_hit(&stable_id).ok()??;
-                let pinned = self
-                    .database
-                    .ranking_signals(&stable_id)
-                    .map(|(_, pinned)| pinned)
-                    .unwrap_or(false);
+        let mut related = Vec::new();
+        for item in self
+            .database
+            .inventory()
+            .map_err(|error| search_failure("read related metadata", error))?
+        {
+            if let Some(score) = candidates.get(&item.hit.stable_id) {
+                if !matches_metadata_filters(&item.metadata, filters) {
+                    continue;
+                }
+                let mut hit = item.hit;
                 hit.rank = 1.0 - score;
-                Some(HybridHit {
+                related.push(HybridHit {
                     hit,
-                    match_source: "related".to_owned(),
-                    semantic_score: Some(score),
-                    embedding_model: Some(embedding_model.to_owned()),
-                    pinned,
-                })
-            })
-            .collect::<Vec<_>>();
+                    metadata: item.metadata,
+                    match_source: "related".into(),
+                    semantic_score: Some(*score),
+                    embedding_model: Some(embedding_model.into()),
+                    pinned: item.pinned,
+                });
+            }
+        }
         related.sort_by(|left, right| {
             left.hit
                 .rank
                 .total_cmp(&right.hit.rank)
-                .then_with(|| left.hit.name.cmp(&right.hit.name))
+                .then_with(|| left.hit.path.cmp(&right.hit.path))
         });
         related.truncate(limit);
         Ok(related)
     }
 
-    fn recent_search(&self, query: &str, limit: usize) -> Result<Vec<HybridHit>, SearchFailure> {
-        self.database
-            .recent_hits(query, limit)
+    fn recent_search_filtered(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: &[SearchFilterRequest],
+    ) -> Result<Vec<HybridHit>, SearchFailure> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let mut hits = Vec::new();
+        for mut hit in self
+            .database
+            .recent_hits(query, 250_000)
             .map_err(|error| search_failure("search recent files", error))?
-            .into_iter()
-            .enumerate()
-            .map(|(index, mut hit)| {
-                let pinned = self
-                    .database
-                    .ranking_signals(&hit.stable_id)
-                    .map(|(_, pinned)| pinned)
-                    .unwrap_or(false);
-                hit.rank = index as f64;
-                Ok(HybridHit {
-                    hit,
-                    match_source: "metadata".to_owned(),
-                    semantic_score: None,
-                    embedding_model: None,
-                    pinned,
-                })
-            })
-            .collect()
+        {
+            let metadata = self
+                .database
+                .inventory_record(&hit.stable_id)
+                .map_err(|error| search_failure("read recent metadata", error))?;
+            let Some(metadata) = metadata else {
+                continue;
+            };
+            if !matches_metadata_filters(&metadata, filters) {
+                continue;
+            }
+            let (_, pinned) = self
+                .database
+                .ranking_signals(&hit.stable_id)
+                .map_err(|error| search_failure("read recent ranking", error))?;
+            hit.rank = 1.0 - 1.0 / (1.0 + hits.len() as f64);
+            hits.push(HybridHit {
+                hit,
+                metadata,
+                match_source: "metadata".into(),
+                semantic_score: None,
+                embedding_model: None,
+                pinned,
+            });
+            if hits.len() == limit {
+                break;
+            }
+        }
+        Ok(hits)
     }
 
     fn semantic_status(
@@ -698,21 +765,18 @@ impl IndexRuntime {
                     return Ok(self.snapshot());
                 }
                 let path = PathBuf::from(&record.path);
-                if path.is_dir() {
-                    continue;
-                }
                 let id = stable_id(&root, &path);
                 inventory
                     .entry(root_key.clone())
                     .or_default()
                     .insert(id.clone());
-                if !content_enabled {
-                    let metadata_hash =
-                        format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
-                    self.database
-                        .upsert_metadata(&root, &id, &path, &metadata_hash)
-                        .map_err(|error| search_failure("update filename inventory", error))?;
-                    indexed_items = indexed_items.saturating_add(1);
+                let metadata_hash =
+                    format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
+                self.database
+                    .upsert_metadata(&root, &id, &path, &metadata_hash)
+                    .map_err(|error| search_failure("update filename inventory", error))?;
+                indexed_items = indexed_items.saturating_add(1);
+                if !content_enabled || record.kind == FileKind::Folder {
                     continue;
                 }
                 let extracted = match extract_document(&path) {
@@ -732,7 +796,6 @@ impl IndexRuntime {
                 self.database
                     .upsert_document(&root, &document)
                     .map_err(|error| search_failure("update the index", error))?;
-                indexed_items = indexed_items.saturating_add(1);
                 if requested_root.cloud_enrichment
                     && let Some(kind) = extracted.pending_enrichment
                 {
@@ -758,7 +821,12 @@ impl IndexRuntime {
             .counts()
             .map_err(|error| search_failure("read index status", error))?;
         let status = IndexStatus {
-            phase: "ready".to_owned(),
+            phase: if skipped_items > 0 {
+                "degraded"
+            } else {
+                "ready"
+            }
+            .to_owned(),
             indexed_items: stored_items,
             queued_enrichment,
             skipped_items,
@@ -781,37 +849,24 @@ impl IndexRuntime {
     }
 }
 
-fn search_kind(path: &Path) -> &'static str {
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    match extension.as_str() {
-        "pdf" => "pdf",
-        "doc" | "docx" | "odt" | "rtf" | "txt" | "md" => "document",
-        "csv" | "ods" | "xls" | "xlsx" => "spreadsheet",
-        "odp" | "ppt" | "pptx" => "presentation",
-        "c" | "cc" | "cpp" | "cs" | "css" | "go" | "h" | "hpp" | "html" | "java" | "js" | "jsx"
-        | "json" | "kt" | "kts" | "lua" | "php" | "py" | "rb" | "rs" | "scss" | "sh" | "sql"
-        | "swift" | "toml" | "ts" | "tsx" | "vue" | "xml" | "yaml" | "yml" => "source",
-        "avif" | "bmp" | "gif" | "ico" | "jpeg" | "jpg" | "png" | "webp" => "image",
-        "avi" | "m4v" | "mkv" | "mov" | "mp4" | "webm" | "wmv" => "video",
-        "aac" | "flac" | "m4a" | "mp3" | "ogg" | "wav" | "wma" => "audio",
-        _ => "unknown",
+fn matches_metadata_scope(metadata: &FileRecord, scope: &str) -> bool {
+    match scope {
+        "all" | "recent" | "related" => true,
+        "files" => metadata.kind != FileKind::Folder,
+        "folders" => metadata.kind == FileKind::Folder,
+        "documents" => matches!(
+            metadata.kind,
+            FileKind::Pdf | FileKind::Document | FileKind::Spreadsheet | FileKind::Presentation
+        ),
+        "code" => metadata.kind == FileKind::Source,
+        "images" => metadata.kind == FileKind::Image,
+        _ => false,
     }
 }
 
+#[cfg(test)]
 fn matches_scope(hit: &HybridHit, scope: &str) -> bool {
-    let kind = search_kind(&hit.hit.path);
-    match scope {
-        "all" | "files" | "recent" | "related" => true,
-        "folders" => false,
-        "documents" => matches!(kind, "pdf" | "document" | "spreadsheet" | "presentation"),
-        "code" => kind == "source",
-        "images" => kind == "image",
-        _ => false,
-    }
+    matches_metadata_scope(&hit.metadata, scope)
 }
 
 fn validate_search_options(
@@ -841,19 +896,21 @@ fn validate_search_options(
     Ok(())
 }
 
-fn matches_filters(hit: &HybridHit, filters: &[SearchFilterRequest]) -> bool {
-    let extension = hit
-        .hit
-        .path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    let kind = search_kind(&hit.hit.path);
+fn matches_metadata_filters(metadata: &FileRecord, filters: &[SearchFilterRequest]) -> bool {
     filters.iter().all(|filter| match filter.id.as_str() {
-        "extension" => extension.eq_ignore_ascii_case(filter.value.trim_start_matches('.')),
-        "kind" => kind.eq_ignore_ascii_case(&filter.value),
+        "extension" => metadata
+            .extension
+            .as_deref()
+            .unwrap_or_default()
+            .eq_ignore_ascii_case(filter.value.trim_start_matches('.')),
+        "kind" => metadata.kind.as_str().eq_ignore_ascii_case(&filter.value),
         _ => false,
     })
+}
+
+#[cfg(test)]
+fn matches_filters(hit: &HybridHit, filters: &[SearchFilterRequest]) -> bool {
+    matches_metadata_filters(&hit.metadata, filters)
 }
 
 fn ranking_weights(
@@ -927,18 +984,6 @@ pub async fn synchronize_index_roots(
     roots: Vec<IndexRootRequest>,
 ) -> Result<IndexStatus, SearchFailure> {
     let activity_snapshot = activity.snapshot();
-    if activity_snapshot.background_policy == crate::activity::BackgroundPolicy::Paused {
-        let previous = state.snapshot();
-        return Ok(IndexStatus {
-            phase: "paused".to_owned(),
-            indexed_items: previous.indexed_items,
-            queued_enrichment: previous.queued_enrichment,
-            skipped_items: previous.skipped_items,
-            message:
-                "Background indexing is paused; exact and existing content search remain available"
-                    .to_owned(),
-        });
-    }
     let content_enabled =
         activity_snapshot.background_policy == crate::activity::BackgroundPolicy::Normal;
     let runtime = state.inner().clone();
@@ -1005,16 +1050,23 @@ pub async fn search_hybrid(
             show_pinned,
         );
         let worker_scope = scope.clone();
+        let worker_filters = filters;
         let mut hits = tauri::async_runtime::spawn_blocking(move || {
             if worker_scope == "recent" {
-                worker_runtime.recent_search(&worker_query, limit.min(10_000))
+                worker_runtime.recent_search_filtered(
+                    &worker_query,
+                    limit.min(10_000),
+                    &worker_filters,
+                )
             } else {
-                worker_runtime.hybrid_search(
+                worker_runtime.hybrid_search_filtered(
                     &worker_query,
                     query_vector.as_deref(),
                     &embedding_model,
-                    limit.saturating_mul(3).min(10_000),
+                    limit.min(10_000),
                     weights,
+                    &worker_scope,
+                    &worker_filters,
                 )
             }
         })
@@ -1023,7 +1075,6 @@ pub async fn search_hybrid(
         if !runtime.search_is_current(request_id) {
             return Ok(Vec::new());
         }
-        hits.retain(|hit| matches_scope(hit, &scope) && matches_filters(hit, &filters));
         hits.truncate(limit.min(10_000));
         runtime.record_user_query(&query, !hits.is_empty())?;
         Ok(hits)
@@ -1041,7 +1092,9 @@ pub async fn search_related(
     registry: State<'_, crate::gateway::registry::ProviderRegistry>,
     stable_id: String,
     limit: usize,
+    filters: Vec<SearchFilterRequest>,
 ) -> Result<Vec<HybridHit>, SearchFailure> {
+    validate_search_options("related", &filters, 50, "balanced")?;
     let source = state.source_text(&stable_id)?.ok_or_else(|| {
         SearchFailure::new(
             "search-failed",
@@ -1061,7 +1114,13 @@ pub async fn search_related(
     let runtime = state.inner().clone();
     let embedding_model = embedding::active_model_key(registry.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        runtime.related_search(&stable_id, &vector, &embedding_model, limit.min(10_000))
+        runtime.related_search_filtered(
+            &stable_id,
+            &vector,
+            &embedding_model,
+            limit.min(10_000),
+            &filters,
+        )
     })
     .await
     .map_err(|error| search_failure("join related search", error))?
@@ -1229,6 +1288,237 @@ mod tests {
     use crate::search::test_support::SearchFixture;
 
     #[test]
+    fn recency_uses_file_modification_and_open_history_instead_of_index_time() {
+        let fixture = SearchFixture::new("meaningful-recency");
+        let old = fixture.file("old-report.md", b"report");
+        let recent = fixture.file("new-report.md", b"report");
+        let now = std::time::SystemTime::now();
+        for (path, age_days) in [(&old, 180), (&recent, 2)] {
+            std::fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_times(
+                    std::fs::FileTimes::new()
+                        .set_modified(now - std::time::Duration::from_secs(age_days * 86400)),
+                )
+                .unwrap();
+        }
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            Path::new("missing-vector.dll"),
+            true,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let old_id = runtime
+            .stable_id_for_path(&std::fs::canonicalize(old).unwrap())
+            .unwrap()
+            .unwrap();
+        let new_id = runtime
+            .stable_id_for_path(&std::fs::canonicalize(recent).unwrap())
+            .unwrap()
+            .unwrap();
+        let old_score = runtime.database.ranking_signals(&old_id).unwrap().0;
+        let new_score = runtime.database.ranking_signals(&new_id).unwrap().0;
+        assert!(
+            old_score < new_score,
+            "indexing both today must not make their recency equal"
+        );
+        runtime.database.record_file_open(&old_id).unwrap();
+        assert!(runtime.database.ranking_signals(&old_id).unwrap().0 > new_score);
+    }
+
+    #[test]
+    fn unified_inventory_retains_folders_empty_and_unsupported_files() {
+        let fixture = SearchFixture::new("unified-inventory");
+        fixture.file("report.md", b"");
+        fixture.file("report.tmp", &[0, 1]);
+        fixture.file("report-folder/child.bin", &[0]);
+        fixture.file("cache/report.md", b"excluded");
+        fixture.file(".report.md", b"hidden");
+        fixture.file("oversize-report.bin", &vec![0; 1024 * 1024 + 1]);
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let runtime =
+            IndexRuntime::open(&database_path, Path::new("missing-vector.dll"), false).unwrap();
+        let roots = vec![IndexRootRequest {
+            path: fixture.root().to_string_lossy().into_owned(),
+            cloud_enrichment: false,
+            exclusions: vec!["cache".into()],
+            include_hidden: false,
+            max_file_size_mb: 1,
+        }];
+        runtime.synchronize_with_content(roots, true).unwrap();
+        let hits = runtime
+            .hybrid_search(
+                "report",
+                None,
+                "missing",
+                100,
+                ranking::RankingWeights::default(),
+            )
+            .unwrap();
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<HashSet<_>>(),
+            HashSet::from(["report.md", "report.tmp", "report-folder"])
+        );
+        assert!(hits.iter().all(|hit| (0.0..=1.0).contains(&hit.hit.rank)));
+        let md = vec![SearchFilterRequest {
+            id: "extension".into(),
+            value: ".md".into(),
+        }];
+        assert_eq!(
+            hits.iter().filter(|hit| matches_filters(hit, &md)).count(),
+            1
+        );
+        assert_eq!(
+            hits.iter()
+                .filter(|hit| matches_scope(hit, "folders"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            hits.iter()
+                .filter(|hit| matches_scope(hit, "files"))
+                .count(),
+            2
+        );
+        let kind = vec![SearchFilterRequest {
+            id: "kind".into(),
+            value: "unknown".into(),
+        }];
+        assert_eq!(
+            hits.iter()
+                .filter(|hit| matches_filters(hit, &kind))
+                .count(),
+            1
+        );
+        drop(runtime);
+        let reopened =
+            IndexRuntime::open(&database_path, Path::new("missing-vector.dll"), false).unwrap();
+        assert_eq!(
+            reopened
+                .hybrid_search(
+                    "report",
+                    None,
+                    "missing",
+                    100,
+                    ranking::RankingWeights::default()
+                )
+                .unwrap()
+                .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn applies_filters_before_limit_for_filename_and_content_candidates() {
+        let fixture = SearchFixture::new("filtered-native-order");
+        fixture.file("report.tmp", b"report");
+        fixture.file("z-report.md", b"report");
+        fixture.file("report-folder/child.bin", b"");
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            Path::new("missing-vector.dll"),
+            false,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let filters = [SearchFilterRequest {
+            id: "extension".into(),
+            value: ".md".into(),
+        }];
+        let filtered = runtime
+            .hybrid_search_filtered(
+                "report",
+                None,
+                "missing",
+                1,
+                ranking::RankingWeights::default(),
+                "files",
+                &filters,
+            )
+            .unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].hit.name, "z-report.md");
+        let folders = runtime
+            .hybrid_search_filtered(
+                "report",
+                None,
+                "missing",
+                1,
+                ranking::RankingWeights::default(),
+                "folders",
+                &[],
+            )
+            .unwrap();
+        assert_eq!(folders[0].metadata.kind, FileKind::Folder);
+    }
+
+    #[test]
+    fn metadata_reconciliation_prunes_revoked_roots_and_their_jobs_while_paused() {
+        let fixture = SearchFixture::new("paused-root-revocation");
+        fixture.file("scan.png", &[0, 1, 2]);
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            Path::new("missing-vector.dll"),
+            true,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: true,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        assert!(!runtime.pending_enrichment().unwrap().is_empty());
+        runtime.synchronize_with_content(vec![], false).unwrap();
+        assert!(runtime.pending_enrichment().unwrap().is_empty());
+        assert!(
+            runtime
+                .hybrid_search(
+                    "scan",
+                    None,
+                    "missing",
+                    10,
+                    ranking::RankingWeights::default()
+                )
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn runtime_history_and_diagnostics_are_durable_and_redacted() {
         let fixture = SearchFixture::new("runtime-privacy-data");
         fixture.file("private-report.txt", b"quarterly private report");
@@ -1265,7 +1555,7 @@ mod tests {
         assert_eq!(diagnostics.indexed_files, 1);
         assert_eq!(diagnostics.indexed_chunks, 1);
         assert_eq!(diagnostics.phase, "ready");
-        assert_eq!(diagnostics.schema_version, 3);
+        assert_eq!(diagnostics.schema_version, 4);
         assert_eq!(diagnostics.history_entries, 1);
         assert!(vector.available);
         let serialized = serde_json::to_string(&diagnostics).unwrap();

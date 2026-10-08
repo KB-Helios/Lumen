@@ -10,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 use super::root_policy::canonicalize_confined;
-use super::types::SearchFailure;
+use super::types::{FileRecord, SearchFailure};
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
@@ -18,6 +18,8 @@ pub enum IndexError {
     Database(#[from] rusqlite::Error),
     #[error(transparent)]
     Policy(#[from] SearchFailure),
+    #[error(transparent)]
+    Inventory(#[from] serde_json::Error),
     #[error("The index mutex is poisoned")]
     Poisoned,
     #[error("An index integer exceeded SQLite's signed 64-bit range")]
@@ -37,6 +39,12 @@ pub struct VectorRuntimeInfo {
 }
 
 const SQLITE_VECTOR_VERSION: &str = "1.0.0";
+
+// Recency belongs to the file and its open history, never to the indexing run.
+const RECENCY_SQL: &str = "COALESCE(1.0 / (1.0 + MAX(0.0, julianday('now') - NULLIF(MAX(
+    COALESCE(json_extract(file_inventory.metadata, '$.modifiedMs') / 86400000.0 + 2440587.5, 0.0),
+    COALESCE((SELECT MAX(julianday(opened_at)) FROM file_access_history WHERE file_id = files.id), 0.0)
+  ), 0.0)) / 30.0), 0.0)";
 
 fn validate_vector_runtime(info: VectorRuntimeInfo) -> IndexResult<VectorRuntimeInfo> {
     if info.version != SQLITE_VECTOR_VERSION {
@@ -79,6 +87,21 @@ fn configure(connection: &Connection) -> rusqlite::Result<()> {
 }
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
+    let version: u32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version > 4 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    migrate_content(connection)?;
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS file_inventory (
+           file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+           metadata TEXT NOT NULL
+         );
+         PRAGMA user_version = 4;",
+    )
+}
+
+fn migrate_content(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(
         "CREATE TABLE IF NOT EXISTS query_history (
            id INTEGER PRIMARY KEY,
@@ -372,7 +395,83 @@ pub struct IndexDatabase {
     history_enabled: AtomicBool,
 }
 
+pub struct InventoryItem {
+    pub hit: IndexedHit,
+    pub metadata: FileRecord,
+    pub recency: f64,
+    pub pinned: bool,
+}
+
+fn store_inventory(connection: &Connection, file_id: i64, metadata: &str) -> IndexResult<()> {
+    connection.execute(
+        "INSERT INTO file_inventory(file_id, metadata) VALUES (?1, ?2)
+         ON CONFLICT(file_id) DO UPDATE SET metadata = excluded.metadata",
+        params![file_id, metadata],
+    )?;
+    Ok(())
+}
+
 impl IndexDatabase {
+    pub fn inventory(&self) -> IndexResult<Vec<InventoryItem>> {
+        let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        let mut statement = connection.prepare(&format!(
+            "SELECT files.stable_id, files.root_path, files.path, files.name,
+                    files.content_hash, files.index_revision,
+                    COALESCE(chunks.extraction_kind, 'metadata'), '',
+                    chunks.page, chunks.time_start_ms, chunks.time_end_ms,
+                    file_inventory.metadata, {RECENCY_SQL},
+                    EXISTS(SELECT 1 FROM pins WHERE pins.file_id = files.id)
+             FROM file_inventory JOIN files ON files.id = file_inventory.file_id
+             LEFT JOIN chunks ON chunks.id = (SELECT id FROM chunks WHERE file_id = files.id ORDER BY ordinal LIMIT 1)
+             ORDER BY lower(files.name), files.stable_id LIMIT 250000"
+        ))?;
+        let rows = statement.query_map([], |row| {
+            let raw: String = row.get(11)?;
+            let metadata = serde_json::from_str(&raw).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    11,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?;
+            Ok(InventoryItem {
+                hit: IndexedHit {
+                    stable_id: row.get(0)?,
+                    root_path: PathBuf::from(row.get::<_, String>(1)?),
+                    path: PathBuf::from(row.get::<_, String>(2)?),
+                    name: row.get(3)?,
+                    content_hash: row.get(4)?,
+                    index_revision: u64::try_from(row.get::<_, i64>(5)?)
+                        .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(5, i64::MAX))?,
+                    extraction_kind: row.get(6)?,
+                    snippet: row.get(7)?,
+                    page: row.get(8)?,
+                    time_start_ms: row
+                        .get::<_, Option<i64>>(9)?
+                        .and_then(|v| u64::try_from(v).ok()),
+                    time_end_ms: row
+                        .get::<_, Option<i64>>(10)?
+                        .and_then(|v| u64::try_from(v).ok()),
+                    rank: 0.0,
+                },
+                metadata,
+                recency: row.get(12)?,
+                pinned: row.get(13)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(IndexError::from)
+    }
+
+    pub fn inventory_record(&self, stable_id: &str) -> IndexResult<Option<FileRecord>> {
+        let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        let raw: Option<String> = connection.query_row(
+            "SELECT metadata FROM file_inventory JOIN files ON files.id = file_inventory.file_id WHERE files.stable_id = ?1",
+            [stable_id], |row| row.get(0),
+        ).optional()?;
+        raw.map(|raw| serde_json::from_str(&raw).map_err(IndexError::from))
+            .transpose()
+    }
     pub fn open(path: &Path, extension: &Path) -> IndexResult<Self> {
         let connection = Connection::open(path)?;
         let (vector_runtime, vector_error) =
@@ -738,9 +837,9 @@ impl IndexDatabase {
         connection
             .query_row(
                 "SELECT files.stable_id, files.root_path, files.path, files.name,
-                        files.content_hash, files.index_revision, chunks.extraction_kind,
-                        chunks.text, chunks.page, chunks.time_start_ms, chunks.time_end_ms
-                 FROM files JOIN chunks ON chunks.file_id = files.id
+                        files.content_hash, files.index_revision, COALESCE(chunks.extraction_kind, 'metadata'),
+                        COALESCE(chunks.text, ''), chunks.page, chunks.time_start_ms, chunks.time_end_ms
+                 FROM files LEFT JOIN chunks ON chunks.file_id = files.id
                  WHERE files.stable_id = ?1
                  ORDER BY chunks.ordinal ASC LIMIT 1",
                 [stable_id],
@@ -773,10 +872,9 @@ impl IndexDatabase {
     pub fn ranking_signals(&self, stable_id: &str) -> IndexResult<(f64, bool)> {
         let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
         connection.query_row(
-            "SELECT
-               MAX(0.0, MIN(1.0, 1.0 / (1.0 + MAX(0.0, julianday('now') - julianday(files.indexed_at)) / 30.0))),
+            &format!("SELECT {RECENCY_SQL},
                EXISTS(SELECT 1 FROM pins WHERE pins.file_id = files.id)
-             FROM files WHERE files.stable_id = ?1",
+             FROM files LEFT JOIN file_inventory ON file_inventory.file_id = files.id WHERE files.stable_id = ?1"),
             [stable_id],
             |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
         ).optional().map(|value| value.unwrap_or((0.0, false))).map_err(IndexError::from)
@@ -915,6 +1013,10 @@ impl IndexDatabase {
     ) -> IndexResult<UpsertOutcome> {
         let canonical_root = super::root_policy::canonicalize_root(_root)?;
         let canonical_path = canonicalize_confined(&canonical_root, &_document.path)?;
+        let metadata = serde_json::to_string(&super::metadata::file_record(
+            &canonical_root,
+            &canonical_path,
+        )?)?;
         let root_path = canonical_root.to_string_lossy().into_owned();
         let path = canonical_path.to_string_lossy().into_owned();
         let name = canonical_path
@@ -942,12 +1044,14 @@ impl IndexDatabase {
             )
             .optional()?;
 
-        if let Some((_, old_root, old_path, old_hash, old_extraction, revision)) = &existing
+        if let Some((file_id, old_root, old_path, old_hash, old_extraction, revision)) = &existing
             && old_root == &root_path
             && old_path == &path
             && old_hash == &_document.content_hash
             && old_extraction == &_document.extraction_version
         {
+            store_inventory(&transaction, *file_id, &metadata)?;
+            transaction.commit()?;
             return Ok(UpsertOutcome::Unchanged {
                 revision: *revision,
             });
@@ -1007,6 +1111,7 @@ impl IndexDatabase {
             (transaction.last_insert_rowid(), 1)
         };
 
+        store_inventory(&transaction, file_id, &metadata)?;
         for (ordinal, chunk) in _document.chunks.iter().enumerate() {
             let ordinal = i64::try_from(ordinal).map_err(|_| IndexError::IntegerOverflow)?;
             let revision_sql = i64::try_from(revision).map_err(|_| IndexError::IntegerOverflow)?;
@@ -1057,6 +1162,10 @@ impl IndexDatabase {
     ) -> IndexResult<UpsertOutcome> {
         let canonical_root = super::root_policy::canonicalize_root(root)?;
         let canonical_path = canonicalize_confined(&canonical_root, file_path)?;
+        let metadata = serde_json::to_string(&super::metadata::file_record(
+            &canonical_root,
+            &canonical_path,
+        )?)?;
         let root_path = canonical_root.to_string_lossy().into_owned();
         let path = canonical_path.to_string_lossy().into_owned();
         let name = canonical_path
@@ -1073,6 +1182,7 @@ impl IndexDatabase {
             )
             .optional()?;
         if let Some((file_id, revision)) = existing {
+            store_inventory(&transaction, file_id, &metadata)?;
             transaction.execute(
                 "UPDATE files SET root_path = ?2, path = ?3, name = ?4 WHERE id = ?1",
                 params![file_id, root_path, path, name],
@@ -1093,6 +1203,7 @@ impl IndexDatabase {
             params![stable_id, root_path, path, name, metadata_hash],
         )?;
         let file_id = transaction.last_insert_rowid();
+        store_inventory(&transaction, file_id, &metadata)?;
         transaction.execute(
             "INSERT INTO chunks
              (file_id, ordinal, text, extraction_kind, content_hash, index_revision)
@@ -1683,7 +1794,7 @@ mod tests {
                 .query_row("PRAGMA integrity_check", [], |row| row.get(0))
                 .unwrap();
 
-            assert_eq!(version, 3);
+            assert_eq!(version, 4);
             assert_eq!(kept_rows, 1);
             assert!(!embedding_sql.contains("VIRTUAL TABLE"));
             assert!(legacy_sql.contains("VIRTUAL TABLE"));
@@ -1699,7 +1810,7 @@ mod tests {
             connection
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
                 .unwrap(),
-            3
+            4
         );
     }
 
@@ -1935,7 +2046,7 @@ mod tests {
             .map(|row| row.unwrap())
             .collect();
 
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         assert_eq!(vector_version, "1.0.0");
         for expected in [
             "answer_cache",

@@ -63,13 +63,29 @@ pub async fn list_files(root: String) -> Result<FileListResponse, SearchFailure>
 pub async fn search_filenames(
     root: String,
     query: String,
+    policy: Option<types::FilenamePolicyRequest>,
     improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
     registry: State<'_, crate::gateway::registry::ProviderRegistry>,
 ) -> Result<FilenameSearchResponse, SearchFailure> {
     let version = improvement.capture(&registry);
     let began = std::time::Instant::now();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        matching::search_filenames_impl(Path::new(&root), &query)
+        if let Some(policy) = policy {
+            let max_bytes = policy
+                .max_file_size_mb
+                .checked_mul(1024 * 1024)
+                .ok_or_else(|| {
+                    SearchFailure::new("invalid-root", "The maximum file size is invalid.", None)
+                })?;
+            let policy = traversal::TraversalPolicy::new(
+                policy.exclusions,
+                policy.include_hidden,
+                max_bytes,
+            )?;
+            matching::search_filenames_with_policy(Path::new(&root), &query, &policy)
+        } else {
+            matching::search_filenames_impl(Path::new(&root), &query)
+        }
     })
     .await
     .map_err(|error| SearchFailure::new("search-failed", error.to_string(), None))
