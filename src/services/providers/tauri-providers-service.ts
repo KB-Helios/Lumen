@@ -2,7 +2,7 @@ import {invoke} from '@tauri-apps/api/core';
 import {z} from 'zod';
 
 import type {ProvidersService} from './providers-service';
-import {switchProviderInputSchema, type SwitchProviderInput} from './providers.types';
+import {parseProviderPayload, providerConfigSchema, switchProviderInputSchema, type ProviderConfig, type SwitchProviderInput} from './providers.types';
 
 export class TauriProvidersService implements ProvidersService {
   /** Query the native sidecar health command and validate its boolean result. */
@@ -11,8 +11,8 @@ export class TauriProvidersService implements ProvidersService {
   }
 
   /** Retrieve the sidecar configuration through the native command boundary. */
-  async getConfig(): Promise<unknown> {
-    return await invoke('cliproxy_get_config');
+  async getConfig(): Promise<ProviderConfig> {
+    return parseProviderPayload(providerConfigSchema, await invoke('cliproxy_get_config'));
   }
 
   /** Validate the target, invoke the native switch, and validate the changed file paths. */

@@ -15,6 +15,21 @@ import {windowsAiService} from '../services/windows-ai';
 import {unsupportedWindowsAiSnapshot} from '../services/windows-ai/unavailable-windows-ai-service';
 import {defaultWindowsAiPreferences, type WindowsAgentActivation} from '../services/windows-ai/windows-ai.types';
 import {App} from './App';
+import {createIndexedRoot} from '../features/settings/indexed-root';
+import {DevelopmentFileSearchService} from '../services/search/development-file-search-service';
+
+vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@tauri-apps/api/core')>(),
+  invoke: async (command: string) => {
+    if (command === 'search_hybrid') return [];
+    if (command === 'search_filenames') return {
+      items: [{path: 'C:\\Projects\\Readme.md', relativePath: 'Readme.md', name: 'Readme.md',
+        kind: 'document', extension: 'md', sizeBytes: 128, modifiedMs: null, score: 1, ranges: []}],
+      total: 1, truncated: false, elapsedMs: 1, warnings: [],
+    };
+    return undefined;
+  },
+}));
 
 class ReactivatableWindowService extends BrowserWindowService {
   reactivateCollapsed() {
@@ -33,6 +48,19 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it.each(['empty', 'paused'] as const)('keeps %s saved roots authoritative after onboarding in the default composition', async (rootState) => {
+    const user = userEvent.setup();
+    useOnboardingStore.setState({hydrated: true, completed: true, root: 'C:\\Projects'});
+    useSettingsStore.setState({hydrated: true, roots: rootState === 'paused'
+      ? [{...createIndexedRoot('C:\\Projects'), paused: true}] : []});
+    const search = vi.spyOn(DevelopmentFileSearchService.prototype, 'search');
+    render(<App windowService={new BrowserWindowService()} />);
+    await user.type(await screen.findByRole('searchbox', {name: 'Search files'}), 'readme');
+    await waitFor(() => expect(search).toHaveBeenCalled());
+    const outcome = await search.mock.results[search.mock.results.length - 1]!.value;
+    expect(outcome).toMatchObject({groups: [], total: 0});
+  });
+
   function nativeActivations(queue: WindowsAgentActivation[], gate: Promise<void> = Promise.resolve()) {
     let signal: (() => void) | undefined;
     vi.spyOn(windowsAiService, 'consumeActivation').mockImplementation(async () => {

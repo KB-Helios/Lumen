@@ -411,6 +411,7 @@ export class DevelopmentFileSearchService implements SearchService {
     try {
       const rawPreview = await this.invoke('get_basic_preview', {root: known.root, path: known.path});
       throwIfAborted(signal);
+      this.requireKnownFile(fileId);
       const parsed = rustPreviewSchema.safeParse(rawPreview);
       if (!parsed.success) {
         throw {
@@ -546,6 +547,17 @@ export class DevelopmentFileSearchService implements SearchService {
       throw {
         code: 'unavailable',
         message: 'Search again before opening this local item.',
+        recoverable: true,
+      } satisfies SearchError;
+    }
+    const authorized = uniqueRoots(this.getRoots()).some((root) =>
+      normalizedPath(displayPath(root)) === normalizedPath(displayPath(known.root)),
+    );
+    if (!authorized) {
+      this.knownFiles.delete(fileId);
+      throw {
+        code: 'permission-denied',
+        message: 'This local root is no longer enabled. Search again after enabling it.',
         recoverable: true,
       } satisfies SearchError;
     }

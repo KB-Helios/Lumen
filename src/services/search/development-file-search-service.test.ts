@@ -31,6 +31,43 @@ function rustResponse() {
 }
 
 describe('DevelopmentFileSearchService', () => {
+  it('rejects a preview whose root is revoked while the native read is pending', async () => {
+    let roots = ['C:\\Projects'];
+    let finishPreview!: (value: unknown) => void;
+    const service = new DevelopmentFileSearchService({getRoots: () => roots, invoke: async (command) => {
+      if (command === 'search_filenames') return rustResponse();
+      if (command === 'search_hybrid') return [];
+      if (command === 'get_basic_preview') return new Promise((resolve) => {finishPreview = resolve;});
+      return undefined;
+    }});
+    const result = (await service.search(request)).groups[0]!.items[0]!;
+    const pending = service.getPreview(result.id);
+    roots = [];
+    finishPreview({kind: 'markdown', title: 'Readme.md', subtitle: result.path,
+      text: 'revoked content', children: [], metadata: {}});
+    await expect(pending).rejects.toMatchObject({code: 'permission-denied'});
+  });
+
+  it.each(['preview', 'open', 'folder'] as const)('rejects cached %s admission after its root is revoked', async (action) => {
+    let roots = ['C:\\Projects'];
+    const nativeActions: string[] = [];
+    const service = new DevelopmentFileSearchService({
+      getRoots: () => roots,
+      invoke: async (command) => {
+        if (command === 'search_filenames') return rustResponse();
+        if (command === 'search_hybrid') return [];
+        if (command !== 'synchronize_index_roots') nativeActions.push(command);
+        return undefined;
+      },
+    });
+    const result = (await service.search(request)).groups[0]!.items[0]!;
+    roots = [];
+    const pending = action === 'preview' ? service.getPreview(result.id)
+      : action === 'open' ? service.openFile(result.id) : service.openContainingFolder(result.id);
+    await expect(pending).rejects.toMatchObject({code: 'permission-denied'});
+    expect(nativeActions).toEqual([]);
+  });
+
   it('merges indexed content hits with provenance without replacing filename search', async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === 'search_filenames') return {...rustResponse(), items: [], total: 0};

@@ -4,6 +4,104 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 #[test]
+fn pinned_executable_serves_isolated_authenticated_management() {
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    struct Fixture {
+        child: std::process::Child,
+        directory: std::path::PathBuf,
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+            let prefix = std::env::temp_dir().join("lumen-proxy-native-");
+            assert!(
+                self.directory
+                    .to_string_lossy()
+                    .starts_with(prefix.to_string_lossy().as_ref())
+            );
+            let _ = std::fs::remove_dir_all(&self.directory);
+        }
+    }
+    let directory =
+        std::env::temp_dir().join(format!("lumen-proxy-native-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let auth_dir = directory.join("auths");
+    std::fs::create_dir(&auth_dir).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let key = uuid::Uuid::new_v4().to_string();
+    let client_key = uuid::Uuid::new_v4().to_string();
+    let yaml = minimal_yaml(
+        &auth_dir.to_string_lossy().replace('\\', "/"),
+        &key,
+        &client_key,
+    )
+    .replace("port: 8317", &format!("port: {port}"));
+    let config = directory.join("config.yaml");
+    std::fs::write(&config, yaml).unwrap();
+    let executable = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("binaries/cliproxy-sidecar-x86_64-pc-windows-msvc.exe");
+    let mut command = Command::new(executable);
+    command
+        .args(["-config", config.to_str().unwrap()])
+        .current_dir(&directory)
+        .env("HOME", &directory)
+        .env("USERPROFILE", &directory)
+        .env("APPDATA", &directory)
+        .env("LOCALAPPDATA", &directory)
+        .env("XDG_CONFIG_HOME", &directory)
+        .env_remove("MANAGEMENT_PASSWORD")
+        .env_remove("CLIPROXY_MGMT_KEY")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let mut fixture = Fixture {
+        child: command.spawn().expect("staged executable starts"),
+        directory,
+    };
+    let base = format!("http://127.0.0.1:{port}/v8/management");
+    let client = CliproxyClient::with_base(base.clone(), key);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let config = loop {
+        if let Ok(config) = tauri::async_runtime::block_on(client.get_config()) {
+            break config;
+        }
+        assert!(
+            fixture.child.try_wait().unwrap().is_none(),
+            "proxy exited before readiness"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "proxy management readiness deadline"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    assert!(
+        !serde_json::to_string(&config)
+            .unwrap()
+            .contains(&client_key)
+    );
+    let credentials = tauri::async_runtime::block_on(client.list_credentials()).unwrap();
+    assert_eq!(
+        serde_json::to_value(credentials).unwrap()["files"],
+        serde_json::json!([])
+    );
+    let unauthorized = CliproxyClient::with_base(base, "incorrect-key".to_owned());
+    assert!(
+        tauri::async_runtime::block_on(unauthorized.get_config())
+            .unwrap_err()
+            .contains("401")
+    );
+}
+
+#[test]
 fn minimal_config_pins_loopback() {
     let yaml = minimal_yaml("/tmp/auths", "mgmt-123", "client-abc");
     assert!(yaml.contains("127.0.0.1"));
@@ -70,7 +168,7 @@ fn get_config_sends_bearer_to_v8_route() {
     );
     let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
     let value = tauri::async_runtime::block_on(client.get_config()).expect("get_config");
-    assert_eq!(value["routing"]["strategy"], "round-robin");
+    assert_eq!(value.routing_strategy.as_deref(), Some("round-robin"));
     server.join().expect("mock server");
 }
 
@@ -87,7 +185,7 @@ fn patch_config_sends_bearer_to_v8_route() {
         client.patch_config(serde_json::json!({"routing": {"retry": {"request-retry": 0}}})),
     )
     .expect("patch_config");
-    assert_eq!(value["ok"], true);
+    assert!(value.ok);
     server.join().expect("mock server");
 }
 
@@ -101,7 +199,7 @@ fn list_credentials_sends_bearer_to_v8_route() {
     );
     let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
     let value = tauri::async_runtime::block_on(client.list_credentials()).expect("list");
-    assert!(value["files"].is_array());
+    assert!(value.files.is_empty());
     server.join().expect("mock server");
 }
 
@@ -166,15 +264,110 @@ fn oauth_linked_matches_credential_metadata() {
 }
 
 #[test]
-fn api_key_usage_passes_counters_through() {
+fn api_key_usage_aggregates_counters_without_secret_keys() {
     let (base, server) = serve_once(
         "GET",
         "/v8/management/observability/usage/api-keys",
         "mgmt-123",
-        r#"{"codex":{"https://api.openai.com|key":{"success":3,"failed":1}}}"#,
+        r#"{"codex":{"https://api.openai.com|sk-audit-secret":{"success":2,"failed":1,"nested":{"token":"sk-audit-secret"}},"second":{"success":1,"failed":1}},"sk-audit-secret":{"key":{"success":9}}}"#,
     );
     let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
     let value = tauri::async_runtime::block_on(client.api_key_usage()).expect("usage");
-    assert_eq!(value["codex"]["https://api.openai.com|key"]["success"], 3);
+    assert!(
+        !serde_json::to_string(&value)
+            .unwrap()
+            .contains("sk-audit-secret")
+    );
+    assert_eq!(value[0].success, 3);
+    assert_eq!(value[0].failed, 2);
+    assert_eq!(value[0].total, 5);
     server.join().expect("mock server");
+}
+
+#[test]
+fn management_config_excludes_secret_fields() {
+    let (base, server) = serve_once(
+        "GET",
+        "/v8/management/config",
+        "mgmt-123",
+        r#"{"routing":{"strategy":"round-robin","token":"sk-audit-secret"},"api-keys":{"codex":[{"name":"sk-audit-secret","keys":[{"api-key":"sk-audit-secret"},{"api-key":"sk-audit-secret"}]}]},"observability":{"usage":{"usage-statistics-enabled":true}},"remote-management":{"secret-key":"sk-audit-secret"}}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let safe = tauri::async_runtime::block_on(client.get_config()).unwrap();
+    assert!(
+        !serde_json::to_string(&safe)
+            .unwrap()
+            .contains("sk-audit-secret")
+    );
+    assert_eq!(
+        safe.provider_counts
+            .iter()
+            .map(|row| (row.provider.as_str(), row.count))
+            .collect::<Vec<_>>(),
+        vec![("codex", 2)]
+    );
+    assert!(safe.usage_statistics_enabled);
+    server.join().unwrap();
+}
+
+#[test]
+fn management_patch_response_excludes_secrets() {
+    let (base, server) = serve_once(
+        "PATCH",
+        "/v8/management/config",
+        "mgmt-123",
+        r#"{"ok":true,"api-keys":["sk-audit-secret"],"nested":{"token":"sk-audit-secret"}}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let safe = tauri::async_runtime::block_on(client.patch_config(serde_json::json!({}))).unwrap();
+    assert!(
+        !serde_json::to_string(&safe)
+            .unwrap()
+            .contains("sk-audit-secret")
+    );
+    server.join().unwrap();
+}
+
+#[test]
+fn credential_metadata_excludes_secret_contents() {
+    let (base, server) = serve_once(
+        "GET",
+        "/v8/management/credentials",
+        "mgmt-123",
+        r#"{"files":[{"type":"codex","disabled":false,"name":"sk-audit-secret.json","token":"sk-audit-secret","nested":{"sk-audit-secret":"secret"}}]}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let safe = tauri::async_runtime::block_on(client.list_credentials()).unwrap();
+    assert!(
+        !serde_json::to_string(&safe)
+            .unwrap()
+            .contains("sk-audit-secret")
+    );
+    assert_eq!(
+        safe.files
+            .iter()
+            .map(|file| (file.provider.as_str(), file.disabled))
+            .collect::<Vec<_>>(),
+        vec![("codex", false)]
+    );
+    server.join().unwrap();
+}
+
+#[test]
+fn oauth_error_excludes_upstream_secret_contents() {
+    let (base, server) = serve_once(
+        "GET",
+        "/v8/management/oauth/status?state=s",
+        "mgmt-123",
+        r#"{"status":"error","error":"invalid token sk-audit-secret"}"#,
+    );
+    let client = CliproxyClient::with_base(base, "mgmt-123".to_owned());
+    let safe = tauri::async_runtime::block_on(client.oauth_status("s")).unwrap();
+    assert!(
+        !serde_json::to_string(&safe)
+            .unwrap()
+            .contains("sk-audit-secret")
+    );
+    assert_eq!(safe.error.as_deref(), Some("Authentication failed"));
+    server.join().unwrap();
 }

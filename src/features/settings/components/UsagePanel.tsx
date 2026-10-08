@@ -4,46 +4,18 @@ import {LumenText} from '../../../design-system/primitives/LumenText';
 import {isNativeRuntime} from '../../../services/ai/native-ai-service';
 import {providersApi} from '../../../services/api/providers';
 import {toProviderErrorMessage} from '../../../services/providers/providers-service';
+import {parseProviderPayload, providerUsageRowsSchema, type ProviderUsage} from '../../../services/providers/providers.types';
 
 /** Injectable usage seam (defaults to the Tauri invoke backend). */
 export interface UsageApi {
   apiKeyUsage(): Promise<unknown>;
 }
 
-export interface ProviderUsage {
-  provider: string;
-  success: number;
-  failed: number;
-  total: number;
-}
+export type {ProviderUsage} from '../../../services/providers/providers.types';
 
-function toCount(value: unknown): number {
-  const count = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
-}
-
-/**
- * Fold the sidecar `GET /observability/usage/api-keys` payload
- * (`{provider: {"base_url|api_key": {success, failed}}}`) into per-provider
- * totals. Composite map keys embed key material, so only the provider name
- * and counters are kept — secrets never reach the DOM.
- */
+/** Validate native allowlisted counters before they enter UI state. */
 export function parseApiKeyUsage(payload: unknown): ProviderUsage[] {
-  if (typeof payload !== 'object' || payload === null) return [];
-  const rows: ProviderUsage[] = [];
-  for (const [provider, keys] of Object.entries(payload as Record<string, unknown>)) {
-    if (typeof keys !== 'object' || keys === null) continue;
-    let success = 0;
-    let failed = 0;
-    for (const entry of Object.values(keys as Record<string, unknown>)) {
-      if (typeof entry !== 'object' || entry === null) continue;
-      const record = entry as Record<string, unknown>;
-      success += toCount(record['success']);
-      failed += toCount(record['failed']);
-    }
-    rows.push({provider, success, failed, total: success + failed});
-  }
-  return rows.sort((a, b) => b.total - a.total);
+  return parseProviderPayload(providerUsageRowsSchema, payload);
 }
 
 function MetricCard({label, value}: {label: string; value: string}) {

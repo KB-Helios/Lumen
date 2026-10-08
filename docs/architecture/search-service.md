@@ -22,7 +22,7 @@ interface SearchService {
 | `MemorySearchService` | Unit/component tests | Controllable test state |
 | `FutureProductionSearchService` | Explicit future boundary | Throws an unavailable error in phase one |
 
-The browser-only preview uses the file adapter without Tauri IPC; deterministic acceptance selects the memory service only when Vite is in development mode and the URL explicitly contains `service=memory`. No production bundle route can select it. Roots come from unpaused Indexed Roots settings, then fall back to the onboarding root.
+The browser-only preview uses the file adapter without Tauri IPC; deterministic acceptance selects the memory service only when Vite is in development mode and the URL explicitly contains `service=memory`. No production bundle route can select it. After hydration, unpaused Indexed Roots settings are authoritative, including an empty set. Onboarding persists its selected root into those settings before completion. Cached preview and opener IDs recheck the current grants, and a preview read is checked again before its response is admitted.
 
 ## Request flow
 

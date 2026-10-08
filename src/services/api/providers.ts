@@ -1,4 +1,5 @@
 import {invoke} from '@tauri-apps/api/core';
+import {parseProviderPayload, providerUsageRowsSchema, type ProviderUsage} from '../providers/providers.types';
 
 export interface AddProviderInput {
   app: string;
@@ -82,8 +83,8 @@ export const providersApi = {
   importToken(provider: string, token: string): Promise<void> {
     return invoke<void>('cliproxy_oauth_import', {provider, token});
   },
-  /** `GET /v8/management/observability/usage/api-keys` — per-key counters. */
-  apiKeyUsage(): Promise<unknown> {
-    return invoke<unknown>('cliproxy_usage');
+  /** Native aggregation of usage counters; composite credential keys stay in Rust. */
+  async apiKeyUsage(): Promise<ProviderUsage[]> {
+    return parseProviderPayload(providerUsageRowsSchema, await invoke('cliproxy_usage'));
   },
 };
