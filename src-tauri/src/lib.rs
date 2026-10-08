@@ -2,6 +2,7 @@ mod activity;
 mod computer_use;
 mod consent;
 mod gateway;
+mod improvement;
 mod privacy;
 pub mod provider_switcher;
 mod search;
@@ -186,6 +187,15 @@ pub fn run() {
             let _ = enrichment.start();
             smoke_checkpoint("enrichment");
             app.manage(enrichment);
+            let packaged_improvement=app.path().resource_dir()?.join("improvement-runtime");
+            let staged_improvement=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/improvement");
+            let improvement=std::sync::Arc::new(improvement::coordinator::ImprovementRuntime::open(
+                &data_directory.join("lumen-improvement.sqlite3"),
+                if packaged_improvement.is_dir(){packaged_improvement}else{staged_improvement},
+            )?);
+            app.manage(improvement.clone());
+            app.state::<computer_use::ComputerUseSupervisor>().set_improvement(improvement.clone());
+            improvement.start_scheduler(app.handle().clone());
             let packaged_vector = app.path().resource_dir()?.join("vector.dll");
             let development_vector =
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/vector.dll");
@@ -232,6 +242,10 @@ pub fn run() {
                         && computer_use.native_stop.available
                         && computer_use.routes.browser.available
                         && computer_use.routes.desktop.available;
+                    let improvement = app.state::<std::sync::Arc<improvement::coordinator::ImprovementRuntime>>();
+                    let improvement_snapshot = improvement.snapshot()?;
+                    let improvement_health = tauri::async_runtime::block_on(improvement.health(&app.state::<gateway::registry::ProviderRegistry>(), &app.state::<gateway::EnrichmentSupervisor>()));
+                    let improvement_defaults = !improvement_snapshot.settings.enabled && !improvement_snapshot.settings.cloud_consent && improvement_snapshot.settings.route_mode == improvement::types::RouteMode::Local && improvement_snapshot.active_version.id == 0 && improvement_snapshot.trace_count == 0 && improvement_health.state == "disabled";
                     let search = search::run_packaged_search_smoke(
                         &data_directory.join("packaged-search-smoke"),
                         &vector_extension,
@@ -266,7 +280,9 @@ pub fn run() {
                         && !diagnostics.contains("packaged smoke secret")
                         && !diagnostics.contains(data_path.as_ref());
                     Ok(serde_json::json!({
-                        "passed": search.exact_vector && search.lexical_fallback && shown && hidden && diagnostics_export && computer_use_packaged,
+                        "passed": search.exact_vector && search.lexical_fallback && shown && hidden && diagnostics_export && computer_use_packaged && improvement_defaults,
+                        "improvementDefaults": improvement_defaults,
+                        "improvementRuntime": improvement_health.state,
                         "exactVector": search.exact_vector,
                         "lexicalFallback": search.lexical_fallback,
                         "vectorVersion": search.vector_version,
@@ -302,6 +318,21 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            improvement::commands::improvement_health,
+            improvement::commands::improvement_snapshot,
+            improvement::commands::improvement_candidate_base,
+            improvement::commands::set_improvement_settings,
+            improvement::commands::prepare_improvement_runtime,
+            improvement::commands::analyze_improvements,
+            improvement::commands::cancel_improvements,
+            improvement::commands::approve_improvement,
+            improvement::commands::reject_improvement,
+            improvement::commands::rollback_improvement,
+            improvement::commands::clear_improvement_data,
+            improvement::commands::save_improvement_preference,
+            improvement::commands::improvement_workflows,
+            improvement::commands::authorize_improvement_workflow,
+            improvement::commands::end_improvement_workflow,
             search::list_files,
             search::search_filenames,
             search::get_file_metadata,

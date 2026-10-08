@@ -18,6 +18,7 @@
     "stage:sidecars": "bun scripts/stage-sidecars.ts && bun run stage:windows-ai && bun run stage:clipproxy",
     "stage:clipproxy": "bun scripts/stage-clipproxy.ts",
     "stage:computer-use": "bun scripts/stage-computer-use.ts",
+    "stage:improvement": "bun scripts/stage-improvement.ts",
     "stage:windows-ai": "bun scripts/stage-windows-ai.ts",
     "preview": "vite preview",
     "tauri": "tauri"

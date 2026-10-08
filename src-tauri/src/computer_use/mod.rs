@@ -2,9 +2,9 @@ mod coordinator;
 mod executor;
 mod foreground;
 mod gate;
-mod policy;
-mod protocol;
-mod provider;
+pub(crate) mod policy;
+pub(crate) mod protocol;
+pub(crate) mod provider;
 mod stop;
 mod windows;
 
@@ -34,8 +34,15 @@ pub fn start_computer_use(
     request: ComputerUseRequest,
     on_event: Channel<ComputerUseEvent>,
     supervisor: State<'_, ComputerUseSupervisor>,
+    improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
+    registry: State<'_, crate::gateway::registry::ProviderRegistry>,
 ) -> Result<(), String> {
-    supervisor.inner().start(request, on_event)
+    let harness =
+        improvement.computer_use_harness(&registry, request.provider.id(), &request.model);
+    improvement.cancel(true);
+    supervisor
+        .inner()
+        .start_with_harness(request, on_event, harness)
 }
 #[tauri::command]
 pub fn respond_computer_use_approval(

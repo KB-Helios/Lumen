@@ -966,6 +966,7 @@ pub async fn search_hybrid(
     gateway: State<'_, crate::gateway::GatewaySupervisor>,
     local_runtime: State<'_, crate::gateway::LocalRuntimeSupervisor>,
     registry: State<'_, crate::gateway::registry::ProviderRegistry>,
+    improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
     request_id: u64,
     query: String,
     scope: String,
@@ -977,52 +978,59 @@ pub async fn search_hybrid(
     semantic_enabled: bool,
     reranking_enabled: bool,
 ) -> Result<Vec<HybridHit>, SearchFailure> {
-    validate_search_options(&scope, &filters, filename_priority, &recency)?;
-    let runtime = state.inner().clone();
-    runtime.begin_search(request_id);
-    let query_vector = if semantic_enabled && scope != "recent" {
-        embedding::embed_query(&query, gateway.inner(), local_runtime.inner())
-            .await
-            .ok()
-    } else {
-        None
-    };
-    if !runtime.search_is_current(request_id) {
-        return Ok(Vec::new());
-    }
-    let worker_runtime = runtime.clone();
-    let worker_query = query.clone();
-    let embedding_model = embedding::active_model_key(registry.inner());
-    let weights = ranking_weights(
-        filename_priority,
-        &recency,
-        semantic_enabled,
-        reranking_enabled,
-        show_pinned,
-    );
-    let worker_scope = scope.clone();
-    let mut hits = tauri::async_runtime::spawn_blocking(move || {
-        if worker_scope == "recent" {
-            worker_runtime.recent_search(&worker_query, limit.min(10_000))
+    let version = improvement.capture(&registry);
+    let began = std::time::Instant::now();
+    let result = async {
+        validate_search_options(&scope, &filters, filename_priority, &recency)?;
+        let runtime = state.inner().clone();
+        runtime.begin_search(request_id);
+        let query_vector = if semantic_enabled && scope != "recent" {
+            embedding::embed_query(&query, gateway.inner(), local_runtime.inner())
+                .await
+                .ok()
         } else {
-            worker_runtime.hybrid_search(
-                &worker_query,
-                query_vector.as_deref(),
-                &embedding_model,
-                limit.saturating_mul(3).min(10_000),
-                weights,
-            )
+            None
+        };
+        if !runtime.search_is_current(request_id) {
+            return Ok(Vec::new());
         }
-    })
-    .await
-    .map_err(|error| search_failure("join the index search", error))??;
-    if !runtime.search_is_current(request_id) {
-        return Ok(Vec::new());
+        let worker_runtime = runtime.clone();
+        let worker_query = query.clone();
+        let embedding_model = embedding::active_model_key(registry.inner());
+        let weights = ranking_weights(
+            filename_priority,
+            &recency,
+            semantic_enabled,
+            reranking_enabled,
+            show_pinned,
+        );
+        let worker_scope = scope.clone();
+        let mut hits = tauri::async_runtime::spawn_blocking(move || {
+            if worker_scope == "recent" {
+                worker_runtime.recent_search(&worker_query, limit.min(10_000))
+            } else {
+                worker_runtime.hybrid_search(
+                    &worker_query,
+                    query_vector.as_deref(),
+                    &embedding_model,
+                    limit.saturating_mul(3).min(10_000),
+                    weights,
+                )
+            }
+        })
+        .await
+        .map_err(|error| search_failure("join the index search", error))??;
+        if !runtime.search_is_current(request_id) {
+            return Ok(Vec::new());
+        }
+        hits.retain(|hit| matches_scope(hit, &scope) && matches_filters(hit, &filters));
+        hits.truncate(limit.min(10_000));
+        runtime.record_user_query(&query, !hits.is_empty())?;
+        Ok(hits)
     }
-    hits.retain(|hit| matches_scope(hit, &scope) && matches_filters(hit, &filters));
-    hits.truncate(limit.min(10_000));
-    runtime.record_user_query(&query, !hits.is_empty())?;
-    Ok(hits)
+    .await;
+    super::record_search_trace(&improvement, &version, began, &result);
+    result
 }
 
 #[tauri::command]

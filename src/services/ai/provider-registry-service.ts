@@ -18,7 +18,7 @@ const modelDescriptorSchema = z.object({
   capabilities: z.array(modelCapabilitySchema).min(1),
 });
 const routeDescriptorSchema = z.object({
-  alias: z.string().regex(/^lumen\.(answer|embed|vision|audio|rerank)\.(local|cloud)$/),
+  alias: z.string().regex(/^lumen\.(answer|embed|vision|audio|rerank|improvement)\.(local|cloud)$/),
   capability: modelCapabilitySchema,
   providerId: providerIdSchema,
   modelId: z.string().min(1),

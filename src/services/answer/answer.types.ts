@@ -5,6 +5,7 @@ export interface AnswerRequest {
   query: string;
   mode: RuntimeMode;
   cloudConsent: boolean;
+  workflowRunId?: string;
 }
 
 export interface AnswerCitation {

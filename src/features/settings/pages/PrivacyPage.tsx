@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
 import {WindowsPrivacyControls} from '../../windows-ai/WindowsAiControls';
+import {ImprovementPrivacyControls} from '../../improvement/ImprovementControls';
 
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../../design-system/primitives/LumenButton';
@@ -164,6 +165,7 @@ export function PrivacyPage({
         </SettingRow>
       </SettingSection>
       <WindowsPrivacyControls />
+      <ImprovementPrivacyControls />
     </SettingsPage>
   );
 }

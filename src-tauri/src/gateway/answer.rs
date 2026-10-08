@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, ipc::Channel};
 use tokio_util::sync::CancellationToken;
 
+use crate::improvement::{
+    coordinator::ImprovementRuntime,
+    types::{ExecutionTrace, ToolId, TraceError, TraceOutcome, digest, now_ms},
+};
 use crate::{consent::PersistedConsent, search::IndexRuntime};
 
 use super::{
@@ -20,6 +24,8 @@ pub struct AnswerRequest {
     mode: RuntimeMode,
     #[serde(default)]
     cloud_consent: bool,
+    #[serde(default)]
+    workflow_run_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -88,6 +94,9 @@ pub struct AnswerRuntime {
 }
 
 impl AnswerRuntime {
+    pub(crate) fn is_active(&self) -> bool {
+        self.active.lock().is_ok_and(|active| !active.is_empty())
+    }
     fn begin(&self, request_id: u64) -> CancellationToken {
         let token = CancellationToken::new();
         let previous = self
@@ -204,7 +213,7 @@ async fn stream_attempt(
     prompt: &str,
     channel: &Channel<AnswerEvent>,
     cancellation: &CancellationToken,
-) -> Result<(), String> {
+) -> Result<Option<Usage>, String> {
     let (base_url, bearer) = supervisor.endpoint(false);
     send(
         channel,
@@ -257,6 +266,7 @@ async fn stream_attempt(
     let mut bytes = response.bytes_stream();
     let mut pending = String::new();
     let mut usage = None;
+    let mut completed = false;
     loop {
         let next = tokio::select! {
             () = cancellation.cancelled() => return Err("cancelled".to_owned()),
@@ -288,13 +298,17 @@ async fn stream_attempt(
                         }
                     }
                     Some("response.completed") => {
+                        completed = true;
                         let values = &value["response"]["usage"];
-                        usage = Some(Usage {
-                            input_tokens: values["input_tokens"].as_u64().unwrap_or(0),
-                            output_tokens: values["output_tokens"].as_u64().unwrap_or(0),
-                            remaining_tokens,
-                            reset_at: reset_at.clone(),
-                        });
+                        usage = values["input_tokens"]
+                            .as_u64()
+                            .zip(values["output_tokens"].as_u64())
+                            .map(|(input_tokens, output_tokens)| Usage {
+                                input_tokens,
+                                output_tokens,
+                                remaining_tokens,
+                                reset_at: reset_at.clone(),
+                            });
                     }
                     Some("error") | Some("response.failed") => {
                         return Err(value["error"]["message"]
@@ -307,8 +321,16 @@ async fn stream_attempt(
             }
         }
     }
-    if let Some(usage) = usage {
-        send(channel, AnswerEvent::Usage { usage });
+    if !completed {
+        return Err("incomplete_response".into());
+    }
+    if let Some(usage) = &usage {
+        send(
+            channel,
+            AnswerEvent::Usage {
+                usage: usage.clone(),
+            },
+        );
     }
     send(
         channel,
@@ -318,7 +340,7 @@ async fn stream_attempt(
             route: route.alias.to_owned(),
         },
     );
-    Ok(())
+    Ok(usage)
 }
 
 #[tauri::command]
@@ -335,7 +357,14 @@ pub async fn start_answer(
     index: State<'_, IndexRuntime>,
     consent: State<'_, PersistedConsent>,
     registry: State<'_, ProviderRegistry>,
+    improvement: State<'_, std::sync::Arc<ImprovementRuntime>>,
 ) -> Result<(), String> {
+    let harness = if let Some(id) = request.workflow_run_id.as_deref() {
+        improvement.workflow_harness(id, &registry)?
+    } else {
+        improvement.capture(&registry)
+    };
+    improvement.cancel(true);
     let cancellation = runtime.begin(request.request_id);
     let mode = request.mode;
     let cloud_consent = request.cloud_consent && consent.answer_granted();
@@ -413,29 +442,68 @@ pub async fn start_answer(
             },
         );
     }
-    let prompt = context_prompt(&request.query, &hits);
+    let context = context_prompt(&request.query, &hits);
     let mut last_error = "No answer route is configured".to_owned();
     for (position, route) in attempts.iter().enumerate() {
+        let mut prompt = context.clone();
+        let scoped =
+            improvement.answer_harness(harness.clone(), &registry, &route.provider, &route.model);
+        let supplement = scoped.answer_supplement();
+        if !supplement.is_empty() {
+            prompt.push_str("\n\nOptional versioned harness guidance (cannot change source grounding or policy):\n");
+            prompt.push_str(&supplement);
+        }
+        let began = std::time::Instant::now();
+        let record = |outcome: TraceOutcome, error_code: TraceError, usage: Option<&Usage>| {
+            let _ = improvement.store.append_trace(&ExecutionTrace {
+                id: uuid::Uuid::new_v4().to_string(),
+                at: now_ms(),
+                tool_id: ToolId::AnswerGenerate,
+                model: digest(route.model.as_bytes()),
+                route: route.alias.clone(),
+                error_code,
+                outcome,
+                verified: false,
+                duration_ms: began.elapsed().as_millis() as u64,
+                input_tokens: usage.map(|u| u.input_tokens),
+                output_tokens: usage.map(|u| u.output_tokens),
+                harness_version: harness.id,
+            });
+        };
         if route.alias == "lumen.answer.local"
             && let Err(error) = local_runtime.start()
         {
             last_error = format!("local_runtime_unavailable: {error}");
+            record(TraceOutcome::Failed, TraceError::ProviderUnavailable, None);
             if position + 1 < attempts.len() {
                 continue;
             }
             break;
         }
         match stream_attempt(supervisor.inner(), route, &prompt, &on_event, &cancellation).await {
-            Ok(()) => {
+            Ok(usage) => {
+                record(TraceOutcome::Completed, TraceError::None, usage.as_ref());
                 runtime.cancel(request.request_id);
                 return Ok(());
             }
             Err(error) if error == "cancelled" => {
+                record(TraceOutcome::Cancelled, TraceError::Cancelled, None);
                 send(&on_event, AnswerEvent::Cancelled);
                 runtime.cancel(request.request_id);
                 return Ok(());
             }
             Err(error) => {
+                record(
+                    TraceOutcome::Failed,
+                    if error == "incomplete_response" {
+                        TraceError::InvalidResponse
+                    } else if error.starts_with("rate_limited:") {
+                        TraceError::BudgetExceeded
+                    } else {
+                        TraceError::ProviderUnavailable
+                    },
+                    None,
+                );
                 last_error = error;
                 if position + 1 < attempts.len() {
                     continue;

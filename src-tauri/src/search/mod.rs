@@ -63,12 +63,52 @@ pub async fn list_files(root: String) -> Result<FileListResponse, SearchFailure>
 pub async fn search_filenames(
     root: String,
     query: String,
+    improvement: State<'_, std::sync::Arc<crate::improvement::coordinator::ImprovementRuntime>>,
+    registry: State<'_, crate::gateway::registry::ProviderRegistry>,
 ) -> Result<FilenameSearchResponse, SearchFailure> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let version = improvement.capture(&registry);
+    let began = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         matching::search_filenames_impl(Path::new(&root), &query)
     })
     .await
-    .map_err(|error| SearchFailure::new("search-failed", error.to_string(), None))?
+    .map_err(|error| SearchFailure::new("search-failed", error.to_string(), None))
+    .and_then(|result| result);
+    record_search_trace(&improvement, &version, began, &result);
+    result
+}
+
+pub(crate) fn record_search_trace<T>(
+    runtime: &crate::improvement::coordinator::ImprovementRuntime,
+    version: &crate::improvement::types::HarnessVersion,
+    began: std::time::Instant,
+    result: &Result<T, SearchFailure>,
+) {
+    use crate::improvement::types::*;
+    let _ = runtime.store.append_trace(&ExecutionTrace {
+        id: uuid::Uuid::new_v4().to_string(),
+        at: now_ms(),
+        tool_id: ToolId::FilesSearch,
+        model: digest(b"lumen-native-search-v1"),
+        route: "lumen.search".into(),
+        error_code: match result.as_ref().err().map(|error| error.code.as_str()) {
+            None => TraceError::None,
+            Some("permission-denied" | "outside-root" | "invalid-root") => {
+                TraceError::PermissionDenied
+            }
+            _ => TraceError::UnknownFailure,
+        },
+        outcome: if result.is_ok() {
+            TraceOutcome::Completed
+        } else {
+            TraceOutcome::Failed
+        },
+        verified: false,
+        duration_ms: began.elapsed().as_millis() as u64,
+        input_tokens: None,
+        output_tokens: None,
+        harness_version: version.id,
+    });
 }
 
 #[tauri::command]

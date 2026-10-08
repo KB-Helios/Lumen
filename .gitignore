@@ -1,5 +1,6 @@
 .worktrees/
 .codex-local/
+.superpowers/
 
 # Package manager and build output
 node_modules/
@@ -11,6 +12,10 @@ workers/computer-use-preview/.build/
 workers/computer-use-preview/.build-id
 workers/**/__pycache__/
 workers/**/*.py[cod]
+workers/improvement-runtime/rust-tests/target/
+src-tauri/resources/improvement/*.tar
+src-tauri/resources/improvement/*.json
+src-tauri/resources/improvement/*.staged
 .tmp-agentgateway-schema.json
 *.local
 

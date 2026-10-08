@@ -54,6 +54,7 @@
       "binaries/vector.dll": "vector.dll",
       "binaries/windows-ai/": "windows-ai/",
       "binaries/computer-use-runtime/": "computer-use-runtime/",
+      "resources/improvement/": "improvement-runtime/",
       "../packaging/windows/Assets/": "Assets/"
     },
     "icon": [
