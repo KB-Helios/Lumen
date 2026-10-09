@@ -12,6 +12,9 @@ use serde::Serialize;
 use super::root_policy::canonicalize_confined;
 use super::types::{FileRecord, SearchFailure};
 
+#[path = "index_query.rs"]
+mod query;
+
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
     #[error(transparent)]
@@ -77,6 +80,7 @@ pub fn register_or_load_sqlite_vector(
 }
 
 fn configure(connection: &Connection) -> rusqlite::Result<()> {
+    query::register(connection)?;
     connection.execute_batch(
         "PRAGMA foreign_keys = ON;
          PRAGMA journal_mode = WAL;
@@ -97,6 +101,9 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
            file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
            metadata TEXT NOT NULL
          );
+         CREATE INDEX IF NOT EXISTS file_access_history_file_recent ON file_access_history(file_id, opened_at DESC);
+         CREATE INDEX IF NOT EXISTS file_inventory_kind ON file_inventory(lower(CASE WHEN json_valid(metadata) THEN json_extract(metadata,'$.kind') END));
+         CREATE INDEX IF NOT EXISTS file_inventory_extension ON file_inventory(lower(COALESCE(CASE WHEN json_valid(metadata) THEN json_extract(metadata,'$.extension') END,'')));
          PRAGMA user_version = 4;",
     )
 }
@@ -393,13 +400,13 @@ pub struct IndexDatabase {
     vector_runtime: Option<VectorRuntimeInfo>,
     vector_dimension: Mutex<Option<usize>>,
     history_enabled: AtomicBool,
+    #[cfg(test)]
+    query_hydrated_rows: std::sync::atomic::AtomicUsize,
 }
 
+#[cfg(test)]
 pub struct InventoryItem {
     pub hit: IndexedHit,
-    pub metadata: FileRecord,
-    pub recency: f64,
-    pub pinned: bool,
 }
 
 // Safety pruning is independent of capped search candidates and schema-4 backfill.
@@ -446,28 +453,19 @@ impl IndexDatabase {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(IndexError::from)
     }
+    #[cfg(test)]
     pub fn inventory(&self) -> IndexResult<Vec<InventoryItem>> {
         let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
-        let mut statement = connection.prepare(&format!(
+        let mut statement = connection.prepare(
             "SELECT files.stable_id, files.root_path, files.path, files.name,
                     files.content_hash, files.index_revision,
                     COALESCE(chunks.extraction_kind, 'metadata'), '',
-                    chunks.page, chunks.time_start_ms, chunks.time_end_ms,
-                    file_inventory.metadata, {RECENCY_SQL},
-                    EXISTS(SELECT 1 FROM pins WHERE pins.file_id = files.id)
+                    chunks.page, chunks.time_start_ms, chunks.time_end_ms
              FROM file_inventory JOIN files ON files.id = file_inventory.file_id
              LEFT JOIN chunks ON chunks.id = (SELECT id FROM chunks WHERE file_id = files.id ORDER BY ordinal LIMIT 1)
-             ORDER BY lower(files.name), files.stable_id LIMIT 250000"
-        ))?;
+             ORDER BY lower(files.name), files.stable_id"
+        )?;
         let rows = statement.query_map([], |row| {
-            let raw: String = row.get(11)?;
-            let metadata = serde_json::from_str(&raw).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    11,
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })?;
             Ok(InventoryItem {
                 hit: IndexedHit {
                     stable_id: row.get(0)?,
@@ -488,9 +486,6 @@ impl IndexDatabase {
                         .and_then(|v| u64::try_from(v).ok()),
                     rank: 0.0,
                 },
-                metadata,
-                recency: row.get(12)?,
-                pinned: row.get(13)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()
@@ -526,6 +521,8 @@ impl IndexDatabase {
             vector_runtime,
             vector_dimension: Mutex::new(None),
             history_enabled: AtomicBool::new(true),
+            #[cfg(test)]
+            query_hydrated_rows: std::sync::atomic::AtomicUsize::new(0),
         })
     }
 
@@ -544,6 +541,7 @@ impl IndexDatabase {
             vector_runtime: Some(vector_runtime),
             vector_dimension: Mutex::new(None),
             history_enabled: AtomicBool::new(true),
+            query_hydrated_rows: std::sync::atomic::AtomicUsize::new(0),
         })
     }
 
@@ -1982,6 +1980,14 @@ mod tests {
         database
             .upsert_embedding(other, "model-b", 3, "hash-other", 1, &[1.0, 0.0, 0.0])
             .unwrap();
+
+        // Exercise the pinned 1.0.0 DLL itself, rather than infer optional-k support
+        // from current upstream docs. Three arguments stream every row before SQL filters.
+        let streaming_rows: i64 = database.connection.lock().unwrap().query_row(
+            "SELECT count(*) FROM vector_full_scan('vector_embeddings', 'embedding', vector_as_f32(?1, 3))",
+            [IndexDatabase::encode_vector(3, &[1.0, 0.0, 0.0]).unwrap()], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(streaming_rows, 4);
 
         let hits = database
             .search_embeddings("model-a", 3, &[1.0, 0.0, 0.0], 2)

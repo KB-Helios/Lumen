@@ -500,103 +500,58 @@ impl IndexRuntime {
         if limit == 0 {
             return Ok(HybridSearchResponse::lexical(Vec::new()));
         }
-        // All filename and content candidates share stored metadata and one native ordering.
-        // Apply policy filters before limiting candidates, including files with no text chunks.
-        let mut inventory = self
-            .database
-            .inventory()
-            .map_err(|error| search_failure("read filename inventory", error))?
-            .into_iter()
-            .filter(|item| {
-                matches_metadata_scope(&item.metadata, scope)
-                    && matches_metadata_filters(&item.metadata, filters)
-            })
-            .map(|item| (item.hit.stable_id.clone(), item))
-            .collect::<HashMap<_, _>>();
-        let lexical = self
-            .database
-            .search(query, 250_000)
-            .map_err(|error| search_failure("search the local index", error))?;
-        let (semantic, semantic_status) = match query_vector {
-            Some(vector) => match self.database.search_embeddings(
-                embedding_model,
-                vector.len(),
-                vector,
-                250_000,
-            ) {
-                Ok(hits) => (
-                    hits,
-                    SemanticRetrievalStatus {
-                        phase: SemanticPhase::Ready,
-                        reason: None,
-                    },
-                ),
-                Err(_) => (Vec::new(), SemanticRetrievalStatus::degraded()),
-            },
-            None => (Vec::new(), SemanticRetrievalStatus::disabled()),
+        let selected = self.database.query_hits(
+            query,
+            query_vector,
+            embedding_model,
+            limit,
+            weights,
+            scope,
+            filters,
+            None,
+        );
+        let (selected, semantic_status) = match (selected, query_vector) {
+            (Ok(hits), Some(_)) => (
+                hits,
+                SemanticRetrievalStatus {
+                    phase: SemanticPhase::Ready,
+                    reason: None,
+                },
+            ),
+            (Ok(hits), None) => (hits, SemanticRetrievalStatus::disabled()),
+            (Err(_), Some(_)) => (
+                self.database
+                    .query_hits(
+                        query,
+                        None,
+                        embedding_model,
+                        limit,
+                        weights,
+                        scope,
+                        filters,
+                        None,
+                    )
+                    .map_err(|error| search_failure("search the local index", error))?,
+                SemanticRetrievalStatus::degraded(),
+            ),
+            (Err(error), None) => return Err(search_failure("search the local index", error)),
         };
-        let mut signals = HashMap::<String, (f64, Option<f64>)>::new();
-        for hit in lexical {
-            if let Some(item) = inventory.get_mut(&hit.stable_id) {
-                signals
-                    .entry(hit.stable_id.clone())
-                    .or_insert((0.0, None))
-                    .0 = 1.0 / (1.0 + hit.rank.abs());
-                item.hit = hit;
-            }
-        }
-        for hit in semantic {
-            if inventory.contains_key(&hit.stable_id) {
-                let score = (1.0 - hit.distance / 2.0).clamp(0.0, 1.0);
-                let signal = signals.entry(hit.stable_id).or_insert((0.0, None));
-                signal.1 = Some(signal.1.unwrap_or(0.0).max(score));
-            }
-        }
-        let mut candidates = inventory
-            .into_values()
-            .filter_map(|item| {
-                let filename = super::matching::filename_score(&item.hit.name, query);
-                let (lexical, semantic) =
-                    signals.remove(&item.hit.stable_id).unwrap_or((0.0, None));
-                if filename.is_none() && lexical == 0.0 && semantic.is_none() {
-                    return None;
-                }
-                let name = item.hit.name.clone();
-                let recency = item.recency;
-                let pinned = item.pinned;
-                Some(ranking::RankingCandidate {
-                    id: (item, semantic, filename.is_some()),
-                    name,
-                    lexical: lexical.max(filename.unwrap_or(0.0)),
-                    semantic,
-                    recency,
-                    pinned,
-                })
-            })
-            .collect::<Vec<_>>();
-        // Stable input also gives equal-score results deterministic path ordering.
-        candidates.sort_by(|left, right| left.id.0.hit.path.cmp(&right.id.0.hit.path));
-        let items = ranking::rank_candidates(query, candidates, weights)
+        let items = selected
             .into_iter()
-            .take(limit)
-            .map(|ranked| {
-                let (mut item, semantic, filename) = ranked.candidate.id;
-                item.hit.rank = 1.0 - ranked.score;
-                HybridHit {
-                    hit: item.hit,
-                    metadata: item.metadata,
-                    match_source: if filename {
-                        "filename"
-                    } else if semantic.is_some() {
-                        "semantic"
-                    } else {
-                        "content"
-                    }
-                    .into(),
-                    semantic_score: semantic,
-                    embedding_model: semantic.map(|_| embedding_model.to_owned()),
-                    pinned: item.pinned,
+            .map(|item| HybridHit {
+                hit: item.hit,
+                metadata: item.metadata,
+                match_source: if item.filename {
+                    "filename"
+                } else if item.semantic.is_some() {
+                    "semantic"
+                } else {
+                    "content"
                 }
+                .into(),
+                semantic_score: item.semantic,
+                embedding_model: item.semantic.map(|_| embedding_model.to_owned()),
+                pinned: item.pinned,
             })
             .collect();
         Ok(HybridSearchResponse {
@@ -624,50 +579,31 @@ impl IndexRuntime {
         limit: usize,
         filters: &[SearchFilterRequest],
     ) -> Result<Vec<HybridHit>, SearchFailure> {
-        let semantic = self
-            .database
-            .search_embeddings(embedding_model, query_vector.len(), query_vector, 250_000)
-            .map_err(|error| search_failure("search related files", error))?;
-        let mut candidates = HashMap::<String, f64>::new();
-        for hit in semantic {
-            if hit.stable_id != source_id {
-                let score = (1.0 - hit.distance / 2.0).clamp(0.0, 1.0);
-                candidates
-                    .entry(hit.stable_id)
-                    .and_modify(|current| *current = current.max(score))
-                    .or_insert(score);
-            }
-        }
-        let mut related = Vec::new();
-        for item in self
-            .database
-            .inventory()
-            .map_err(|error| search_failure("read related metadata", error))?
-        {
-            if let Some(score) = candidates.get(&item.hit.stable_id) {
-                if !matches_metadata_filters(&item.metadata, filters) {
-                    continue;
-                }
-                let mut hit = item.hit;
-                hit.rank = 1.0 - score;
-                related.push(HybridHit {
-                    hit,
-                    metadata: item.metadata,
-                    match_source: "related".into(),
-                    semantic_score: Some(*score),
-                    embedding_model: Some(embedding_model.into()),
-                    pinned: item.pinned,
-                });
-            }
-        }
-        related.sort_by(|left, right| {
-            left.hit
-                .rank
-                .total_cmp(&right.hit.rank)
-                .then_with(|| left.hit.path.cmp(&right.hit.path))
-        });
-        related.truncate(limit);
-        Ok(related)
+        self.database
+            .query_hits(
+                "",
+                Some(query_vector),
+                embedding_model,
+                limit,
+                ranking::RankingWeights::default(),
+                "related",
+                filters,
+                Some(source_id),
+            )
+            .map_err(|error| search_failure("search related files", error))
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| HybridHit {
+                        hit: item.hit,
+                        metadata: item.metadata,
+                        match_source: "related".into(),
+                        semantic_score: item.semantic,
+                        embedding_model: Some(embedding_model.to_owned()),
+                        pinned: item.pinned,
+                    })
+                    .collect()
+            })
     }
 
     fn recent_search_filtered(
@@ -2064,6 +2000,371 @@ mod tests {
     use super::*;
     use crate::search::test_support::SearchFixture;
 
+    fn report_seeded_size(connection: &rusqlite::Connection, files: usize) {
+        let (pages, page_size, chunks, vectors, fts): (i64, i64, i64, i64, i64) = connection.query_row(
+            "SELECT (SELECT page_count FROM pragma_page_count),(SELECT page_size FROM pragma_page_size),
+                (SELECT count(*) FROM chunks),(SELECT count(*) FROM vector_embeddings),(SELECT count(*) FROM search_fts)",
+            [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?))
+        ).unwrap();
+        println!(
+            "seeded-database files={files} chunks={chunks} vectors={vectors} fts={fts} allocated_bytes={}",
+            pages * page_size
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn measure_seeded_query(
+        runtime: &IndexRuntime,
+        size: usize,
+        query: &str,
+        vector: Option<&[f32]>,
+        scope: &str,
+        filters: &[SearchFilterRequest],
+        expected: usize,
+    ) {
+        // Core runs always check first and repeated queries on the full fixture.
+        // Opt in to ten warm timing samples only for isolated profiling runs.
+        let benchmark = std::env::var("LUMEN_QUERY_BENCHMARK").as_deref() == Ok("1");
+        let sample_count = if benchmark { 11 } else { 2 };
+        let mut samples = Vec::new();
+        for sample in 0..sample_count {
+            let started = Instant::now();
+            let hits = runtime
+                .hybrid_search_filtered(
+                    query,
+                    vector,
+                    "fixture",
+                    5,
+                    ranking::RankingWeights::default(),
+                    scope,
+                    filters,
+                )
+                .unwrap();
+            samples.push(started.elapsed().as_secs_f64() * 1000.0);
+            if sample == 0 {
+                println!(
+                    "seeded-query-first rows={size} query={query:?} ms={:.3}",
+                    samples[0]
+                );
+            }
+            assert_eq!(hits.items.len(), expected);
+            assert_eq!(runtime.database.query_hydrated_rows(), expected);
+            if vector.is_some() {
+                assert_eq!(hits.semantic.phase, SemanticPhase::Ready);
+            }
+        }
+        if !benchmark {
+            println!(
+                "seeded-query-checks rows={size} query={query:?} vector={} scope={scope} samples={sample_count} hydrated={expected}",
+                vector.is_some()
+            );
+            return;
+        }
+        let first = samples.remove(0);
+        samples.sort_by(f64::total_cmp);
+        println!(
+            "seeded-query rows={size} query={query:?} vector={} scope={scope} first_ms={first:.3} warm_p50_ms={:.3} warm_p95_ms={:.3} hydrated={expected}",
+            vector.is_some(),
+            (samples[4] + samples[5]) / 2.0,
+            samples[9]
+        );
+    }
+
+    #[test]
+    fn query_finds_eligible_names_beyond_global_inventory_cap() {
+        let fixture = SearchFixture::new("query-cap-boundary");
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let mut runtime =
+            IndexRuntime::open(&database_path, Path::new("missing.dll"), false).unwrap();
+        // Synthetic DB rows have no admitted filesystem roots. Join the owned
+        // watcher/extractor before seeding so periodic policy cleanup cannot
+        // contend with or remove this query-core fixture.
+        drop(runtime.worker.take());
+        let connection = rusqlite::Connection::open(&database_path).unwrap();
+        connection.execute_batch(
+            "BEGIN;
+             WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<250001)
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             SELECT 'decoy-'||x, 'root-a', 'root-a/'||x, 'aaaa-'||x||'.tmp', '', 'metadata', 1 FROM n;
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             VALUES('wanted','root-b','root-b/zz-target.md','zz-target.md','','metadata',1);
+             INSERT INTO file_inventory(file_id,metadata)
+             SELECT id,json_object('path',path,'relativePath',name,'name',name,'kind',
+                 CASE WHEN stable_id='wanted' THEN 'document' ELSE 'unknown' END,
+                 'extension',CASE WHEN stable_id='wanted' THEN 'md' ELSE 'tmp' END,
+                 'sizeBytes',0,'modifiedMs',NULL) FROM files;
+             INSERT INTO chunks(file_id,ordinal,text,extraction_kind,content_hash,index_revision)
+             SELECT id,0,'boundarybody text','text','',1 FROM files;
+             INSERT INTO search_fts(file_id,chunk_id,name,path,body)
+             SELECT files.id,chunks.id,files.name,files.path,chunks.text FROM chunks JOIN files ON files.id=chunks.file_id;
+             COMMIT;"
+        ).unwrap();
+        for (scope, filters) in [
+            ("all", vec![]),
+            ("documents", vec![]),
+            (
+                "files",
+                vec![SearchFilterRequest {
+                    id: "extension".into(),
+                    value: ".MD".into(),
+                }],
+            ),
+        ] {
+            let hits = runtime
+                .hybrid_search_filtered(
+                    "target",
+                    None,
+                    "missing",
+                    1,
+                    ranking::RankingWeights::default(),
+                    scope,
+                    &filters,
+                )
+                .unwrap()
+                .items;
+            assert_eq!(
+                hits.iter()
+                    .map(|hit| hit.hit.stable_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["wanted"]
+            );
+            assert_eq!(runtime.database.query_hydrated_rows(), 1);
+        }
+        report_seeded_size(&connection, 250_002);
+        let filters = [SearchFilterRequest {
+            id: "extension".into(),
+            value: ".md".into(),
+        }];
+        let body = runtime
+            .hybrid_search_filtered(
+                "boundarybody",
+                None,
+                "missing",
+                1,
+                ranking::RankingWeights::default(),
+                "documents",
+                &filters,
+            )
+            .unwrap()
+            .items;
+        assert_eq!(body[0].hit.stable_id, "wanted");
+        assert_eq!(body[0].hit.snippet, "boundarybody text");
+        assert_eq!(runtime.database.query_hydrated_rows(), 1);
+        measure_seeded_query(&runtime, 250_002, "target", None, "all", &[], 1);
+        measure_seeded_query(
+            &runtime,
+            250_002,
+            "boundarybody",
+            None,
+            "documents",
+            &filters,
+            1,
+        );
+        measure_seeded_query(&runtime, 250_002, "nevermatches", None, "all", &[], 0);
+    }
+
+    #[test]
+    fn query_scaling_uses_selected_hydration_on_fifty_thousand_rows() {
+        let fixture = SearchFixture::new("query-scaling");
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let extension = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/vector.dll");
+        let mut runtime = IndexRuntime::open(&database_path, &extension, false).unwrap();
+        drop(runtime.worker.take());
+        let connection = rusqlite::Connection::open(&database_path).unwrap();
+        connection.execute_batch(
+            "BEGIN;
+             WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<50000)
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             SELECT 'decoy-'||x, 'root-a', 'root-a/'||x, 'aaaa-'||x||'.tmp', 'hash', 'text', 1 FROM n;
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             VALUES('wanted','root-b','root-b/zz-target.md','zz-target.md','hash','text',1);
+             INSERT INTO file_inventory(file_id,metadata)
+             SELECT id,json_object('path',path,'relativePath',name,'name',name,'kind',
+                 CASE WHEN stable_id='wanted' THEN 'document' ELSE 'unknown' END,
+                 'extension',CASE WHEN stable_id='wanted' THEN 'md' ELSE 'tmp' END,
+                 'sizeBytes',100,'modifiedMs',NULL) FROM files;
+             INSERT INTO chunks(file_id,ordinal,text,extraction_kind,content_hash,index_revision)
+             SELECT id,0,CASE WHEN stable_id='wanted' THEN 'needle text' ELSE 'common text' END,'text','hash',1 FROM files;
+             INSERT INTO search_fts(file_id,chunk_id,name,path,body)
+             SELECT files.id,chunks.id,files.name,files.path,chunks.text FROM chunks JOIN files ON files.id=chunks.file_id;
+             COMMIT;"
+        ).unwrap();
+        let vector = [1.0_f32, 0.0]
+            .into_iter()
+            .flat_map(f32::to_le_bytes)
+            .collect::<Vec<_>>();
+        connection.execute("INSERT INTO vector_embeddings(chunk_id,embedding,embedding_model,dimension,distance_metric,content_hash,index_revision) SELECT id,?1,'fixture',2,'cosine','hash',1 FROM chunks", [vector]).unwrap();
+        report_seeded_size(&connection, 50_001);
+        let filters = [SearchFilterRequest {
+            id: "kind".into(),
+            value: "DOCUMENT".into(),
+        }];
+        measure_seeded_query(&runtime, 50_001, "nevermatches", None, "all", &[], 0);
+        measure_seeded_query(&runtime, 50_001, "target", None, "files", &[], 1);
+        measure_seeded_query(&runtime, 50_001, "needle", None, "documents", &filters, 1);
+        measure_seeded_query(&runtime, 50_001, "aaaa", None, "files", &[], 5);
+        measure_seeded_query(
+            &runtime,
+            50_001,
+            "seafaring",
+            Some(&[1.0, 0.0]),
+            "documents",
+            &filters,
+            1,
+        );
+        let related = runtime
+            .related_search_filtered("decoy-1", &[1.0, 0.0], "fixture", 1, &filters)
+            .unwrap();
+        assert_eq!(related[0].hit.stable_id, "wanted");
+        assert_eq!(related[0].hit.snippet, "needle text");
+        assert_eq!(runtime.database.query_hydrated_rows(), 1);
+    }
+
+    #[test]
+    fn sql_query_preserves_exact_unicode_fuzzy_and_combined_preferences() {
+        let fixture = SearchFixture::new("query-native-ranking");
+        for name in [
+            "Report.md",
+            "report-prefix.md",
+            "r-e-p-o-r-t.md",
+            "Årsrapport.md",
+            "notes.md",
+        ] {
+            fixture.file(
+                name,
+                if name == "notes.md" {
+                    b"quasar body only"
+                } else {
+                    b"unrelated body"
+                },
+            );
+        }
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let runtime = IndexRuntime::open(&database_path, Path::new("missing.dll"), false).unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let connection = rusqlite::Connection::open(&database_path).unwrap();
+        connection
+            .execute(
+                "UPDATE file_inventory SET metadata=json_set(metadata,'$.modifiedMs',NULL)",
+                [],
+            )
+            .unwrap();
+        let fuzzy_id: String = connection
+            .query_row(
+                "SELECT stable_id FROM files WHERE name='r-e-p-o-r-t.md'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        runtime.set_pinned(&fuzzy_id, true).unwrap();
+        runtime.set_history_enabled(true);
+        assert!(runtime.record_file_open(&fuzzy_id).unwrap());
+        let weights = ranking::RankingWeights {
+            lexical: 0.5,
+            semantic: 0.0,
+            recency: 0.3,
+            pin: 0.2,
+        };
+        let hits = runtime
+            .hybrid_search("report", None, "missing", 3, weights)
+            .unwrap();
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Report.md", "r-e-p-o-r-t.md", "report-prefix.md"]
+        );
+        // FTS finds both exact and prefix; fuzzy name has gaps=5 => score .63.
+        assert!((hits[1].hit.rank - (1.0 - (0.63 * 0.5 + 0.3 + 0.2))).abs() < 0.00001);
+        assert!(hits[1].pinned);
+        assert_eq!(runtime.database.query_hydrated_rows(), 3);
+        let unicode = runtime
+            .hybrid_search("ÅRS", None, "missing", 1, weights)
+            .unwrap();
+        assert_eq!(unicode[0].hit.name, "Årsrapport.md");
+        assert_eq!(unicode[0].match_source, "filename");
+        let content = runtime
+            .hybrid_search("quasar", None, "missing", 1, weights)
+            .unwrap();
+        assert_eq!(content[0].hit.name, "notes.md");
+        assert_eq!(content[0].hit.snippet, "quasar body only");
+        assert_eq!(content[0].match_source, "content");
+        // An unrelated corrupt metadata row must not be parsed for sparse or missing names.
+        connection.execute("UPDATE file_inventory SET metadata='{}' WHERE file_id=(SELECT id FROM files WHERE name='report-prefix.md')", []).unwrap();
+        assert!(
+            runtime
+                .hybrid_search("nevermatches", None, "missing", 5, weights)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(runtime.database.query_hydrated_rows(), 0);
+        assert_eq!(
+            runtime
+                .hybrid_search("quasar", None, "missing", 1, weights)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(runtime.database.query_hydrated_rows(), 1);
+    }
+
+    #[test]
+    fn sql_query_ties_preserve_native_path_component_order() {
+        let fixture = SearchFixture::new("query-path-order");
+        fixture.file("a-b.txt", b"");
+        fixture.file("a/b.txt", b"");
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let runtime = IndexRuntime::open(&database_path, Path::new("missing.dll"), false).unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let connection = rusqlite::Connection::open(database_path).unwrap();
+        connection
+            .execute(
+                "UPDATE file_inventory SET metadata=json_set(metadata,'$.modifiedMs',NULL)",
+                [],
+            )
+            .unwrap();
+        let hits = runtime
+            .hybrid_search_filtered(
+                "",
+                None,
+                "missing",
+                2,
+                ranking::RankingWeights::default(),
+                "files",
+                &[],
+            )
+            .unwrap()
+            .items;
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<Vec<_>>(),
+            ["b.txt", "a-b.txt"]
+        );
+    }
+
     #[test]
     fn missing_vector_extension_preserves_content_only_and_filename_hits() {
         let fixture = SearchFixture::new("missing-vector-lexical");
@@ -2616,6 +2917,7 @@ mod tests {
             .unwrap();
         assert_eq!(recovered[0].hit.name, "alpha.txt");
         assert_eq!(recovered[0].match_source, "semantic");
+        assert_eq!(recovered[0].hit.snippet, "quiet lighthouse notes");
         let source_id = recovered[0].hit.stable_id.clone();
 
         let related = runtime
@@ -2623,6 +2925,91 @@ mod tests {
             .unwrap();
         assert!(!related.iter().any(|hit| hit.hit.stable_id == source_id));
         assert_eq!(related[0].hit.name, "beta.txt");
+        assert_eq!(related[0].hit.snippet, "harbor navigation notes");
         assert!(related.iter().all(|hit| hit.match_source == "related"));
+    }
+
+    #[test]
+    fn selected_semantic_and_content_snippets_use_the_matching_current_chunk() {
+        let fixture = SearchFixture::new("selected-chunk-snippet");
+        let text = format!("{}needle {}", "a".repeat(32 * 1024), "東京".repeat(600));
+        fixture.file("notes.txt", text.as_bytes());
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let extension = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/vector.dll");
+        let runtime = IndexRuntime::open(&database_path, &extension, false).unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        runtime.queue_embedding_jobs("fixture").unwrap();
+        let jobs = runtime.pending_embedding_jobs("fixture", 8).unwrap();
+        assert_eq!(jobs.len(), 2);
+        let (hash, revision) = (jobs[1].content_hash.clone(), jobs[1].index_revision);
+        for job in jobs {
+            runtime
+                .complete_embedding_job(
+                    &job,
+                    if job.text.starts_with("needle") {
+                        &[1.0, 0.0]
+                    } else {
+                        &[0.0, 1.0]
+                    },
+                )
+                .unwrap();
+        }
+        let lexical = runtime
+            .hybrid_search(
+                "needle",
+                None,
+                "fixture",
+                1,
+                ranking::RankingWeights::default(),
+            )
+            .unwrap();
+        let semantic = runtime
+            .hybrid_search(
+                "seafaring",
+                Some(&[1.0, 0.0]),
+                "fixture",
+                1,
+                ranking::RankingWeights::default(),
+            )
+            .unwrap();
+        let related = runtime
+            .related_search("unrelated-source", &[1.0, 0.0], "fixture", 1)
+            .unwrap();
+        for hit in [&lexical[0], &semantic[0], &related[0]] {
+            assert!(hit.hit.snippet.starts_with("needle "));
+            assert_eq!(hit.hit.snippet.chars().count(), 1000);
+            assert_eq!(hit.hit.content_hash, hash);
+            assert_eq!(hit.hit.index_revision, revision);
+            assert_eq!(hit.hit.extraction_kind, "text");
+        }
+        let connection = rusqlite::Connection::open(database_path).unwrap();
+        connection
+            .execute("UPDATE vector_embeddings SET content_hash='obsolete'", [])
+            .unwrap();
+        let stale = runtime
+            .hybrid_search_filtered(
+                "seafaring",
+                Some(&[1.0, 0.0]),
+                "fixture",
+                1,
+                ranking::RankingWeights::default(),
+                "all",
+                &[],
+            )
+            .unwrap();
+        assert_eq!(stale.semantic.phase, SemanticPhase::Ready);
+        assert!(stale.items.is_empty());
+        assert_eq!(runtime.database.query_hydrated_rows(), 0);
     }
 }

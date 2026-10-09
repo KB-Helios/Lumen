@@ -1,4 +1,5 @@
 #[derive(Clone, Debug)]
+#[cfg(test)]
 pub struct RankingCandidate<T> {
     pub id: T,
     pub name: String,
@@ -28,6 +29,7 @@ impl Default for RankingWeights {
 }
 
 #[derive(Clone, Debug)]
+#[cfg(test)]
 pub struct RankedCandidate<T> {
     pub candidate: RankingCandidate<T>,
     pub exact_filename: bool,
@@ -42,31 +44,50 @@ fn bounded(value: f64) -> f64 {
     }
 }
 
-fn exact_filename(query: &str, name: &str) -> bool {
+pub(super) fn exact_filename(query: &str, name: &str) -> bool {
     let query = query.trim().to_lowercase();
     let name = name.to_lowercase();
     name == query || name.rsplit_once('.').is_some_and(|(stem, _)| stem == query)
 }
 
-pub fn rank_candidates<T>(
-    query: &str,
-    candidates: Vec<RankingCandidate<T>>,
+pub(super) fn score(
+    lexical: f64,
+    semantic: Option<f64>,
+    recency: f64,
+    pinned: bool,
     weights: RankingWeights,
-) -> Vec<RankedCandidate<T>> {
+) -> f64 {
     let total_weight = weights.lexical + weights.semantic + weights.recency + weights.pin;
     let denominator = if total_weight.is_finite() && total_weight > 0.0 {
         total_weight
     } else {
         1.0
     };
+    bounded(
+        (bounded(lexical) * weights.lexical
+            + bounded(semantic.unwrap_or(0.0)) * weights.semantic
+            + bounded(recency) * weights.recency
+            + if pinned { weights.pin } else { 0.0 })
+            / denominator,
+    )
+}
+
+#[cfg(test)]
+pub fn rank_candidates<T>(
+    query: &str,
+    candidates: Vec<RankingCandidate<T>>,
+    weights: RankingWeights,
+) -> Vec<RankedCandidate<T>> {
     let mut ranked = candidates
         .into_iter()
         .map(|candidate| {
-            let score = (bounded(candidate.lexical) * weights.lexical
-                + bounded(candidate.semantic.unwrap_or(0.0)) * weights.semantic
-                + bounded(candidate.recency) * weights.recency
-                + if candidate.pinned { weights.pin } else { 0.0 })
-                / denominator;
+            let score = score(
+                candidate.lexical,
+                candidate.semantic,
+                candidate.recency,
+                candidate.pinned,
+                weights,
+            );
             RankedCandidate {
                 exact_filename: exact_filename(query, &candidate.name),
                 candidate,

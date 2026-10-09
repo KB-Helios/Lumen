@@ -13,7 +13,7 @@ struct MatchQuality {
     ranges: Vec<[usize; 2]>,
 }
 
-fn filename_match(name: &str, query: &str) -> Option<MatchQuality> {
+fn filename_match(name: &str, query: &str, include_ranges: bool) -> Option<MatchQuality> {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
         return Some(MatchQuality {
@@ -26,41 +26,48 @@ fn filename_match(name: &str, query: &str) -> Option<MatchQuality> {
     if normalized == query {
         return Some(MatchQuality {
             score: 1.0,
-            ranges: vec![[0, name.chars().count()]],
+            ranges: if include_ranges {
+                vec![[0, name.chars().count()]]
+            } else {
+                Vec::new()
+            },
         });
     }
     if normalized.starts_with(&query) {
         return Some(MatchQuality {
             score: 0.94,
-            ranges: vec![[0, query.chars().count()]],
+            ranges: if include_ranges {
+                vec![[0, query.chars().count()]]
+            } else {
+                Vec::new()
+            },
         });
     }
     if let Some(byte_index) = normalized.find(&query) {
         let start = normalized[..byte_index].chars().count();
         return Some(MatchQuality {
             score: (0.86 - (start as f64 * 0.002)).max(0.72),
-            ranges: vec![[start, start + query.chars().count()]],
+            ranges: if include_ranges {
+                vec![[start, start + query.chars().count()]]
+            } else {
+                Vec::new()
+            },
         });
     }
 
-    let name_chars = normalized.chars().collect::<Vec<_>>();
-    let mut search_index = 0;
-    let mut matched = Vec::new();
+    let mut name_chars = normalized.chars().enumerate();
+    let mut first = None;
+    let mut last = 0;
+    let mut ranges = Vec::new();
     for query_character in query.chars() {
-        let offset = name_chars[search_index..]
-            .iter()
-            .position(|candidate| *candidate == query_character)?;
-        search_index += offset;
-        matched.push(search_index);
-        search_index += 1;
+        let (index, _) = name_chars.find(|(_, candidate)| *candidate == query_character)?;
+        first.get_or_insert(index);
+        last = index;
+        if include_ranges {
+            ranges.push([index, index + 1]);
+        }
     }
-    let span = matched.last().copied().unwrap_or_default()
-        - matched.first().copied().unwrap_or_default()
-        + 1;
-    let ranges = matched
-        .into_iter()
-        .map(|index| [index, index + 1])
-        .collect();
+    let span = last - first.unwrap_or_default() + 1;
     Some(MatchQuality {
         score: (0.68 - (span.saturating_sub(query.chars().count()) as f64 * 0.01)).max(0.5),
         ranges,
@@ -68,7 +75,7 @@ fn filename_match(name: &str, query: &str) -> Option<MatchQuality> {
 }
 
 pub(super) fn filename_score(name: &str, query: &str) -> Option<f64> {
-    filename_match(name, query).map(|quality| quality.score)
+    filename_match(name, query, false).map(|quality| quality.score)
 }
 
 #[cfg(test)]
@@ -105,7 +112,7 @@ pub fn search_filenames_filtered(
             matches_metadata_scope(file, scope) && matches_metadata_filters(file, filters)
         })
         .filter_map(|file| {
-            filename_match(&file.name, query).map(|quality| FilenameMatch {
+            filename_match(&file.name, query, true).map(|quality| FilenameMatch {
                 file,
                 score: quality.score,
                 ranges: quality.ranges,
