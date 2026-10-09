@@ -1,0 +1,245 @@
+{
+  "browser": "155.0.4283.45",
+  "samples": [
+    {
+      "start": 6786.099999964237,
+      "nominal": 6784.6,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.5,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 3.600000023841858,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 7.300000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6856.099999964237,
+      "nominal": 6855.5,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.30000001192092896,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4.100000023841858,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 8,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6898.199999988079,
+      "nominal": 6897.1,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.5,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 7.699999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6943.800000011921,
+      "nominal": 6938.9,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.5,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 2.299999952316284,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 4.199999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6981.5,
+      "nominal": 6980.6,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.3999999761581421,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4.199999988079071,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 8,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7035.5,
+      "nominal": 7034.7,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.30000001192092896,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4.300000011920929,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 8,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7085.5,
+      "nominal": 7084.8,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.3999999761581421,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4.399999976158142,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 7.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7127.399999976158,
+      "nominal": 7126.5,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.40000003576278687,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 7.699999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7173,
+      "nominal": 7172.4,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.30000001192092896,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4.199999988079071,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 8,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7214.599999964237,
+      "nominal": 7214.1,
+      "states": [
+        {
+          "frame": 1,
+          "elapsed": 0.30000001192092896,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "frame": 2,
+          "elapsed": 4.300000011920929,
+          "hovered": true,
+          "bg": "oklab(0 0 0 / 0)"
+        },
+        {
+          "frame": 3,
+          "elapsed": 8.200000047683716,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    }
+  ]
+}
