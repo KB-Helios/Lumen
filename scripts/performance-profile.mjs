@@ -5,6 +5,7 @@ import path from 'node:path';
 import {chromium} from 'playwright';
 
 import {withLumenDevServer} from './lib/lumen-dev-server.mjs';
+import {sampleHover} from './lib/hover-sample.mjs';
 
 const outputDirectory = path.resolve('artifacts/performance');
 const tracePath = path.join(outputDirectory, 'interaction-trace.zip');
@@ -203,26 +204,11 @@ async function profile(baseUrl) {
     await resetMetrics(page);
     const hoverSamples = [];
     for (let index = 0; index < 80; index += 1) {
-      hoverSamples.push(await row.evaluate((element) => new Promise((resolve) => {
-        requestAnimationFrame((frameStartedAt) => {
-          const hoverStartedAt = performance.now();
-          element.dispatchEvent(new PointerEvent('pointerover', {
-            bubbles: true,
-            pointerType: 'mouse',
-          }));
-          const synchronousDispatchMs = performance.now() - hoverStartedAt;
-          requestAnimationFrame((frameEndedAt) => resolve({
-            hoverToPaintMs: performance.now() - hoverStartedAt,
-            frameIntervalMs: frameEndedAt - frameStartedAt,
-            synchronousDispatchMs,
-          }));
-        });
-      })));
-      await page.waitForTimeout(12);
+      hoverSamples.push(await sampleHover(row));
     }
     await page.waitForTimeout(100);
-    const hoverToPaintSamples = hoverSamples.map((sample) => sample.hoverToPaintMs);
-    const hoverFrameIntervals = hoverSamples.map((sample) => sample.frameIntervalMs);
+    const hoverToPaintSamples = hoverSamples.map((sample) => sample.responseMs);
+    const hoverFrameIntervals = hoverSamples.map((sample) => sample.callbackIntervalMs);
     const hoverSynchronousDispatch = hoverSamples.map((sample) => sample.synchronousDispatchMs);
     const hoverMetrics = await readMetrics(page);
 
@@ -251,6 +237,8 @@ async function profile(baseUrl) {
       selectionToPaintP95Ms: percentile(selectionSamples, 0.95),
       hoverToPaintP95Ms: percentile(hoverToPaintSamples, 0.95),
       hoverFrameIntervalP95Ms: percentile(hoverFrameIntervals, 0.95),
+      hoverNominalFrameIntervalP95Ms: percentile(hoverSamples.map((sample) => sample.nominalFrameIntervalMs), 0.95),
+      hoverReadySamples: hoverSamples.filter((sample) => sample.ready).length,
       hoverSynchronousDispatchMaxMs: Math.max(...hoverSynchronousDispatch),
       hoverBrowserLongTasksOver50Ms: hoverMetrics.browserLongTasks,
       ordinaryReactCommitP95Ms: percentile(selectionMetrics.reactCommits, 0.95),
@@ -284,7 +272,7 @@ async function profile(baseUrl) {
     const strict240Hz = {
       input: measured.inputResponseP95Ms < targetFrameBudgetMs,
       selection: measured.selectionToPaintP95Ms < targetFrameBudgetMs,
-      hover: measured.hoverToPaintP95Ms < targetFrameBudgetMs,
+      hover: measured.hoverToPaintP95Ms < targetFrameBudgetMs && measured.hoverReadySamples === 80,
     };
     strict240Hz.passed = Object.values(strict240Hz).every(Boolean);
     const cadenceMeasurementAvailable = Number.isFinite(refresh.p95FrameIntervalMs) &&
@@ -317,7 +305,8 @@ async function profile(baseUrl) {
       warmLauncher: measured.warmLauncherP95Ms < budgets.warmLauncherP95Ms,
       input: measured.inputResponseP95Ms < budgets.inputResponseP95Ms,
       selection: measured.selectionToPaintP95Ms < budgets.selectionToPaintP95Ms,
-      hover: measured.hoverToPaintP95Ms < budgets.hoverToPaintP95Ms,
+      hover: measured.hoverToPaintP95Ms <= budgets.hoverToPaintP95Ms,
+      hoverReadiness: measured.hoverReadySamples === 80,
       hoverSynchronousDispatch: measured.hoverSynchronousDispatchMaxMs < budgets.synchronousWorkMs,
       hoverBrowserLongTasks: measured.hoverBrowserLongTasksOver50Ms.length === 0,
       reactCommit: measured.ordinaryReactCommitP95Ms < budgets.ordinaryReactCommitP95Ms,
@@ -341,7 +330,8 @@ async function profile(baseUrl) {
       generatedAt: new Date().toISOString(),
       gitSha: execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(),
       browser: {name: 'Microsoft Edge', version: browserVersion},
-      profile: 'warm deterministic browser adapter, 800x540 viewport, 30 paced input samples, 120 paced selection samples, 80 contemporaneously paired hover/frame samples with direct dispatch timing, renderer-side synchronous 30-event input and selection bursts, plus activity-indicator settle verification',
+      profile: 'warm deterministic browser adapter, 800x540 viewport, 30 paced input samples, 120 paced selection samples, 80 fresh hover transitions with paired actual callback endpoints, independent next-callback state and token-color readiness, separate nominal rAF cadence, direct dispatch timing, renderer-side synchronous 30-event input and selection bursts, plus activity-indicator settle verification',
+      hoverEvidenceBoundary: 'Legacy hoverToPaint fields measure dispatch to the next actual animation callback, with independent computed-style readiness; they do not measure compositor paint. hoverFrameInterval fields use actual callback endpoints; nominal rendering timestamps and callback offsets are retained in samples.hover.',
       target: {
         refreshRateHz: 240,
         frameBudgetMs: targetFrameBudgetMs,
@@ -362,6 +352,7 @@ async function profile(baseUrl) {
         hoverToPaintMs: hoverToPaintSamples,
         hoverFrameIntervalMs: hoverFrameIntervals,
         hoverSynchronousDispatchMs: hoverSynchronousDispatch,
+        hover: hoverSamples,
         reactCommitMs: selectionMetrics.reactCommits,
       },
     };

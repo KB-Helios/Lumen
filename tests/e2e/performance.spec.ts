@@ -1,5 +1,7 @@
 import {expect, test, type Page} from '@playwright/test';
 
+import {sampleHover} from '../../scripts/lib/hover-sample.mjs';
+
 const frameSchedulingToleranceMs = 2;
 
 test.describe.configure({mode: 'serial'});
@@ -211,29 +213,20 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
   await expect(row).toBeVisible();
 
   await resetMetrics(page);
-  const hoverSamples: Array<{hoverToPaintMs: number; frameIntervalMs: number; synchronousDispatchMs: number}> = [];
+  const hoverSamples = [];
   for (let index = 0; index < 80; index += 1) {
-    hoverSamples.push(await row.evaluate((element) => new Promise((resolve) => {
-      requestAnimationFrame((frameStartedAt) => {
-        const hoverStartedAt = performance.now();
-        element.dispatchEvent(new PointerEvent('pointerover', {bubbles: true, pointerType: 'mouse'}));
-        const synchronousDispatchMs = performance.now() - hoverStartedAt;
-        requestAnimationFrame((frameEndedAt) => resolve({
-          hoverToPaintMs: performance.now() - hoverStartedAt,
-          frameIntervalMs: frameEndedAt - frameStartedAt,
-          synchronousDispatchMs,
-        }));
-      });
-    })));
-    await page.waitForTimeout(12);
+    hoverSamples.push(await sampleHover(row));
   }
   await page.waitForTimeout(100);
-  const hoverToPaintSamples = hoverSamples.map((sample) => sample.hoverToPaintMs);
-  const hoverFrameIntervals = hoverSamples.map((sample) => sample.frameIntervalMs);
+  const hoverToPaintSamples = hoverSamples.map((sample) => sample.responseMs);
+  const hoverFrameIntervals = hoverSamples.map((sample) => sample.callbackIntervalMs);
   const hoverSynchronousDispatch = hoverSamples.map((sample) => sample.synchronousDispatchMs);
   const hoverMetrics = await readMetrics(page);
   const hoverFrameBudget = Math.max(percentile(hoverFrameIntervals, 0.95), 1000 / 240);
-  expect(percentile(hoverToPaintSamples, 0.95)).toBeLessThan(hoverFrameBudget);
+  // Callback endpoints may be equal at the clock's precision. Readiness is an
+  // independent state AND intended-color gate, not an elapsed <= interval tautology.
+  expect(hoverSamples.filter((sample) => !sample.ready)).toEqual([]);
+  expect(percentile(hoverToPaintSamples, 0.95)).toBeLessThanOrEqual(hoverFrameBudget);
   expect(Math.max(...hoverSynchronousDispatch)).toBeLessThan(16);
   expect(hoverMetrics.browserLongTasks).toHaveLength(0);
 
