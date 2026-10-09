@@ -51,13 +51,13 @@ impl CliproxyClient {
     }
 
     /// `GET /v8/management/config` — persisted config in the v8 layout.
-    pub async fn get_config(&self) -> Result<Value, String> {
-        self.get("/config").await
+    pub async fn get_config(&self) -> Result<ConfigSummary, String> {
+        Ok(config_summary(&self.get("/config").await?))
     }
 
     /// `PATCH /v8/management/config` — merges objects, replaces lists/scalars.
     /// The patch value is sent directly (no `{value:}` envelope).
-    pub async fn patch_config(&self, patch: Value) -> Result<Value, String> {
+    pub async fn patch_config(&self, patch: Value) -> Result<PatchResult, String> {
         let response = self
             .client
             .patch(format!("{}/config", self.base))
@@ -66,14 +66,15 @@ impl CliproxyClient {
             .send()
             .await
             .map_err(|error| format!("Cliproxy request failed: {error}"))?;
-        check_status(response).await
+        let _ = check_status(response).await?;
+        Ok(PatchResult { ok: true })
     }
 
     /// `GET /v8/management/credentials` — credential-file metadata.
-    /// Returns the sidecar payload (file metadata/status, never key material
-    /// fetched out-of-band); callers must not log or forward secrets.
-    pub async fn list_credentials(&self) -> Result<Value, String> {
-        self.get("/credentials").await
+    /// Returns only known provider labels and disabled state. File names and
+    /// arbitrary nested credential metadata never cross IPC.
+    pub async fn list_credentials(&self) -> Result<CredentialsSummary, String> {
+        Ok(credentials_summary(&self.get("/credentials").await?))
     }
 
     /// `GET /v8/management/oauth/auth-url?provider=` — starts a sidecar OAuth
@@ -139,16 +140,193 @@ impl CliproxyClient {
         if provider.is_empty() {
             return Err("OAuth provider is required".to_owned());
         }
-        let value = self.list_credentials().await?;
+        let value = self.get("/credentials").await?;
         Ok(credentials_linked(&value, provider))
     }
 
     /// `GET /v8/management/observability/usage/api-keys` — per-key request
     /// counters (`{provider: {"base_url|api_key": {success, failed, ...}}}`).
-    /// Composite map keys embed key material, so the frontend folds only
-    /// provider names and counters out of this payload.
-    pub async fn api_key_usage(&self) -> Result<Value, String> {
-        self.get("/observability/usage/api-keys").await
+    /// Composite keys embed key material; fold counters in Rust before IPC.
+    pub async fn api_key_usage(&self) -> Result<Vec<ProviderUsage>, String> {
+        Ok(usage_summary(
+            &self.get("/observability/usage/api-keys").await?,
+        ))
+    }
+}
+
+const SAFE_PROVIDERS: &[&str] = &[
+    "codex",
+    "openai",
+    "claude",
+    "anthropic",
+    "gemini",
+    "qwen",
+    "xai",
+    "grok",
+    "iflow",
+    "kimi",
+    "antigravity",
+    "vertex",
+    "copilot",
+];
+const MAX_WEB_COUNT: u64 = 9_007_199_254_740_991;
+
+fn safe_provider(value: &str) -> Option<String> {
+    let normalized = value.trim().to_lowercase();
+    SAFE_PROVIDERS
+        .contains(&normalized.as_str())
+        .then_some(normalized)
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct ProviderUsage {
+    pub provider: String,
+    pub success: u64,
+    pub failed: u64,
+    pub total: u64,
+}
+
+fn usage_summary(value: &Value) -> Vec<ProviderUsage> {
+    let Some(providers) = value.as_object() else {
+        return Vec::new();
+    };
+    let mut rows = Vec::new();
+    for (provider, keys) in providers {
+        let Some(provider) = safe_provider(provider) else {
+            continue;
+        };
+        let Some(keys) = keys.as_object() else {
+            continue;
+        };
+        let mut success = 0u64;
+        let mut failed = 0u64;
+        for entry in keys.values() {
+            success = success
+                .saturating_add(entry.get("success").and_then(Value::as_u64).unwrap_or(0))
+                .min(MAX_WEB_COUNT);
+            failed = failed
+                .saturating_add(entry.get("failed").and_then(Value::as_u64).unwrap_or(0))
+                .min(MAX_WEB_COUNT);
+        }
+        rows.push(ProviderUsage {
+            provider,
+            success,
+            failed,
+            total: success.saturating_add(failed).min(MAX_WEB_COUNT),
+        });
+    }
+    rows.sort_by(|left, right| {
+        right
+            .total
+            .cmp(&left.total)
+            .then(left.provider.cmp(&right.provider))
+    });
+    rows
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct ProviderCount {
+    pub provider: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigSummary {
+    pub routing_strategy: Option<String>,
+    pub usage_statistics_enabled: bool,
+    pub provider_counts: Vec<ProviderCount>,
+}
+
+fn config_summary(value: &Value) -> ConfigSummary {
+    let routing_strategy = value
+        .pointer("/routing/strategy")
+        .and_then(Value::as_str)
+        .filter(|strategy| ["round-robin", "fill-first"].contains(strategy))
+        .map(str::to_owned);
+    let mut provider_counts = Vec::new();
+    for (field, provider) in [
+        ("codex-api-key", "codex"),
+        ("claude-api-key", "claude"),
+        ("gemini-api-key", "gemini"),
+        ("vertex-api-key", "vertex"),
+    ] {
+        if let Some(groups) = value
+            .pointer(&format!("/api-keys/{provider}"))
+            .and_then(Value::as_array)
+        {
+            let count = groups
+                .iter()
+                .filter_map(|group| group.get("keys").and_then(Value::as_array))
+                .fold(0u64, |count, keys| {
+                    count.saturating_add(keys.len() as u64).min(MAX_WEB_COUNT)
+                });
+            provider_counts.push(ProviderCount {
+                provider: provider.to_owned(),
+                count,
+            });
+        } else if let Some(entries) = value.get(field).and_then(Value::as_array) {
+            provider_counts.push(ProviderCount {
+                provider: provider.to_owned(),
+                count: entries.len() as u64,
+            });
+        }
+    }
+    ConfigSummary {
+        routing_strategy,
+        usage_statistics_enabled: value
+            .pointer("/observability/usage/usage-statistics-enabled")
+            .or_else(|| value.get("usage-statistics-enabled"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        provider_counts,
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct PatchResult {
+    pub ok: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct CredentialMetadata {
+    pub provider: String,
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct CredentialsSummary {
+    pub files: Vec<CredentialMetadata>,
+}
+
+fn credentials_summary(value: &Value) -> CredentialsSummary {
+    let files = value
+        .as_array()
+        .or_else(|| value.get("files").and_then(Value::as_array));
+    CredentialsSummary {
+        files: files
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| {
+                let provider = entry
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .and_then(safe_provider)
+                    .or_else(|| {
+                        entry
+                            .get("provider")
+                            .and_then(Value::as_str)
+                            .and_then(safe_provider)
+                    })?;
+                Some(CredentialMetadata {
+                    provider,
+                    disabled: entry
+                        .get("disabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                })
+            })
+            .collect(),
     }
 }
 
@@ -228,14 +406,7 @@ fn map_oauth_status(value: &Value) -> OAuthPoll {
         },
         "error" => OAuthPoll {
             done: false,
-            error: Some(
-                value
-                    .get("error")
-                    .and_then(Value::as_str)
-                    .map(|message| message.trim().to_owned())
-                    .filter(|message| !message.is_empty())
-                    .unwrap_or_else(|| "Authentication failed".to_owned()),
-            ),
+            error: Some("Authentication failed".to_owned()),
         },
         _ => OAuthPoll {
             done: false,
@@ -341,19 +512,24 @@ fn client_for(app: &tauri::AppHandle) -> Result<CliproxyClient, String> {
 
 /// Fetch the sidecar configuration using the app's management credentials.
 #[tauri::command]
-pub async fn cliproxy_get_config(app: tauri::AppHandle) -> Result<Value, String> {
+pub async fn cliproxy_get_config(app: tauri::AppHandle) -> Result<ConfigSummary, String> {
     client_for(&app)?.get_config().await
 }
 
 /// Forward a configuration patch to the authenticated sidecar API.
 #[tauri::command]
-pub async fn cliproxy_patch_config(app: tauri::AppHandle, patch: Value) -> Result<Value, String> {
+pub async fn cliproxy_patch_config(
+    app: tauri::AppHandle,
+    patch: Value,
+) -> Result<PatchResult, String> {
     client_for(&app)?.patch_config(patch).await
 }
 
 /// Fetch the sidecar credential metadata through the native command boundary.
 #[tauri::command]
-pub async fn cliproxy_list_credentials(app: tauri::AppHandle) -> Result<Value, String> {
+pub async fn cliproxy_list_credentials(
+    app: tauri::AppHandle,
+) -> Result<CredentialsSummary, String> {
     client_for(&app)?.list_credentials().await
 }
 
@@ -409,10 +585,10 @@ pub async fn cliproxy_oauth_import(provider: String, token: String) -> Result<()
     ))
 }
 
-/// Per-key request counters for the Usage panel (provider names + counters
+/// Aggregated request counters for the Usage panel (provider names + counters
 /// only; composite keys holding key material stay server-side).
 #[tauri::command]
-pub async fn cliproxy_usage(app: tauri::AppHandle) -> Result<Value, String> {
+pub async fn cliproxy_usage(app: tauri::AppHandle) -> Result<Vec<ProviderUsage>, String> {
     client_for(&app)?.api_key_usage().await
 }
 
@@ -478,7 +654,7 @@ mod tests {
             map_oauth_status(&serde_json::json!({"status": "error", "error": "denied"})),
             OAuthPoll {
                 done: false,
-                error: Some("denied".to_owned())
+                error: Some("Authentication failed".to_owned())
             }
         );
     }

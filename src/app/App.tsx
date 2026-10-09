@@ -59,17 +59,14 @@ function createDefaultSearchService() {
     return new DevelopmentSearchService();
   }
   return new DevelopmentFileSearchService({
+    isReady: () => useSettingsStore.getState().hydrated,
     getRoots: () => {
       const settingsRoots = useSettingsStore
         .getState()
         .roots
         .filter((root) => !root.paused)
         .map((root) => root.path);
-      if (settingsRoots.length > 0) {
-        return settingsRoots;
-      }
-      const onboardingRoot = useOnboardingStore.getState().root;
-      return onboardingRoot ? [onboardingRoot] : [];
+      return settingsRoots;
     },
     getRootConfigurations: () => {
       const settings = useSettingsStore.getState();
@@ -83,18 +80,7 @@ function createDefaultSearchService() {
           includeHidden: root.includeHidden,
           maxFileSizeMb: root.maxFileSizeMb,
         }));
-      if (configuredRoots.length > 0) {
-        return configuredRoots;
-      }
-      const onboardingRoot = useOnboardingStore.getState().root;
-      return onboardingRoot ? [{
-        id: `onboarding:${onboardingRoot}`,
-        path: onboardingRoot,
-        cloudEnrichment: false,
-        exclusions: [],
-        includeHidden: false,
-        maxFileSizeMb: 256,
-      }] : [];
+      return configuredRoots;
     },
     getSearchPreferences: () => {
       const {
@@ -454,7 +440,7 @@ export function App({
               </kbd>
             </div>
           </LumenSurface>
-        ) : showOnboarding ? (
+        ) : !settingsHydrated ? null : showOnboarding ? (
           <Suspense fallback={null}>
             <OnboardingFlow windowService={windowService} onComplete={completeOnboarding} />
           </Suspense>

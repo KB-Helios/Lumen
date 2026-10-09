@@ -211,6 +211,8 @@ describe('core settings pages', () => {
     vi.spyOn(nativeAiService, 'indexStatus').mockResolvedValue({
       phase: 'ready',
       indexedItems: 1,
+      generation: 1,
+      pendingItems: 0,
       queuedEnrichment: 0,
       skippedItems: 0,
       message: 'Index ready.',

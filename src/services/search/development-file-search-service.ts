@@ -1,5 +1,6 @@
 import {invoke as tauriInvoke} from '@tauri-apps/api/core';
 import {z} from 'zod';
+import {admitIndexRoots, indexStatusSchema, type IndexStatus} from '../ai/native-ai-service';
 
 import type {SearchService} from './search-service';
 import {
@@ -50,16 +51,28 @@ const rustIndexedHitSchema = z.object({
   contentHash: z.string().min(1),
   indexRevision: z.number().int().positive(),
   extractionKind: z.string().min(1),
+  snippet: z.string().transform(value => {
+    const splitPair = /[\uD800-\uDBFF]/.test(value.charAt(999)) && /[\uDC00-\uDFFF]/.test(value.charAt(1000));
+    return value.slice(0, splitPair ? 999 : 1000);
+  }).optional(),
   page: z.number().int().positive().nullable().optional(),
   timeStartMs: z.number().int().nonnegative().nullable().optional(),
   timeEndMs: z.number().int().nonnegative().nullable().optional(),
-  rank: z.number(),
+  rank: z.number().min(0).max(1),
+  metadata: rustFileSchema,
   matchSource: z.enum(['filename', 'content', 'metadata', 'ocr', 'semantic', 'related']),
   semanticScore: z.number().min(0).max(1).nullable().optional(),
   embeddingModel: z.string().min(1).nullable().optional(),
   pinned: z.boolean(),
 });
 const rustIndexedHitsSchema = z.array(rustIndexedHitSchema);
+const rustHybridResponseSchema = z.object({
+  items: rustIndexedHitsSchema,
+  semantic: z.object({
+    phase: z.enum(['disabled', 'ready', 'degraded']),
+    reason: z.string().min(1).max(256).nullable(),
+  }).refine(status => status.phase === 'degraded' ? status.reason !== null : status.reason === null),
+});
 const pinUpdateSchema = z.object({applied: z.boolean(), pinned: z.boolean()});
 
 const rustPreviewSchema = z.object({
@@ -83,6 +96,7 @@ interface KnownFile {
 }
 
 export interface DevelopmentFileSearchServiceOptions {
+  isReady?(): boolean;
   getRoots(): readonly string[];
   getRootConfigurations?(): readonly {
     id: string;
@@ -111,11 +125,11 @@ const defaultSearchPreferences = {
 } as const;
 
 function normalizedPath(value: string) {
-  return value.replace(/\\/g, '/').replace(/\/+$/, '').toLocaleLowerCase();
+  return displayPath(value).replace(/\\/g, '/').replace(/\/+$/, '').toLocaleLowerCase();
 }
 
 function displayPath(value: string) {
-  return value.replace(/^\\\\\?\\/, '');
+  return value.replace(/^\\\\\?\\UNC\\/i, '\\\\').replace(/^\\\\\?\\/, '');
 }
 
 function formatBytes(value: string) {
@@ -170,19 +184,6 @@ function isInScope(kind: SearchResult['kind'], scope: SearchScope) {
   }
 }
 
-function indexedKind(path: string): SearchResult['kind'] {
-  const extension = path.split('.').pop()?.toLocaleLowerCase() ?? '';
-  if (extension === 'pdf') return 'pdf';
-  if (['doc', 'docx', 'odt', 'rtf', 'txt', 'md'].includes(extension)) return 'document';
-  if (['csv', 'ods', 'xls', 'xlsx'].includes(extension)) return 'spreadsheet';
-  if (['odp', 'ppt', 'pptx'].includes(extension)) return 'presentation';
-  if (['c', 'cc', 'cpp', 'cs', 'css', 'go', 'h', 'hpp', 'html', 'java', 'js', 'jsx', 'json', 'kt', 'kts', 'lua', 'php', 'py', 'rb', 'rs', 'scss', 'sh', 'sql', 'swift', 'toml', 'ts', 'tsx', 'vue', 'xml', 'yaml', 'yml'].includes(extension)) return 'source';
-  if (['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'webp'].includes(extension)) return 'image';
-  if (['avi', 'm4v', 'mkv', 'mov', 'mp4', 'webm', 'wmv'].includes(extension)) return 'video';
-  if (['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav', 'wma'].includes(extension)) return 'audio';
-  return 'unknown';
-}
-
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new DOMException('Request aborted.', 'AbortError');
@@ -202,7 +203,7 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 function commandFailure(error: unknown, fallbackMessage: string): SearchError {
   if (error && typeof error === 'object') {
     const candidate = error as {code?: unknown; message?: unknown; recoverable?: unknown};
-    const code = candidate.code === 'permission-denied'
+    const code = candidate.code === 'invalid-response' ? 'invalid-response' : candidate.code === 'permission-denied'
       ? 'permission-denied'
       : fallbackMessage.toLocaleLowerCase().includes('preview')
         ? 'preview-failed'
@@ -221,6 +222,7 @@ function commandFailure(error: unknown, fallbackMessage: string): SearchError {
 }
 
 export class DevelopmentFileSearchService implements SearchService {
+  private readonly isReady: () => boolean;
   private readonly getRoots: () => readonly string[];
   private readonly getRootConfigurations?: DevelopmentFileSearchServiceOptions['getRootConfigurations'];
   private readonly getSearchPreferences: NonNullable<DevelopmentFileSearchServiceOptions['getSearchPreferences']>;
@@ -229,9 +231,16 @@ export class DevelopmentFileSearchService implements SearchService {
   private readonly listeners = new Set<(status: SearchStatus) => void>();
   private synchronizedRootSignature = '';
   private pendingRootSignature = '';
+  private configurationOperation = 0;
   private rootSynchronization: Promise<void> = Promise.resolve();
+  private nativeStatus?: IndexStatus;
+  private searchDegradation?: string;
+  private statusTimer?: ReturnType<typeof setInterval>;
+  private statusPollRunning = false;
+  private statusPollFailed = false;
 
-  constructor({getRoots, getRootConfigurations, getSearchPreferences = () => defaultSearchPreferences, invoke = defaultInvoke}: DevelopmentFileSearchServiceOptions) {
+  constructor({getRoots, getRootConfigurations, getSearchPreferences = () => defaultSearchPreferences, isReady = () => true, invoke = defaultInvoke}: DevelopmentFileSearchServiceOptions) {
+    this.isReady = isReady;
     this.getRoots = getRoots;
     this.getRootConfigurations = getRootConfigurations;
     this.getSearchPreferences = getSearchPreferences;
@@ -240,169 +249,153 @@ export class DevelopmentFileSearchService implements SearchService {
 
   async search(request: SearchRequest, signal?: AbortSignal): Promise<SearchResponse> {
     throwIfAborted(signal);
-    const roots = uniqueRoots(this.getRoots());
-    if (roots.length === 0) {
-      this.publishStatus(this.createStatus());
-      return {requestId: request.requestId, groups: [], elapsedMs: 0, total: 0};
-    }
-
+    this.requireReady();
+    let roots = uniqueRoots(this.getRoots());
     const startedAt = performance.now();
-    await abortable(this.synchronizeRoots(roots), signal);
+    let raw: unknown;
+    let fallback: unknown;
+    let usedFallback = false;
+    let degradationMessage: string | undefined;
+    for (const [id, known] of this.knownFiles) {
+      if (!roots.some(root => normalizedPath(displayPath(root)) === normalizedPath(displayPath(known.root)))) this.knownFiles.delete(id);
+    }
+    if (!roots.length) this.knownFiles.clear();
+    try {
+      // Settings may change while an already-issued admission is held. Recheck
+      // the desired policy after completion before reading indexed content.
+      let desired = this.rootSignature(this.rootConfigurations(roots));
+      for (;;) {
+        await abortable(this.synchronizeRoots(roots), signal);
+        this.requireReady();
+        const currentRoots = uniqueRoots(this.getRoots());
+        const currentPolicy = this.rootSignature(this.rootConfigurations(currentRoots));
+        if (currentPolicy === desired) break;
+        roots = currentRoots;
+        desired = currentPolicy;
+        if (desired === this.synchronizedRootSignature && !this.pendingRootSignature) break;
+      }
+    } catch (error) {
+      throwIfAborted(signal);
+      this.requireReady();
+      const failure = commandFailure(error, 'Local root synchronization failed.');
+      if (failure.code === 'permission-denied' || request.scope === 'recent' || request.scope === 'related') throw failure;
+      fallback = error;
+      usedFallback = true;
+    }
     throwIfAborted(signal);
+    if (!roots.length) {
+      this.publishStatus(this.createStatus());
+      return {requestId: request.requestId, groups: [], elapsedMs: performance.now() - startedAt, total: 0};
+    }
     if (request.scope === 'related' && !request.relatedTo) {
       return {requestId: request.requestId, groups: [], elapsedMs: performance.now() - startedAt, total: 0};
     }
     const preferences = this.getSearchPreferences();
-    const indexedRequest = request.scope === 'related'
-      ? this.invoke('search_related', {stableId: request.relatedTo, limit: request.limit})
-      : this.invoke('search_hybrid', {
-          requestId: request.requestId,
-          query: request.query,
-          scope: request.scope,
-          filters: request.filters.map(({id, value}) => ({id, value})),
-          limit: request.limit,
-          filenamePriority: preferences.filenamePriority,
-          recency: preferences.recency,
-          showPinned: preferences.showPinned,
-          semanticEnabled: preferences.semanticEnabled,
-          rerankingEnabled: preferences.rerankingEnabled,
-        });
-    const filenameRequests = request.scope === 'recent' || request.scope === 'related'
-      ? []
-      : roots.map((root) => this.invoke('search_filenames', {root, query: request.query}));
-    const [settled, indexedSettled] = await abortable(Promise.all([
-      Promise.allSettled(filenameRequests),
-      Promise.allSettled([indexedRequest]),
-    ]), signal);
+    const args = {
+      requestId: request.requestId, query: request.query, scope: request.scope,
+      filters: request.filters.map(({id, value}) => ({id, value})), limit: request.limit,
+      ...preferences,
+    };
+    if (!usedFallback) {
+      try {
+        raw = await abortable(request.scope === 'related'
+          ? this.invoke('search_related', {...args, stableId: request.relatedTo})
+          : this.invoke('search_hybrid', args), signal);
+      } catch (error) {
+        throwIfAborted(signal);
+        if (request.scope === 'recent' || request.scope === 'related') throw commandFailure(error, 'Local index search failed.');
+        fallback = error;
+        usedFallback = true;
+      }
+    }
     throwIfAborted(signal);
-
-    const responses: Array<{root: string; data: z.infer<typeof rustSearchResponseSchema>}> = [];
-    let firstFailure: unknown;
-    settled.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        firstFailure ??= result.reason;
-        return;
-      }
-      const parsed = rustSearchResponseSchema.safeParse(result.value);
-      if (!parsed.success) {
-        firstFailure ??= {
-          code: 'invalid-response',
-          message: 'The local filename adapter returned an invalid response.',
-          recoverable: true,
-        };
-        return;
-      }
-      responses.push({root: roots[index] ?? '', data: parsed.data});
-    });
-
-    const filenameMatches = responses
-      .flatMap(({root, data}) => data.items.map((item) => ({root, item})))
-      .map(({root, item}) => {
-        const id = stableFileId(root, item.relativePath);
-        this.knownFiles.set(id, {root, path: item.path});
-        return {
-          id,
-          name: item.name,
-          path: displayPath(item.path),
-          kind: item.kind,
-          match: {
-            source: 'filename' as const,
-            fragment: item.relativePath,
-            ranges: item.ranges,
-            score: item.score,
-          },
-          metadata: {
-            extension: item.extension ?? undefined,
-            modifiedAt: item.modifiedMs == null ? undefined : new Date(item.modifiedMs).toISOString(),
-            sizeBytes: item.sizeBytes,
-          },
-          availability: 'available' as const,
-        } satisfies SearchResult;
-      })
-      .filter((item) => isInScope(item.kind, request.scope))
-      .sort((left, right) =>
-        (right.match.score ?? 0) - (left.match.score ?? 0) ||
-        left.name.length - right.name.length ||
-        left.path.localeCompare(right.path),
-      );
-    let indexedFailure: unknown;
-    const indexedMatches = indexedSettled.flatMap((result) => {
-      if (result.status === 'rejected') {
-        indexedFailure = result.reason;
-        return [];
-      }
-      const parsed = rustIndexedHitsSchema.safeParse(result.value);
-      if (!parsed.success) {
-        indexedFailure = {message: 'The local content index returned an invalid response.'};
-        return [];
-      }
-      return parsed.data.map((item) => {
+    this.requireReady();
+    let mapped: SearchResult[];
+    if (!usedFallback) {
+      const parsed = request.scope === 'related'
+        ? rustIndexedHitsSchema.transform(items => ({items, semantic: {phase: 'disabled' as const, reason: null}})).safeParse(raw)
+        : rustHybridResponseSchema.safeParse(raw);
+      if (!parsed.success) throw {code: 'invalid-response', message: 'The local index returned an invalid response.', recoverable: true} satisfies SearchError;
+      if (parsed.data.semantic.phase === 'degraded') degradationMessage = parsed.data.semantic.reason ?? undefined;
+      const seen = new Set<string>();
+      const currentRoots = uniqueRoots(this.getRoots());
+      mapped = parsed.data.items.filter(item => {
+        if (!currentRoots.some(root => normalizedPath(displayPath(root)) === normalizedPath(displayPath(item.rootPath)))) return false;
+        const path = normalizedPath(displayPath(item.path));
+        if (seen.has(path)) return false;
+        seen.add(path);
+        return true;
+      }).map(item => {
         this.knownFiles.set(item.stableId, {root: item.rootPath, path: item.path});
         return {
-          id: item.stableId,
-          name: item.name,
-          path: displayPath(item.path),
-          kind: indexedKind(item.path),
-          match: {
-            source: item.matchSource,
-            score: item.semanticScore ?? 1 / (1 + Math.abs(item.rank)),
-          },
-          metadata: {},
+          id: item.stableId, name: item.name, path: displayPath(item.path), kind: item.metadata.kind,
+          match: {source: item.matchSource, score: 1 - item.rank,
+            fragment: ['content', 'ocr', 'semantic', 'related'].includes(item.matchSource) ? item.snippet : undefined},
+          metadata: {extension: item.metadata.extension ?? undefined, sizeBytes: item.metadata.sizeBytes,
+            modifiedAt: item.metadata.modifiedMs == null ? undefined : new Date(item.metadata.modifiedMs).toISOString()},
           pinned: item.pinned,
-          provenance: {
-            extractionKind: item.extractionKind,
-            fileHash: item.contentHash,
-            page: item.page ?? undefined,
-            timeStartMs: item.timeStartMs ?? undefined,
-            timeEndMs: item.timeEndMs ?? undefined,
-            embeddingModel: item.embeddingModel ?? undefined,
-            indexRevision: item.indexRevision,
-          },
-          availability: 'available' as const,
+          provenance: {extractionKind: item.extractionKind, fileHash: item.contentHash,
+            page: item.page ?? undefined, timeStartMs: item.timeStartMs ?? undefined,
+            timeEndMs: item.timeEndMs ?? undefined, embeddingModel: item.embeddingModel ?? undefined,
+            indexRevision: item.indexRevision}, availability: 'available',
         } satisfies SearchResult;
-      }).filter((item) => isInScope(item.kind, request.scope));
-    });
-    if (responses.length === 0 && firstFailure && indexedMatches.length === 0) {
-      throw commandFailure(firstFailure ?? indexedFailure, 'Local filename search failed.');
+      });
+    } else {
+      const configurations = this.rootConfigurations(roots);
+      const settled = await abortable(Promise.allSettled(configurations.map(root => this.invoke('search_filenames', {
+        root: root.path, query: request.query,
+        scope: request.scope, filters: args.filters,
+        policy: {exclusions: root.exclusions, includeHidden: root.includeHidden, maxFileSizeMb: root.maxFileSizeMb},
+      }))), signal);
+      throwIfAborted(signal);
+      this.requireReady();
+      mapped = [];
+      let usable = 0;
+      let malformed = 0;
+      let failed = 0;
+      let warnings = 0;
+      let truncated = 0;
+      for (const [index, response] of settled.entries()) {
+        if (response.status === 'rejected') {failed++; continue;}
+        const parsed = rustSearchResponseSchema.safeParse(response.value);
+        if (!parsed.success) {malformed++; continue;}
+        usable++;
+        warnings += parsed.data.warnings.length;
+        if (parsed.data.truncated) truncated++;
+        const root = configurations[index]!.path;
+        if (!uniqueRoots(this.getRoots()).some(current => normalizedPath(displayPath(current)) === normalizedPath(displayPath(root)))) continue;
+        for (const item of parsed.data.items) {
+          if (!isInScope(item.kind, request.scope) || !request.filters.every(filter =>
+            filter.id === 'extension' ? item.extension?.toLowerCase() === filter.value.replace(/^\./, '').toLowerCase()
+              : filter.id === 'kind' && item.kind === filter.value.toLowerCase())) continue;
+          const id = stableFileId(root, item.relativePath);
+          this.knownFiles.set(id, {root, path: item.path});
+          mapped.push({id, name: item.name, path: displayPath(item.path), kind: item.kind,
+            match: {source: 'filename', fragment: item.relativePath, ranges: item.ranges, score: item.score},
+            metadata: {extension: item.extension ?? undefined, sizeBytes: item.sizeBytes,
+              modifiedAt: item.modifiedMs == null ? undefined : new Date(item.modifiedMs).toISOString()}, availability: 'available'});
+        }
+      }
+      if (!usable && malformed) throw {code: 'invalid-response', message: 'The local filename adapter returned an invalid response.', recoverable: true} satisfies SearchError;
+      if (!usable) throw commandFailure(fallback, 'Local search failed.');
+      degradationMessage = 'Local index unavailable; using policy-aware filename search';
+      if (failed) degradationMessage += `; ${failed} root${failed === 1 ? '' : 's'} failed`;
+      if (malformed) degradationMessage += `; ${malformed} roots returned an invalid response`;
+      if (warnings) degradationMessage += `; ${warnings} traversal warning${warnings === 1 ? '' : 's'}`;
+      if (truncated) degradationMessage += `; ${truncated} root${truncated === 1 ? '' : 's'} truncated`;
+      degradationMessage = degradationMessage.slice(0, 256);
+      mapped.sort((left, right) => (right.match.score ?? 0) - (left.match.score ?? 0) || left.path.localeCompare(right.path));
+      const seen = new Set<string>();
+      mapped = mapped.filter(item => {const path = normalizedPath(item.path); if (seen.has(path)) return false; seen.add(path); return true;});
     }
-    const indexedByPath = new Map(indexedMatches.map((item) => [normalizedPath(item.path), item]));
-    const mergedFilenameMatches = filenameMatches.map((item) => {
-      const indexed = indexedByPath.get(normalizedPath(item.path));
-      if (!indexed) return item;
-      this.knownFiles.set(indexed.id, {root: this.knownFiles.get(item.id)?.root ?? '', path: this.knownFiles.get(item.id)?.path ?? item.path});
-      return {
-        ...item,
-        id: indexed.id,
-        pinned: indexed.pinned,
-        provenance: indexed.provenance,
-      } satisfies SearchResult;
-    });
-    const seenPaths = new Set(mergedFilenameMatches.map((item) => normalizedPath(item.path)));
-    const mapped = [
-      ...mergedFilenameMatches,
-      ...indexedMatches.filter((item) => !seenPaths.has(normalizedPath(item.path))),
-    ];
-    const total = mapped.length;
+    this.searchDegradation = degradationMessage;
+    this.publishStatus({phase: degradationMessage ? 'degraded' : this.nativeStatus?.phase ?? 'indexing', indexedItems: this.nativeStatus?.indexedItems,
+      generation: this.nativeStatus?.generation, pendingItems: this.nativeStatus?.pendingItems,
+      message: degradationMessage ?? this.nativeStatus?.message ?? 'Preparing local inventory',
+      updatedAt: new Date().toISOString()});
     const visible = mapped.slice(0, request.limit);
-    const warningCount = responses.reduce((count, response) => count + response.data.warnings.length, 0);
-    const failedCount = settled.length - responses.length;
-    this.publishStatus({
-      phase: failedCount > 0 || warningCount > 0 ? 'degraded' : 'ready',
-      indexedItems: total,
-      message: failedCount > 0
-        ? `${roots.length - failedCount} of ${roots.length} local roots searched`
-        : warningCount > 0
-          ? `Local search ready with ${warningCount} skipped paths`
-          : `${roots.length} local ${roots.length === 1 ? 'root' : 'roots'} ready`,
-      updatedAt: new Date().toISOString(),
-    });
-
-    return {
-      requestId: request.requestId,
-      groups: visible.length ? [{id: 'local-files', label: 'Local files', items: visible}] : [],
-      elapsedMs: Math.max(0, performance.now() - startedAt),
-      total,
-    };
+    return {requestId: request.requestId, groups: visible.length ? [{id: 'local-files', label: 'Local files', items: visible}] : [],
+      elapsedMs: Math.max(0, performance.now() - startedAt), total: mapped.length};
   }
 
   async getPreview(fileId: string, signal?: AbortSignal): Promise<FilePreview> {
@@ -411,6 +404,7 @@ export class DevelopmentFileSearchService implements SearchService {
     try {
       const rawPreview = await this.invoke('get_basic_preview', {root: known.root, path: known.path});
       throwIfAborted(signal);
+      this.requireKnownFile(fileId);
       const parsed = rustPreviewSchema.safeParse(rawPreview);
       if (!parsed.success) {
         throw {
@@ -473,14 +467,42 @@ export class DevelopmentFileSearchService implements SearchService {
   subscribeToStatus(listener: (status: SearchStatus) => void): () => void {
     this.listeners.add(listener);
     listener(this.createStatus());
-    return () => this.listeners.delete(listener);
+    this.statusTimer ??= setInterval(() => {void this.pollStatus();}, 1000);
+    return () => {
+      this.listeners.delete(listener);
+      if (!this.listeners.size && this.statusTimer !== undefined) {
+        clearInterval(this.statusTimer);
+        this.statusTimer = undefined;
+      }
+    };
+  }
+
+  private async pollStatus() {
+    if (this.statusPollRunning || !this.listeners.size || !this.isReady() || !this.getRoots().length) return;
+    this.statusPollRunning = true;
+    try {
+      const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
+      if (!this.isReady()) return;
+      if (!this.statusPollFailed && JSON.stringify(status) === JSON.stringify(this.nativeStatus)) return;
+      this.statusPollFailed = false;
+      if (status.generation !== this.nativeStatus?.generation) this.synchronizedRootSignature = '';
+      this.nativeStatus = status;
+      this.publishStatus({...status, phase: this.searchDegradation ? 'degraded' : status.phase,
+        message: this.searchDegradation ?? status.message, updatedAt: new Date().toISOString()});
+    } catch {
+      this.statusPollFailed = true;
+      this.publishStatus({phase: 'degraded', message: 'Local index status is unavailable.', updatedAt: new Date().toISOString()});
+    } finally {
+      this.statusPollRunning = false;
+    }
   }
 
   private createStatus(): SearchStatus {
+    if (!this.isReady()) return {phase: 'indexing', message: 'Loading indexed root settings', updatedAt: new Date().toISOString()};
     const roots = uniqueRoots(this.getRoots());
     return roots.length > 0
       ? {
-          phase: 'ready',
+          phase: this.nativeStatus?.phase ?? 'indexing',
           message: `${roots.length} local ${roots.length === 1 ? 'root' : 'roots'} configured`,
           updatedAt: new Date().toISOString(),
         }
@@ -495,52 +517,60 @@ export class DevelopmentFileSearchService implements SearchService {
     this.listeners.forEach((listener) => listener(status));
   }
 
-  private synchronizeRoots(roots: readonly string[]): Promise<void> {
-    const configuredRoots = this.getRootConfigurations?.() ?? roots.map((path) => ({
-      id: normalizedPath(path),
-      path,
-      cloudEnrichment: false,
-      exclusions: [],
-      includeHidden: false,
-      maxFileSizeMb: 256,
-    }));
-    const signature = JSON.stringify(configuredRoots.map((root) => ({
-      path: normalizedPath(root.path),
-      cloudEnrichment: root.cloudEnrichment,
-      exclusions: root.exclusions,
-      includeHidden: root.includeHidden,
-      maxFileSizeMb: root.maxFileSizeMb,
-    })));
+  private rootConfigurations(roots: readonly string[]) {
+    return (this.getRootConfigurations?.() ?? roots.map(path => ({
+      id: normalizedPath(path), path, cloudEnrichment: false, exclusions: [], includeHidden: false, maxFileSizeMb: 256,
+    }))).filter(configuration => roots.some(root => normalizedPath(root) === normalizedPath(configuration.path)));
+  }
+
+  private async synchronizeRoots(roots: readonly string[]): Promise<void> {
+    const operation = ++this.configurationOperation;
+    const configuredRoots = this.rootConfigurations(roots);
+    const signature = this.rootSignature(configuredRoots);
+    const stillDesired = () => this.isReady() && signature === this.rootSignature(this.rootConfigurations(uniqueRoots(this.getRoots())));
+    const current = () => operation === this.configurationOperation
+      && stillDesired();
     if (signature === this.synchronizedRootSignature && !this.pendingRootSignature) {
-      return Promise.resolve();
+      const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
+      if (!current()) return;
+      if (status.generation === this.nativeStatus?.generation) {
+        this.nativeStatus = status;
+        return;
+      }
+      this.synchronizedRootSignature = '';
     }
     if (signature === this.pendingRootSignature) {
       return this.rootSynchronization;
     }
+    if (!current()) return;
     this.pendingRootSignature = signature;
-    const previous = this.rootSynchronization.catch(() => undefined);
-    const synchronization = previous.then(async () => {
-      if (signature === this.synchronizedRootSignature) return;
-      await this.invoke('synchronize_index_roots', {
-        roots: configuredRoots.map((root) => ({
-          path: root.path,
-          cloudEnrichment: root.cloudEnrichment,
-          exclusions: root.exclusions,
-          includeHidden: root.includeHidden,
-          maxFileSizeMb: root.maxFileSizeMb,
-        })),
-      });
-      this.synchronizedRootSignature = signature;
+    const synchronization: Promise<void> = admitIndexRoots(configuredRoots.map((root) => ({
+      path: root.path,
+      cloudEnrichment: root.cloudEnrichment,
+      exclusions: root.exclusions,
+      includeHidden: root.includeHidden,
+      maxFileSizeMb: root.maxFileSizeMb,
+    })), this.invoke, stillDesired).then(status => {
+      if (status && this.rootSynchronization === synchronization && stillDesired()) {
+        this.nativeStatus = status;
+        this.synchronizedRootSignature = signature;
+      }
     });
     this.rootSynchronization = synchronization;
     return synchronization.finally(() => {
-      if (this.pendingRootSignature === signature) {
+      if (this.rootSynchronization === synchronization) {
         this.pendingRootSignature = '';
       }
     });
   }
 
+  private rootSignature(configurations: ReturnType<NonNullable<DevelopmentFileSearchServiceOptions['getRootConfigurations']>>) {
+    return JSON.stringify(configurations.map(root => ({path: normalizedPath(root.path), cloudEnrichment: root.cloudEnrichment,
+      exclusions: root.exclusions, includeHidden: root.includeHidden, maxFileSizeMb: root.maxFileSizeMb})));
+  }
+
   private requireKnownFile(fileId: string) {
+    this.requireReady();
     const known = this.knownFiles.get(fileId);
     if (!known) {
       throw {
@@ -549,6 +579,21 @@ export class DevelopmentFileSearchService implements SearchService {
         recoverable: true,
       } satisfies SearchError;
     }
+    const authorized = uniqueRoots(this.getRoots()).some((root) =>
+      normalizedPath(displayPath(root)) === normalizedPath(displayPath(known.root)),
+    );
+    if (!authorized) {
+      this.knownFiles.delete(fileId);
+      throw {
+        code: 'permission-denied',
+        message: 'This local root is no longer enabled. Search again after enabling it.',
+        recoverable: true,
+      } satisfies SearchError;
+    }
     return known;
+  }
+
+  private requireReady() {
+    if (!this.isReady()) throw {code: 'unavailable', message: 'Indexed root settings are still loading.', recoverable: true} satisfies SearchError;
   }
 }

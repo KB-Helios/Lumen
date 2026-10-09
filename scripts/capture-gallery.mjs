@@ -90,31 +90,39 @@ async function capture(baseUrl) {
     }
     const gitSha = execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim();
     const entries = [];
+    await page.close();
     for (const scenario of scenarios) {
-      await page.goto(`${baseUrl}/?gallery=1&scenario=${encodeURIComponent(scenario.id)}&capture=1`);
-      await page.locator(`[data-gallery-scenario="${scenario.id}"]`).waitFor();
-      await page.evaluate(async (useLightBackdrop) => {
-        document.documentElement.style.background = useLightBackdrop
-          ? 'linear-gradient(145deg, #fafaf8, #e2e1dc)'
-          : 'radial-gradient(circle at 28% 8%, #30302c, #171716 58%, #111110)';
-        await document.fonts.ready;
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      }, scenario.id === 'theme-light' || scenario.id === 'theme-high-contrast');
-      await waitForScenario(page, scenario);
-      const filename = `${scenario.id}.png`;
-      const absolutePath = path.join(outputDirectory, filename);
-      await captureScreenshot(page, {path: absolutePath, animations: 'disabled'});
-      entries.push({
-        scenario: scenario.id,
-        label: scenario.label,
-        category: scenario.category,
-        file: `artifacts/screenshots/${filename}`,
-        absolutePath,
-        viewport,
-        colorScheme: scenario.id === 'theme-light' ? 'light' : 'dark',
-        reducedMotion: true,
-        gitSha,
-      });
+      // Bound renderer/network resources across the complete gallery. Reusing
+      // one page for every module-heavy navigation can exhaust Edge resources.
+      const page = await context.newPage();
+      try {
+        await page.goto(`${baseUrl}/?gallery=1&scenario=${encodeURIComponent(scenario.id)}&capture=1`);
+        await page.locator(`[data-gallery-scenario="${scenario.id}"]`).waitFor();
+        await page.evaluate(async (useLightBackdrop) => {
+          document.documentElement.style.background = useLightBackdrop
+            ? 'linear-gradient(145deg, #fafaf8, #e2e1dc)'
+            : 'radial-gradient(circle at 28% 8%, #30302c, #171716 58%, #111110)';
+          await document.fonts.ready;
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }, scenario.id === 'theme-light' || scenario.id === 'theme-high-contrast');
+        await waitForScenario(page, scenario);
+        const filename = `${scenario.id}.png`;
+        const absolutePath = path.join(outputDirectory, filename);
+        await captureScreenshot(page, {path: absolutePath, animations: 'disabled'});
+        entries.push({
+          scenario: scenario.id,
+          label: scenario.label,
+          category: scenario.category,
+          file: `artifacts/screenshots/${filename}`,
+          absolutePath,
+          viewport,
+          colorScheme: scenario.id === 'theme-light' ? 'light' : 'dark',
+          reducedMotion: true,
+          gitSha,
+        });
+      } finally {
+        await page.close();
+      }
     }
     await createContactSheet(browser, entries);
     const manifest = {

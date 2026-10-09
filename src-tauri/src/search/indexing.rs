@@ -24,12 +24,17 @@ use super::index::{
     DeletedIndexData, HistoryClearResult, HistoryStatus, IndexDatabase, IndexedDocument,
     IndexedHit, VectorStatus,
 };
+use super::index_worker;
 use super::root_policy::canonicalize_root;
 use super::traversal;
-use super::types::SearchFailure;
+use super::types::{FileKind, FileRecord, SearchFailure};
 use super::{embedding, ranking};
 
-#[derive(Clone, Debug, Deserialize)]
+#[cfg(test)]
+#[path = "freshness_tests.rs"]
+mod freshness_tests;
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexRootRequest {
     pub path: String,
@@ -51,6 +56,8 @@ fn default_max_file_size_mb() -> u64 {
 #[serde(rename_all = "camelCase")]
 pub struct IndexStatus {
     pub phase: String,
+    pub generation: u64,
+    pub pending_items: u64,
     pub indexed_items: u64,
     pub queued_enrichment: u64,
     pub skipped_items: u64,
@@ -159,10 +166,60 @@ pub struct NativeDiagnostics {
 pub struct HybridHit {
     #[serde(flatten)]
     pub hit: IndexedHit,
+    pub metadata: FileRecord,
     pub match_source: String,
     pub semantic_score: Option<f64>,
     pub embedding_model: Option<String>,
     pub pinned: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SemanticPhase {
+    Disabled,
+    Ready,
+    Degraded,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticRetrievalStatus {
+    pub phase: SemanticPhase,
+    pub reason: Option<String>,
+}
+
+impl SemanticRetrievalStatus {
+    fn disabled() -> Self {
+        Self {
+            phase: SemanticPhase::Disabled,
+            reason: None,
+        }
+    }
+
+    fn degraded() -> Self {
+        Self {
+            phase: SemanticPhase::Degraded,
+            reason: Some(
+                "Semantic search unavailable; filename and content search remain available.".into(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridSearchResponse {
+    pub items: Vec<HybridHit>,
+    pub semantic: SemanticRetrievalStatus,
+}
+
+impl HybridSearchResponse {
+    fn lexical(items: Vec<HybridHit>) -> Self {
+        Self {
+            items,
+            semantic: SemanticRetrievalStatus::disabled(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -193,12 +250,22 @@ pub struct PinUpdateResult {
 #[derive(Clone)]
 pub struct IndexRuntime {
     database: Arc<IndexDatabase>,
+    owned_database_path: Arc<PathBuf>,
     status: Arc<Mutex<IndexStatus>>,
     generation: Arc<AtomicU64>,
     synchronization: Arc<Mutex<()>>,
+    pub(super) work: Arc<index_worker::WorkState>,
+    worker: Option<Arc<index_worker::IndexWorker>>,
     embedding_worker_running: Arc<AtomicBool>,
     latest_search_request: Arc<AtomicU64>,
+    #[cfg(test)]
+    extraction_gate: Arc<Mutex<Option<ExtractionGate>>>,
+    #[cfg(test)]
+    commit_gate: Arc<Mutex<Option<ExtractionGate>>>,
 }
+
+#[cfg(test)]
+type ExtractionGate = Arc<dyn Fn(&Path) + Send + Sync>;
 
 fn search_failure(operation: &str, error: impl std::fmt::Display) -> SearchFailure {
     SearchFailure::new(
@@ -235,10 +302,15 @@ impl IndexRuntime {
         let (indexed_items, queued_enrichment) = database
             .counts()
             .map_err(|error| search_failure("read index status", error))?;
-        Ok(Self {
+        let mut runtime = Self {
             database: Arc::new(database),
+            owned_database_path: Arc::new(
+                std::fs::canonicalize(path).map_err(|e| search_failure("locate owned index", e))?,
+            ),
             status: Arc::new(Mutex::new(IndexStatus {
                 phase: "ready".to_owned(),
+                generation: 0,
+                pending_items: 0,
                 indexed_items,
                 queued_enrichment,
                 skipped_items: 0,
@@ -246,9 +318,17 @@ impl IndexRuntime {
             })),
             generation: Arc::new(AtomicU64::new(0)),
             synchronization: Arc::new(Mutex::new(())),
+            work: Arc::new(index_worker::WorkState::default()),
+            worker: None,
             embedding_worker_running: Arc::new(AtomicBool::new(false)),
             latest_search_request: Arc::new(AtomicU64::new(0)),
-        })
+            #[cfg(test)]
+            extraction_gate: Arc::new(Mutex::new(None)),
+            #[cfg(test)]
+            commit_gate: Arc::new(Mutex::new(None)),
+        };
+        runtime.worker = Some(index_worker::IndexWorker::start(runtime.clone()));
+        Ok(runtime)
     }
 
     fn snapshot(&self) -> IndexStatus {
@@ -270,10 +350,6 @@ impl IndexRuntime {
         query: &str,
         limit: usize,
     ) -> Result<Vec<IndexedHit>, SearchFailure> {
-        let _synchronization = self
-            .synchronization
-            .lock()
-            .map_err(|error| search_failure("lock the indexing worker", error))?;
         self.database
             .search(query, limit)
             .map_err(|error| search_failure("build answer context", error))
@@ -297,9 +373,57 @@ impl IndexRuntime {
     pub(crate) fn pending_enrichment(
         &self,
     ) -> Result<Vec<super::EnrichmentJobRecord>, SearchFailure> {
-        self.database
+        if !self.work.configured.load(Ordering::SeqCst) {
+            return Ok(Vec::new());
+        }
+        let jobs = self
+            .database
             .queued_jobs()
-            .map_err(|error| search_failure("read enrichment jobs", error))
+            .map_err(|error| search_failure("read enrichment jobs", error))?;
+        let mut admitted = Vec::new();
+        for job in jobs {
+            if self.enrichment_dispatch_is_admitted(&job)? {
+                admitted.push(job);
+            }
+        }
+        Ok(admitted)
+    }
+
+    fn enrichment_dispatch_is_admitted(
+        &self,
+        job: &super::EnrichmentJobRecord,
+    ) -> Result<bool, SearchFailure> {
+        let _admission = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("admit enrichment dispatch", e))?;
+        if !self.work.configured.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+            || !self
+                .database
+                .enrichment_job_is_queued(job)
+                .map_err(|e| search_failure("validate queued enrichment", e))?
+        {
+            return Ok(false);
+        }
+        let Some((root_path, path)) = self
+            .database
+            .file_location(&job.file_id)
+            .map_err(|e| search_failure("locate enrichment source", e))?
+        else {
+            return Ok(false);
+        };
+        let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(root) = roots
+            .iter()
+            .find(|root| root.cloud_enrichment && Path::new(&root.path) == root_path)
+        else {
+            return Ok(false);
+        };
+        Ok(
+            traversal::policy_record(&root_path, &path, &Self::root_traversal_policy(root)?)?
+                .is_some(),
+        )
     }
 
     pub(crate) fn queue_embedding_jobs(&self, model: &str) -> Result<u64, SearchFailure> {
@@ -323,13 +447,12 @@ impl IndexRuntime {
         job: &super::index::EmbeddingJobRecord,
         values: &[f32],
     ) -> Result<bool, SearchFailure> {
-        let _synchronization = self
-            .synchronization
-            .lock()
-            .map_err(|error| search_failure("lock the indexing worker", error))?;
-        self.database
-            .complete_embedding_job(job, values)
-            .map_err(|error| search_failure("store an embedding", error))
+        self.with_current_generation(self.current_generation(), || {
+            self.database
+                .complete_embedding_job(job, values)
+                .map_err(|error| search_failure("store an embedding", error))
+        })
+        .map(|applied| applied.unwrap_or(false))
     }
 
     pub(crate) fn defer_embedding_job(
@@ -342,6 +465,7 @@ impl IndexRuntime {
             .map_err(|error| search_failure("defer an embedding", error))
     }
 
+    #[cfg(test)]
     fn hybrid_search(
         &self,
         query: &str,
@@ -350,86 +474,93 @@ impl IndexRuntime {
         limit: usize,
         weights: ranking::RankingWeights,
     ) -> Result<Vec<HybridHit>, SearchFailure> {
-        let lexical = self
-            .database
-            .search(query, limit.saturating_mul(3).max(20))
-            .map_err(|error| search_failure("search the local index", error))?;
-        let semantic = match query_vector {
-            Some(vector) => self
-                .database
-                .search_embeddings(
-                    embedding_model,
-                    vector.len(),
-                    vector,
-                    limit.saturating_mul(3).max(20),
-                )
-                .unwrap_or_default(),
-            None => Vec::new(),
-        };
-        let mut candidates = HashMap::<String, (IndexedHit, f64, Option<f64>)>::new();
-        for hit in lexical {
-            let lexical_score = 1.0 / (1.0 + hit.rank.abs());
-            candidates.insert(hit.stable_id.clone(), (hit, lexical_score, None));
-        }
-        for semantic_hit in semantic {
-            let semantic_score = (1.0 - semantic_hit.distance / 2.0).clamp(0.0, 1.0);
-            if let Some(candidate) = candidates.get_mut(&semantic_hit.stable_id) {
-                candidate.2 = Some(semantic_score);
-            } else if let Some(hit) = self
-                .database
-                .representative_hit(&semantic_hit.stable_id)
-                .map_err(|error| search_failure("resolve a semantic result", error))?
-            {
-                candidates.insert(semantic_hit.stable_id, (hit, 0.0, Some(semantic_score)));
-            }
-        }
-        let ranked = ranking::rank_candidates(
+        self.hybrid_search_filtered(
             query,
-            candidates
-                .into_values()
-                .map(|(hit, lexical, semantic)| {
-                    let (recency, pinned) = self
-                        .database
-                        .ranking_signals(&hit.stable_id)
-                        .unwrap_or((0.0, false));
-                    let name = hit.name.clone();
-                    ranking::RankingCandidate {
-                        id: (hit, semantic),
-                        name,
-                        lexical,
-                        semantic,
-                        recency,
-                        pinned,
-                    }
-                })
-                .collect(),
+            query_vector,
+            embedding_model,
+            limit,
             weights,
-        );
-        Ok(ranked
-            .into_iter()
-            .take(limit)
-            .map(|ranked| {
-                let (mut hit, semantic) = ranked.candidate.id;
-                let pinned = ranked.candidate.pinned;
-                hit.rank = 1.0 - ranked.score;
-                HybridHit {
-                    match_source: if ranked.exact_filename {
-                        "filename"
-                    } else if semantic.is_some() {
-                        "semantic"
-                    } else {
-                        "content"
-                    }
-                    .to_owned(),
-                    semantic_score: semantic,
-                    embedding_model: semantic.map(|_| embedding_model.to_owned()),
-                    pinned,
-                    hit,
-                }
-            })
-            .collect())
+            "all",
+            &[],
+        )
+        .map(|response| response.items)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn hybrid_search_filtered(
+        &self,
+        query: &str,
+        query_vector: Option<&[f32]>,
+        embedding_model: &str,
+        limit: usize,
+        weights: ranking::RankingWeights,
+        scope: &str,
+        filters: &[SearchFilterRequest],
+    ) -> Result<HybridSearchResponse, SearchFailure> {
+        if limit == 0 {
+            return Ok(HybridSearchResponse::lexical(Vec::new()));
+        }
+        let selected = self.database.query_hits(
+            query,
+            query_vector,
+            embedding_model,
+            limit,
+            weights,
+            scope,
+            filters,
+            None,
+        );
+        let (selected, semantic_status) = match (selected, query_vector) {
+            (Ok(hits), Some(_)) => (
+                hits,
+                SemanticRetrievalStatus {
+                    phase: SemanticPhase::Ready,
+                    reason: None,
+                },
+            ),
+            (Ok(hits), None) => (hits, SemanticRetrievalStatus::disabled()),
+            (Err(_), Some(_)) => (
+                self.database
+                    .query_hits(
+                        query,
+                        None,
+                        embedding_model,
+                        limit,
+                        weights,
+                        scope,
+                        filters,
+                        None,
+                    )
+                    .map_err(|error| search_failure("search the local index", error))?,
+                SemanticRetrievalStatus::degraded(),
+            ),
+            (Err(error), None) => return Err(search_failure("search the local index", error)),
+        };
+        let items = selected
+            .into_iter()
+            .map(|item| HybridHit {
+                hit: item.hit,
+                metadata: item.metadata,
+                match_source: if item.filename {
+                    "filename"
+                } else if item.semantic.is_some() {
+                    "semantic"
+                } else {
+                    "content"
+                }
+                .into(),
+                semantic_score: item.semantic,
+                embedding_model: item.semantic.map(|_| embedding_model.to_owned()),
+                pinned: item.pinned,
+            })
+            .collect();
+        Ok(HybridSearchResponse {
+            items,
+            semantic: semantic_status,
+        })
+    }
+
+    #[cfg(test)]
     fn related_search(
         &self,
         source_id: &str,
@@ -437,77 +568,87 @@ impl IndexRuntime {
         embedding_model: &str,
         limit: usize,
     ) -> Result<Vec<HybridHit>, SearchFailure> {
-        let semantic = self
-            .database
-            .search_embeddings(
-                embedding_model,
-                query_vector.len(),
-                query_vector,
-                limit.saturating_mul(4).max(20),
-            )
-            .map_err(|error| search_failure("search related files", error))?;
-        let mut candidates = HashMap::<String, f64>::new();
-        for hit in semantic {
-            if hit.stable_id == source_id {
-                continue;
-            }
-            let score = (1.0 - hit.distance / 2.0).clamp(0.0, 1.0);
-            candidates
-                .entry(hit.stable_id)
-                .and_modify(|current| *current = current.max(score))
-                .or_insert(score);
-        }
-        let mut related = candidates
-            .into_iter()
-            .filter_map(|(stable_id, score)| {
-                let mut hit = self.database.representative_hit(&stable_id).ok()??;
-                let pinned = self
-                    .database
-                    .ranking_signals(&stable_id)
-                    .map(|(_, pinned)| pinned)
-                    .unwrap_or(false);
-                hit.rank = 1.0 - score;
-                Some(HybridHit {
-                    hit,
-                    match_source: "related".to_owned(),
-                    semantic_score: Some(score),
-                    embedding_model: Some(embedding_model.to_owned()),
-                    pinned,
-                })
-            })
-            .collect::<Vec<_>>();
-        related.sort_by(|left, right| {
-            left.hit
-                .rank
-                .total_cmp(&right.hit.rank)
-                .then_with(|| left.hit.name.cmp(&right.hit.name))
-        });
-        related.truncate(limit);
-        Ok(related)
+        self.related_search_filtered(source_id, query_vector, embedding_model, limit, &[])
     }
 
-    fn recent_search(&self, query: &str, limit: usize) -> Result<Vec<HybridHit>, SearchFailure> {
+    fn related_search_filtered(
+        &self,
+        source_id: &str,
+        query_vector: &[f32],
+        embedding_model: &str,
+        limit: usize,
+        filters: &[SearchFilterRequest],
+    ) -> Result<Vec<HybridHit>, SearchFailure> {
         self.database
-            .recent_hits(query, limit)
-            .map_err(|error| search_failure("search recent files", error))?
-            .into_iter()
-            .enumerate()
-            .map(|(index, mut hit)| {
-                let pinned = self
-                    .database
-                    .ranking_signals(&hit.stable_id)
-                    .map(|(_, pinned)| pinned)
-                    .unwrap_or(false);
-                hit.rank = index as f64;
-                Ok(HybridHit {
-                    hit,
-                    match_source: "metadata".to_owned(),
-                    semantic_score: None,
-                    embedding_model: None,
-                    pinned,
-                })
+            .query_hits(
+                "",
+                Some(query_vector),
+                embedding_model,
+                limit,
+                ranking::RankingWeights::default(),
+                "related",
+                filters,
+                Some(source_id),
+            )
+            .map_err(|error| search_failure("search related files", error))
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| HybridHit {
+                        hit: item.hit,
+                        metadata: item.metadata,
+                        match_source: "related".into(),
+                        semantic_score: item.semantic,
+                        embedding_model: Some(embedding_model.to_owned()),
+                        pinned: item.pinned,
+                    })
+                    .collect()
             })
-            .collect()
+    }
+
+    fn recent_search_filtered(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: &[SearchFilterRequest],
+    ) -> Result<Vec<HybridHit>, SearchFailure> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let mut hits = Vec::new();
+        for mut hit in self
+            .database
+            .recent_hits(query, 250_000)
+            .map_err(|error| search_failure("search recent files", error))?
+        {
+            let metadata = self
+                .database
+                .inventory_record(&hit.stable_id)
+                .map_err(|error| search_failure("read recent metadata", error))?;
+            let Some(metadata) = metadata else {
+                continue;
+            };
+            if !matches_metadata_filters(&metadata, filters) {
+                continue;
+            }
+            let (_, pinned) = self
+                .database
+                .ranking_signals(&hit.stable_id)
+                .map_err(|error| search_failure("read recent ranking", error))?;
+            hit.rank = 1.0 - 1.0 / (1.0 + hits.len() as f64);
+            hits.push(HybridHit {
+                hit,
+                metadata,
+                match_source: "metadata".into(),
+                semantic_score: None,
+                embedding_model: None,
+                pinned,
+            });
+            if hits.len() == limit {
+                break;
+            }
+        }
+        Ok(hits)
     }
 
     fn semantic_status(
@@ -559,6 +700,41 @@ impl IndexRuntime {
         self.database
             .source_text(stable_id)
             .map_err(|error| search_failure("prepare related search", error))
+    }
+
+    pub(crate) fn start_index_lifecycle(&self, app: AppHandle) {
+        let runtime = self.clone();
+        tauri::async_runtime::spawn(async move {
+            while !runtime.work.stop.load(Ordering::SeqCst) {
+                let enabled = app.state::<ActivityRuntime>().snapshot().background_policy
+                    == BackgroundPolicy::Normal;
+                runtime.set_content_enabled(enabled);
+                if enabled && runtime.work.configured.load(Ordering::SeqCst) {
+                    let model =
+                        embedding::active_model_key(app.state::<ProviderRegistry>().inner());
+                    if runtime.queue_embedding_jobs(&model).is_ok() {
+                        schedule_embedding_worker(app.clone(), runtime.clone());
+                    }
+                    if let Ok(jobs) = runtime.pending_enrichment() {
+                        for job in jobs {
+                            // Earlier submissions may await HTTP; revalidate each remaining job's
+                            // current grant and queued hash immediately before its own dispatch.
+                            if runtime
+                                .enrichment_dispatch_is_admitted(&job)
+                                .unwrap_or(false)
+                                && !app
+                                    .state::<crate::gateway::EnrichmentSupervisor>()
+                                    .sync_jobs(std::slice::from_ref(&job))
+                                    .await
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        });
     }
 
     fn begin_embedding_worker(&self) -> bool {
@@ -634,12 +810,38 @@ impl IndexRuntime {
             .lock()
             .map_err(|error| search_failure("lock the indexing worker", error))?;
         self.generation.fetch_add(1, Ordering::SeqCst);
+        self.work
+            .roots
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.work
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.work
+            .completed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.work.reconcile.store(true, Ordering::SeqCst);
+        if let Some(worker) = &self.worker {
+            worker.wake();
+        }
         let deleted = self
             .database
             .delete_indexed_content()
             .map_err(|error| search_failure("delete generated index data", error))?;
         self.set_status(IndexStatus {
             phase: "ready".to_owned(),
+            generation: self.generation.load(Ordering::SeqCst),
+            pending_items: 0,
             indexed_items: 0,
             queued_enrichment: 0,
             skipped_items: 0,
@@ -648,128 +850,774 @@ impl IndexRuntime {
         Ok(deleted)
     }
 
+    pub(crate) fn configure_roots(
+        &self,
+        roots: Vec<IndexRootRequest>,
+        content_enabled: bool,
+    ) -> Result<IndexStatus, SearchFailure> {
+        let mut canonical = Vec::with_capacity(roots.len());
+        let mut policies = HashMap::new();
+        for mut root in roots {
+            root.path = canonicalize_root(Path::new(&root.path))?
+                .to_string_lossy()
+                .into_owned();
+            policies.insert(root.path.clone(), Self::root_traversal_policy(&root)?);
+            canonical.push(root);
+        }
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("admit roots", e))?;
+        let mut configured = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+        if !self.work.configured.load(Ordering::SeqCst) || *configured != canonical {
+            self.work.configured.store(false, Ordering::SeqCst);
+            self.generation.fetch_add(1, Ordering::SeqCst);
+            *configured = canonical;
+            self.work
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
+            self.work
+                .completed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
+            self.work
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
+            let inventory = self
+                .database
+                .policy_inventory()
+                .map_err(|e| search_failure("read root inventory", e))?;
+            let mut retained = HashMap::<String, HashSet<String>>::new();
+            for item in inventory {
+                let Some(policy) = policies.get(item.root_path.to_string_lossy().as_ref()) else {
+                    continue;
+                };
+                let allowed = if let Some(metadata) = &item.metadata {
+                    traversal::record_matches_policy(metadata, policy)
+                        && traversal::stored_path_is_safe(&item.root_path, &item.path)
+                } else {
+                    traversal::policy_record(&item.root_path, &item.path, policy)?.is_some()
+                };
+                if allowed {
+                    retained
+                        .entry(item.root_path.to_string_lossy().into_owned())
+                        .or_default()
+                        .insert(item.stable_id);
+                }
+            }
+            self.database
+                .retain_inventory(&retained)
+                .map_err(|e| search_failure("prune revoked roots", e))?;
+            let cloud_roots = configured
+                .iter()
+                .filter(|root| root.cloud_enrichment)
+                .map(|root| root.path.clone())
+                .collect::<HashSet<_>>();
+            self.database
+                .retain_enrichment_roots(&cloud_roots)
+                .map_err(|e| search_failure("invalidate revoked cloud jobs", e))?;
+            self.work.reconcile.store(true, Ordering::SeqCst);
+            self.work.configured.store(true, Ordering::SeqCst);
+        }
+        drop(configured);
+        self.work
+            .content_enabled
+            .store(content_enabled, Ordering::SeqCst);
+        self.refresh_worker_status()?;
+        if let Some(worker) = &self.worker {
+            worker.wake();
+        }
+        Ok(self.snapshot())
+    }
+
+    pub(crate) fn set_content_enabled(&self, enabled: bool) {
+        self.work.content_enabled.store(enabled, Ordering::SeqCst);
+        let _ = self.refresh_worker_status();
+        if let Some(worker) = &self.worker {
+            worker.wake();
+        }
+    }
+
+    pub(crate) fn stop_index_worker(&self) {
+        let _commit = self
+            .synchronization
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Some(worker) = &self.worker {
+            worker.stop();
+        }
+    }
+
+    /// Capture before asynchronous enrichment. Admit its returned result under
+    /// `with_current_generation`, then check its current file hash and root grant.
+    pub fn current_generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    /// The operation must be a short synchronous database commit, never provider I/O.
+    pub fn with_current_generation<T>(
+        &self,
+        generation: u64,
+        operation: impl FnOnce() -> Result<T, SearchFailure>,
+    ) -> Result<Option<T>, SearchFailure> {
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("admit current index generation", e))?;
+        if self.current_generation() != generation || self.work.stop.load(Ordering::SeqCst) {
+            return Ok(None);
+        }
+        operation().map(Some)
+    }
+
+    fn root_traversal_policy(
+        root: &IndexRootRequest,
+    ) -> Result<traversal::TraversalPolicy, SearchFailure> {
+        let maximum = root
+            .max_file_size_mb
+            .checked_mul(1024 * 1024)
+            .ok_or_else(|| search_failure("admit root policy", "invalid file size"))?;
+        traversal::TraversalPolicy::new(root.exclusions.clone(), root.include_hidden, maximum)
+    }
+
+    pub(super) fn worker_failed(&self, _detail: &str) {
+        let mut status = self.snapshot();
+        status.phase = "degraded".into();
+        status.message =
+            "Some local indexing work could not finish; pending content will retry.".into();
+        status.skipped_items = status.skipped_items.max(1);
+        self.set_status(status);
+    }
+
+    fn refresh_worker_status(&self) -> Result<(), SearchFailure> {
+        let (indexed_items, queued_enrichment) = self
+            .database
+            .counts()
+            .map_err(|e| search_failure("read index status", e))?;
+        let pending = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let pending_items = pending.len() as u64;
+        let retries = pending.values().filter(|item| item.attempts > 0).count() as u64;
+        drop(pending);
+        let failures = self
+            .work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len() as u64;
+        let indexing = self.work.inventory_running.load(Ordering::SeqCst)
+            || self.work.reconcile.load(Ordering::SeqCst);
+        let paused = !self.work.content_enabled.load(Ordering::SeqCst) && pending_items > 0;
+        let degraded = self.work.watcher_degraded.load(Ordering::SeqCst);
+        let inventory_failed = self.work.inventory_failed.load(Ordering::SeqCst)
+            || self.work.inventory_incomplete.load(Ordering::SeqCst);
+        self.set_status(IndexStatus {
+            phase: if paused {
+                "paused"
+            } else if retries > 0 || failures > 0 || inventory_failed {
+                "degraded"
+            } else if indexing || pending_items > 0 {
+                "indexing"
+            } else if degraded {
+                "degraded"
+            } else {
+                "ready"
+            }
+            .into(),
+            generation: self.generation.load(Ordering::SeqCst),
+            pending_items,
+            indexed_items,
+            queued_enrichment,
+            skipped_items: retries + failures + u64::from(inventory_failed),
+            message: if paused {
+                "Content indexing paused; filenames remain searchable"
+            } else if failures > 0 {
+                "Some files remain searchable by metadata after bounded extraction retries"
+            } else if retries > 0 {
+                "Some content could not be extracted; pending work will retry"
+            } else if inventory_failed {
+                "Local inventory reconciliation could not finish; bounded retry remains active"
+            } else if indexing || pending_items > 0 {
+                "Updating local inventory and pending content"
+            } else if degraded {
+                "File watching unavailable; bounded reconciliation remains active"
+            } else {
+                "Local index ready"
+            }
+            .into(),
+        });
+        Ok(())
+    }
+
+    fn inventory_record(
+        &self,
+        root: &IndexRootRequest,
+        record: &FileRecord,
+        generation: u64,
+        force_content: bool,
+    ) -> Result<bool, SearchFailure> {
+        let path = PathBuf::from(&record.path);
+        if self.is_owned_index_path(&path) {
+            return Ok(false);
+        }
+        let root_path = PathBuf::from(&root.path);
+        let id = stable_id(&root_path, &path);
+        let signature = format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("commit inventory", e))?;
+        if self.generation.load(Ordering::SeqCst) != generation
+            || !self.work.configured.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(false);
+        }
+        // Revalidate policy and symlink ancestors at the commit boundary.
+        if traversal::policy_record(&root_path, &path, &Self::root_traversal_policy(root)?)?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        #[cfg(test)]
+        if let Some(gate) = self.work.inventory_record_gate.lock().unwrap().clone() {
+            gate(&path);
+        }
+        if let Err(error) = self
+            .database
+            .upsert_metadata(&root_path, &id, &path, &signature)
+        {
+            // Only a filesystem policy failure on this now-vanished path is
+            // skippable. Database errors and safety/permission refusals propagate.
+            if matches!(&error, super::index::IndexError::Policy(failure) if failure.code == "search-failed" && failure.path.as_deref() == Some(path.to_string_lossy().as_ref()))
+                && std::fs::symlink_metadata(&path)
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            {
+                return Ok(false);
+            }
+            return Err(search_failure("update inventory", error));
+        }
+        if force_content && record.kind != FileKind::Folder {
+            self.work
+                .completed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+            self.work
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+            self.database
+                .upsert_document(
+                    &root_path,
+                    &IndexedDocument {
+                        stable_id: id.clone(),
+                        path: path.clone(),
+                        content_hash: signature.clone(),
+                        extraction_version: "metadata-v1".into(),
+                        chunks: Vec::new(),
+                    },
+                )
+                .map_err(|e| search_failure("invalidate dirty content", e))?;
+        }
+        if self
+            .work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .is_some_and(|failed| failed != &signature)
+        {
+            self.work
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+        }
+        if record.kind != FileKind::Folder
+            && self
+                .work
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&id)
+                != Some(&signature)
+            && self
+                .work
+                .completed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&id)
+                != Some(&signature)
+        {
+            let mut pending = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
+            if force_content
+                || !pending.get(&id).is_some_and(|item| {
+                    item.signature == signature && item.generation == generation
+                })
+            {
+                pending.insert(
+                    id,
+                    index_worker::PendingContent {
+                        root: root_path,
+                        path,
+                        signature,
+                        generation,
+                        admission: self.work.next_admission.fetch_add(1, Ordering::SeqCst),
+                        cloud_enrichment: root.cloud_enrichment,
+                        retry_at: Instant::now(),
+                        attempts: 0,
+                    },
+                );
+            }
+        }
+        Ok(true)
+    }
+
+    // False leaves the worker's refresh obligation outstanding after deferral/cancellation.
+    pub(super) fn reconcile_inventory(&self, force_content: bool) -> Result<bool, SearchFailure> {
+        let (generation, roots) = {
+            let _admission = self
+                .synchronization
+                .lock()
+                .map_err(|e| search_failure("admit inventory reconciliation", e))?;
+            if !self.work.configured.load(Ordering::SeqCst) || self.work.stop.load(Ordering::SeqCst)
+            {
+                return Ok(false);
+            }
+            (
+                self.current_generation(),
+                self.work
+                    .roots
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            )
+        };
+        let mut inventory = HashMap::<String, HashSet<String>>::new();
+        let mut incomplete = HashSet::new();
+        let mut truncated = false;
+        for root in &roots {
+            if self.generation.load(Ordering::SeqCst) != generation {
+                return Ok(false);
+            }
+            let root_path = PathBuf::from(&root.path);
+            if !traversal::admitted_root_is_current(&root_path) {
+                inventory.entry(root.path.clone()).or_default();
+                truncated = true;
+                continue;
+            }
+            #[cfg(test)]
+            let outcome = traversal::traverse_with_policy_until_limit(
+                &root_path,
+                &Self::root_traversal_policy(root)?,
+                || {
+                    self.generation.load(Ordering::SeqCst) != generation
+                        || self.work.stop.load(Ordering::SeqCst)
+                },
+                match self.work.traversal_limit.load(Ordering::SeqCst) {
+                    0 => 250_000,
+                    limit => limit as usize,
+                },
+            )?;
+            #[cfg(not(test))]
+            let outcome = traversal::traverse_with_policy_until(
+                &root_path,
+                &Self::root_traversal_policy(root)?,
+                || {
+                    self.generation.load(Ordering::SeqCst) != generation
+                        || self.work.stop.load(Ordering::SeqCst)
+                },
+            )?;
+            truncated |= outcome.truncated || !outcome.warnings.is_empty();
+            if outcome.truncated || !outcome.warnings.is_empty() {
+                incomplete.insert(root.path.clone());
+            }
+            let observed = inventory.entry(root.path.clone()).or_default();
+            for record in outcome.records {
+                if self.is_owned_index_path(Path::new(&record.path)) {
+                    continue;
+                }
+                if self.generation.load(Ordering::SeqCst) != generation
+                    || self.work.stop.load(Ordering::SeqCst)
+                {
+                    return Ok(false);
+                }
+                if self.inventory_record(root, &record, generation, force_content)? {
+                    observed.insert(stable_id(&root_path, Path::new(&record.path)));
+                }
+            }
+        }
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("reconcile inventory", e))?;
+        if self.generation.load(Ordering::SeqCst) != generation
+            || !self.work.configured.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(false);
+        }
+        if !incomplete.is_empty() {
+            for item in self
+                .database
+                .policy_inventory()
+                .map_err(|e| search_failure("preserve incomplete inventory", e))?
+            {
+                let Some(root) = roots.iter().find(|root| {
+                    Path::new(&root.path) == item.root_path && incomplete.contains(&root.path)
+                }) else {
+                    continue;
+                };
+                let policy = Self::root_traversal_policy(root)?;
+                let allowed = if let Some(metadata) = &item.metadata {
+                    traversal::record_matches_policy(metadata, &policy)
+                        && traversal::stored_path_is_safe(&item.root_path, &item.path)
+                } else {
+                    traversal::policy_record(&item.root_path, &item.path, &policy)?.is_some()
+                };
+                if allowed {
+                    inventory
+                        .entry(root.path.clone())
+                        .or_default()
+                        .insert(item.stable_id);
+                }
+            }
+        }
+        self.database
+            .retain_inventory(&inventory)
+            .map_err(|e| search_failure("remove stale inventory", e))?;
+        let current = inventory.values().flatten().collect::<HashSet<_>>();
+        self.work
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|id, _| current.contains(id));
+        self.work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|id, _| current.contains(id));
+        self.work
+            .completed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|id, _| current.contains(id));
+        if truncated {
+            self.work.watcher_degraded.store(true, Ordering::SeqCst);
+        }
+        self.work
+            .inventory_incomplete
+            .store(truncated, Ordering::SeqCst);
+        self.work.inventory_running.store(false, Ordering::SeqCst);
+        self.work.inventory_failed.store(false, Ordering::SeqCst);
+        self.refresh_worker_status().map(|()| true)
+    }
+
+    pub(super) fn refresh_paths(&self, paths: Vec<PathBuf>) -> Result<bool, SearchFailure> {
+        let (generation, roots) = {
+            let _admission = self
+                .synchronization
+                .lock()
+                .map_err(|e| search_failure("admit changed inventory", e))?;
+            if !self.work.configured.load(Ordering::SeqCst) || self.work.stop.load(Ordering::SeqCst)
+            {
+                return Ok(false);
+            }
+            (
+                self.current_generation(),
+                self.work
+                    .roots
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            )
+        };
+        #[cfg(test)]
+        if let Some(gate) = self.work.path_refresh_gate.lock().unwrap().clone() {
+            gate(false, true);
+        }
+        let mut directory_changed = false;
+        for event in paths {
+            for root in &roots {
+                let root_path = PathBuf::from(&root.path);
+                let Some(path) = index_worker::event_path(&root_path, &event) else {
+                    continue;
+                };
+                if self.is_owned_index_path(&path) {
+                    continue;
+                }
+                if path == root_path
+                    || std::fs::symlink_metadata(&path).is_ok_and(|metadata| {
+                        metadata.is_dir() && !metadata.file_type().is_symlink()
+                    })
+                {
+                    // Directory events observe metadata changes; unchanged files retain
+                    // extracted and paid content. Overflow is the explicit forced lane.
+                    directory_changed = true;
+                    continue;
+                }
+                if let Some(record) = traversal::policy_record(
+                    &root_path,
+                    &path,
+                    &Self::root_traversal_policy(root)?,
+                )? {
+                    if !self.inventory_record(root, &record, generation, true)? {
+                        return Ok(false);
+                    }
+                } else {
+                    let _commit = self
+                        .synchronization
+                        .lock()
+                        .map_err(|e| search_failure("remove changed inventory", e))?;
+                    if self.generation.load(Ordering::SeqCst) != generation
+                        || !self.work.configured.load(Ordering::SeqCst)
+                        || self.work.stop.load(Ordering::SeqCst)
+                    {
+                        return Ok(false);
+                    }
+                    let removed = self
+                        .database
+                        .remove_inventory_path(&root_path, &path)
+                        .map_err(|e| search_failure("remove changed inventory", e))?;
+                    self.work
+                        .pending
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .retain(|_, pending| {
+                            pending.root != root_path || !pending.path.starts_with(&path)
+                        });
+                    let mut completed = self
+                        .work
+                        .completed
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    for id in removed {
+                        completed.remove(&id);
+                        self.work
+                            .failed
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(&id);
+                    }
+                }
+            }
+        }
+        if directory_changed {
+            let completed = self.reconcile_inventory(false)?;
+            #[cfg(test)]
+            if let Some(gate) = self.work.path_refresh_gate.lock().unwrap().clone() {
+                gate(true, false);
+            }
+            if !completed {
+                return Ok(false);
+            }
+        }
+        // Delegation may admit a newer snapshot; completion still belongs to this batch.
+        let _completion = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("complete changed inventory", e))?;
+        if self.current_generation() != generation
+            || !self.work.configured.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(false);
+        }
+        self.work.inventory_running.store(false, Ordering::SeqCst);
+        self.refresh_worker_status().map(|()| true)
+    }
+
+    fn is_owned_index_path(&self, path: &Path) -> bool {
+        let owned = self.owned_database_path.to_string_lossy().to_lowercase();
+        let path = path.to_string_lossy().to_lowercase();
+        path == owned
+            || path == format!("{owned}-wal")
+            || path == format!("{owned}-shm")
+            || path == format!("{owned}-journal")
+    }
+
+    pub(super) fn extract_pending(&self) -> Result<(), SearchFailure> {
+        let next = self
+            .work
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|(_, item)| item.retry_at <= Instant::now())
+            .min_by(|a, b| a.1.path.cmp(&b.1.path))
+            .map(|(id, item)| (id.clone(), item.clone()));
+        let Some((id, pending)) = next else {
+            return Ok(());
+        };
+        {
+            let _admission = self
+                .synchronization
+                .lock()
+                .map_err(|e| search_failure("admit pending extraction", e))?;
+            if self.current_generation() != pending.generation
+                || !self.work.configured.load(Ordering::SeqCst)
+                || !self.work.content_enabled.load(Ordering::SeqCst)
+                || self.work.stop.load(Ordering::SeqCst)
+            {
+                return Ok(());
+            }
+            let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+            let Some(root) = roots
+                .iter()
+                .find(|root| Path::new(&root.path) == pending.root)
+            else {
+                return Ok(());
+            };
+            if traversal::policy_record(
+                &pending.root,
+                &pending.path,
+                &Self::root_traversal_policy(root)?,
+            )?
+            .is_none()
+            {
+                self.work
+                    .pending
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&id);
+                return Ok(());
+            }
+        }
+        #[cfg(test)]
+        let gate = self.extraction_gate.lock().unwrap().clone();
+        #[cfg(test)]
+        if let Some(gate) = gate {
+            gate(&pending.path);
+        }
+        let extracted = extract_document(&pending.path);
+        #[cfg(test)]
+        let gate = self.commit_gate.lock().unwrap().clone();
+        #[cfg(test)]
+        if let Some(gate) = gate {
+            gate(&pending.path);
+        }
+        let _commit = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("commit content", e))?;
+        if self.generation.load(Ordering::SeqCst) != pending.generation
+            || !self.work.content_enabled.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(());
+        }
+        let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(root) = roots
+            .iter()
+            .find(|root| Path::new(&root.path) == pending.root)
+        else {
+            return Ok(());
+        };
+        let Some(record) = traversal::policy_record(
+            &pending.root,
+            &pending.path,
+            &Self::root_traversal_policy(root)?,
+        )?
+        else {
+            return Ok(());
+        };
+        let signature = format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
+        if signature != pending.signature {
+            self.work.reconcile.store(true, Ordering::SeqCst);
+            return Ok(());
+        }
+        let mut jobs = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
+        if !jobs.get(&id).is_some_and(|item| {
+            item.generation == pending.generation
+                && item.signature == pending.signature
+                && item.admission == pending.admission
+        }) {
+            return Ok(());
+        }
+        let extracted = match extracted {
+            Ok(extracted) => extracted,
+            Err(_) => {
+                if let Some(job) = jobs.get_mut(&id) {
+                    job.attempts += 1;
+                    if job.attempts >= 3 {
+                        self.work
+                            .failed
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .insert(id.clone(), job.signature.clone());
+                        jobs.remove(&id);
+                    } else {
+                        job.retry_at = Instant::now()
+                            + std::time::Duration::from_secs(5 * (1 << (job.attempts - 1)));
+                    }
+                }
+                drop(jobs);
+                drop(roots);
+                return self.refresh_worker_status();
+            }
+        };
+        let document = IndexedDocument {
+            stable_id: id.clone(),
+            path: pending.path,
+            content_hash: extracted.content_hash,
+            extraction_version: extracted.extraction_version,
+            chunks: extracted.chunks,
+        };
+        self.database
+            .upsert_document(&pending.root, &document)
+            .map_err(|e| search_failure("store content", e))?;
+        if pending.cloud_enrichment
+            && let Some(kind) = extracted.pending_enrichment
+        {
+            self.database
+                .enqueue_enrichment(
+                    &id,
+                    &kind,
+                    if kind == "ocr" {
+                        "lumen.vision.cloud"
+                    } else {
+                        "lumen.audio.cloud"
+                    },
+                )
+                .map_err(|e| search_failure("queue enrichment", e))?;
+        }
+        self.work
+            .completed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.clone(), signature);
+        jobs.remove(&id);
+        drop(jobs);
+        drop(roots);
+        self.refresh_worker_status()
+    }
+
+    #[cfg(test)]
     fn synchronize_with_content(
         &self,
         roots: Vec<IndexRootRequest>,
         content_enabled: bool,
     ) -> Result<IndexStatus, SearchFailure> {
-        let _synchronization = self
-            .synchronization
-            .lock()
-            .map_err(|error| search_failure("lock the indexing worker", error))?;
-        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
-        self.set_status(IndexStatus {
-            phase: "indexing".to_owned(),
-            indexed_items: self.snapshot().indexed_items,
-            queued_enrichment: self.snapshot().queued_enrichment,
-            skipped_items: 0,
-            message: "Updating local content index".to_owned(),
-        });
-
-        let mut indexed_items = 0_u64;
-        let mut skipped_items = 0_u64;
-        let mut inventory = HashMap::<String, HashSet<String>>::new();
-        for requested_root in roots {
-            if self.generation.load(Ordering::SeqCst) != generation {
-                return Ok(self.snapshot());
+        self.configure_roots(roots, content_enabled)?;
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        while Instant::now() < deadline {
+            let status = self.snapshot();
+            if matches!(status.phase.as_str(), "ready" | "degraded" | "paused")
+                && !self.work.inventory_running.load(Ordering::SeqCst)
+                && !self.work.reconcile.load(Ordering::SeqCst)
+            {
+                return Ok(status);
             }
-            let root = canonicalize_root(Path::new(&requested_root.path))?;
-            let root_key = root.to_string_lossy().into_owned();
-            inventory.entry(root_key.clone()).or_default();
-            let max_file_size_bytes = requested_root
-                .max_file_size_mb
-                .checked_mul(1024 * 1024)
-                .ok_or_else(|| {
-                    SearchFailure::new(
-                        "invalid-root",
-                        "The maximum indexed file size is invalid.",
-                        None,
-                    )
-                })?;
-            let policy = traversal::TraversalPolicy::new(
-                requested_root.exclusions,
-                requested_root.include_hidden,
-                max_file_size_bytes,
-            )?;
-            let outcome = traversal::traverse_with_policy(&root, &policy)?;
-            skipped_items = skipped_items.saturating_add(outcome.warnings.len() as u64);
-            for record in outcome.records {
-                if self.generation.load(Ordering::SeqCst) != generation {
-                    return Ok(self.snapshot());
-                }
-                let path = PathBuf::from(&record.path);
-                if path.is_dir() {
-                    continue;
-                }
-                let id = stable_id(&root, &path);
-                inventory
-                    .entry(root_key.clone())
-                    .or_default()
-                    .insert(id.clone());
-                if !content_enabled {
-                    let metadata_hash =
-                        format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
-                    self.database
-                        .upsert_metadata(&root, &id, &path, &metadata_hash)
-                        .map_err(|error| search_failure("update filename inventory", error))?;
-                    indexed_items = indexed_items.saturating_add(1);
-                    continue;
-                }
-                let extracted = match extract_document(&path) {
-                    Ok(value) => value,
-                    Err(_) => {
-                        skipped_items = skipped_items.saturating_add(1);
-                        continue;
-                    }
-                };
-                let document = IndexedDocument {
-                    stable_id: id.clone(),
-                    path,
-                    content_hash: extracted.content_hash,
-                    extraction_version: extracted.extraction_version,
-                    chunks: extracted.chunks,
-                };
-                self.database
-                    .upsert_document(&root, &document)
-                    .map_err(|error| search_failure("update the index", error))?;
-                indexed_items = indexed_items.saturating_add(1);
-                if requested_root.cloud_enrichment
-                    && let Some(kind) = extracted.pending_enrichment
-                {
-                    let route = if kind == "ocr" {
-                        "lumen.vision.cloud"
-                    } else {
-                        "lumen.audio.cloud"
-                    };
-                    self.database
-                        .enqueue_enrichment(&id, &kind, route)
-                        .map_err(|error| search_failure("queue enrichment", error))?;
-                }
-            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        if self.generation.load(Ordering::SeqCst) != generation {
-            return Ok(self.snapshot());
-        }
-        self.database
-            .retain_inventory(&inventory)
-            .map_err(|error| search_failure("remove stale index inventory", error))?;
-        let (stored_items, queued_enrichment) = self
-            .database
-            .counts()
-            .map_err(|error| search_failure("read index status", error))?;
-        let status = IndexStatus {
-            phase: "ready".to_owned(),
-            indexed_items: stored_items,
-            queued_enrichment,
-            skipped_items,
-            message: if content_enabled {
-                format!("Indexed {indexed_items} local items")
-            } else {
-                format!("Updated {indexed_items} filenames; content work remains paused")
-            },
-        };
-        self.set_status(status.clone());
-        Ok(status)
+        Err(search_failure("finish test indexing", "timed out"))
     }
 
     #[cfg(test)]
@@ -781,40 +1629,27 @@ impl IndexRuntime {
     }
 }
 
-fn search_kind(path: &Path) -> &'static str {
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    match extension.as_str() {
-        "pdf" => "pdf",
-        "doc" | "docx" | "odt" | "rtf" | "txt" | "md" => "document",
-        "csv" | "ods" | "xls" | "xlsx" => "spreadsheet",
-        "odp" | "ppt" | "pptx" => "presentation",
-        "c" | "cc" | "cpp" | "cs" | "css" | "go" | "h" | "hpp" | "html" | "java" | "js" | "jsx"
-        | "json" | "kt" | "kts" | "lua" | "php" | "py" | "rb" | "rs" | "scss" | "sh" | "sql"
-        | "swift" | "toml" | "ts" | "tsx" | "vue" | "xml" | "yaml" | "yml" => "source",
-        "avif" | "bmp" | "gif" | "ico" | "jpeg" | "jpg" | "png" | "webp" => "image",
-        "avi" | "m4v" | "mkv" | "mov" | "mp4" | "webm" | "wmv" => "video",
-        "aac" | "flac" | "m4a" | "mp3" | "ogg" | "wav" | "wma" => "audio",
-        _ => "unknown",
-    }
-}
-
-fn matches_scope(hit: &HybridHit, scope: &str) -> bool {
-    let kind = search_kind(&hit.hit.path);
+pub(super) fn matches_metadata_scope(metadata: &FileRecord, scope: &str) -> bool {
     match scope {
-        "all" | "files" | "recent" | "related" => true,
-        "folders" => false,
-        "documents" => matches!(kind, "pdf" | "document" | "spreadsheet" | "presentation"),
-        "code" => kind == "source",
-        "images" => kind == "image",
+        "all" | "recent" | "related" => true,
+        "files" => metadata.kind != FileKind::Folder,
+        "folders" => metadata.kind == FileKind::Folder,
+        "documents" => matches!(
+            metadata.kind,
+            FileKind::Pdf | FileKind::Document | FileKind::Spreadsheet | FileKind::Presentation
+        ),
+        "code" => metadata.kind == FileKind::Source,
+        "images" => metadata.kind == FileKind::Image,
         _ => false,
     }
 }
 
-fn validate_search_options(
+#[cfg(test)]
+fn matches_scope(hit: &HybridHit, scope: &str) -> bool {
+    matches_metadata_scope(&hit.metadata, scope)
+}
+
+pub(super) fn validate_search_options(
     scope: &str,
     filters: &[SearchFilterRequest],
     filename_priority: u8,
@@ -841,19 +1676,24 @@ fn validate_search_options(
     Ok(())
 }
 
-fn matches_filters(hit: &HybridHit, filters: &[SearchFilterRequest]) -> bool {
-    let extension = hit
-        .hit
-        .path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    let kind = search_kind(&hit.hit.path);
+pub(super) fn matches_metadata_filters(
+    metadata: &FileRecord,
+    filters: &[SearchFilterRequest],
+) -> bool {
     filters.iter().all(|filter| match filter.id.as_str() {
-        "extension" => extension.eq_ignore_ascii_case(filter.value.trim_start_matches('.')),
-        "kind" => kind.eq_ignore_ascii_case(&filter.value),
+        "extension" => metadata
+            .extension
+            .as_deref()
+            .unwrap_or_default()
+            .eq_ignore_ascii_case(filter.value.trim_start_matches('.')),
+        "kind" => metadata.kind.as_str().eq_ignore_ascii_case(&filter.value),
         _ => false,
     })
+}
+
+#[cfg(test)]
+fn matches_filters(hit: &HybridHit, filters: &[SearchFilterRequest]) -> bool {
+    matches_metadata_filters(&hit.metadata, filters)
 }
 
 fn ranking_weights(
@@ -920,43 +1760,14 @@ pub fn get_index_status(state: State<'_, IndexRuntime>) -> IndexStatus {
 
 #[tauri::command]
 pub async fn synchronize_index_roots(
-    app: AppHandle,
     state: State<'_, IndexRuntime>,
-    enrichment: State<'_, crate::gateway::EnrichmentSupervisor>,
     activity: State<'_, crate::activity::ActivityRuntime>,
     roots: Vec<IndexRootRequest>,
 ) -> Result<IndexStatus, SearchFailure> {
-    let activity_snapshot = activity.snapshot();
-    if activity_snapshot.background_policy == crate::activity::BackgroundPolicy::Paused {
-        let previous = state.snapshot();
-        return Ok(IndexStatus {
-            phase: "paused".to_owned(),
-            indexed_items: previous.indexed_items,
-            queued_enrichment: previous.queued_enrichment,
-            skipped_items: previous.skipped_items,
-            message:
-                "Background indexing is paused; exact and existing content search remain available"
-                    .to_owned(),
-        });
-    }
-    let content_enabled =
-        activity_snapshot.background_policy == crate::activity::BackgroundPolicy::Normal;
-    let runtime = state.inner().clone();
-    let worker_runtime = runtime.clone();
-    let status = tauri::async_runtime::spawn_blocking(move || {
-        worker_runtime.synchronize_with_content(roots, content_enabled)
-    })
-    .await
-    .map_err(|error| search_failure("join the indexing worker", error))??;
-    if content_enabled && let Ok(jobs) = runtime.pending_enrichment() {
-        enrichment.inner().sync_jobs(&jobs).await;
-    }
-    if content_enabled {
-        let registry = app.state::<crate::gateway::registry::ProviderRegistry>();
-        runtime.queue_embedding_jobs(&embedding::active_model_key(registry.inner()))?;
-        schedule_embedding_worker(app, runtime);
-    }
-    Ok(status)
+    state.configure_roots(
+        roots,
+        activity.snapshot().background_policy == crate::activity::BackgroundPolicy::Normal,
+    )
 }
 
 #[tauri::command]
@@ -977,7 +1788,7 @@ pub async fn search_hybrid(
     show_pinned: bool,
     semantic_enabled: bool,
     reranking_enabled: bool,
-) -> Result<Vec<HybridHit>, SearchFailure> {
+) -> Result<HybridSearchResponse, SearchFailure> {
     let version = improvement.capture(&registry);
     let began = std::time::Instant::now();
     let result = async {
@@ -992,8 +1803,9 @@ pub async fn search_hybrid(
             None
         };
         if !runtime.search_is_current(request_id) {
-            return Ok(Vec::new());
+            return Ok(HybridSearchResponse::lexical(Vec::new()));
         }
+        let embedding_unavailable = semantic_enabled && scope != "recent" && query_vector.is_none();
         let worker_runtime = runtime.clone();
         let worker_query = query.clone();
         let embedding_model = embedding::active_model_key(registry.inner());
@@ -1005,27 +1817,34 @@ pub async fn search_hybrid(
             show_pinned,
         );
         let worker_scope = scope.clone();
+        let worker_filters = filters;
         let mut hits = tauri::async_runtime::spawn_blocking(move || {
             if worker_scope == "recent" {
-                worker_runtime.recent_search(&worker_query, limit.min(10_000))
+                worker_runtime
+                    .recent_search_filtered(&worker_query, limit.min(10_000), &worker_filters)
+                    .map(HybridSearchResponse::lexical)
             } else {
-                worker_runtime.hybrid_search(
+                worker_runtime.hybrid_search_filtered(
                     &worker_query,
                     query_vector.as_deref(),
                     &embedding_model,
-                    limit.saturating_mul(3).min(10_000),
+                    limit.min(10_000),
                     weights,
+                    &worker_scope,
+                    &worker_filters,
                 )
             }
         })
         .await
         .map_err(|error| search_failure("join the index search", error))??;
         if !runtime.search_is_current(request_id) {
-            return Ok(Vec::new());
+            return Ok(HybridSearchResponse::lexical(Vec::new()));
         }
-        hits.retain(|hit| matches_scope(hit, &scope) && matches_filters(hit, &filters));
-        hits.truncate(limit.min(10_000));
-        runtime.record_user_query(&query, !hits.is_empty())?;
+        if embedding_unavailable {
+            hits.semantic = SemanticRetrievalStatus::degraded();
+        }
+        hits.items.truncate(limit.min(10_000));
+        runtime.record_user_query(&query, !hits.items.is_empty())?;
         Ok(hits)
     }
     .await;
@@ -1041,7 +1860,9 @@ pub async fn search_related(
     registry: State<'_, crate::gateway::registry::ProviderRegistry>,
     stable_id: String,
     limit: usize,
+    filters: Vec<SearchFilterRequest>,
 ) -> Result<Vec<HybridHit>, SearchFailure> {
+    validate_search_options("related", &filters, 50, "balanced")?;
     let source = state.source_text(&stable_id)?.ok_or_else(|| {
         SearchFailure::new(
             "search-failed",
@@ -1061,7 +1882,13 @@ pub async fn search_related(
     let runtime = state.inner().clone();
     let embedding_model = embedding::active_model_key(registry.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        runtime.related_search(&stable_id, &vector, &embedding_model, limit.min(10_000))
+        runtime.related_search_filtered(
+            &stable_id,
+            &vector,
+            &embedding_model,
+            limit.min(10_000),
+            &filters,
+        )
     })
     .await
     .map_err(|error| search_failure("join related search", error))?
@@ -1228,6 +2055,674 @@ mod tests {
     use super::*;
     use crate::search::test_support::SearchFixture;
 
+    fn report_seeded_size(connection: &rusqlite::Connection, files: usize) {
+        let (pages, page_size, chunks, vectors, fts): (i64, i64, i64, i64, i64) = connection.query_row(
+            "SELECT (SELECT page_count FROM pragma_page_count),(SELECT page_size FROM pragma_page_size),
+                (SELECT count(*) FROM chunks),(SELECT count(*) FROM vector_embeddings),(SELECT count(*) FROM search_fts)",
+            [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?))
+        ).unwrap();
+        println!(
+            "seeded-database files={files} chunks={chunks} vectors={vectors} fts={fts} allocated_bytes={}",
+            pages * page_size
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn measure_seeded_query(
+        runtime: &IndexRuntime,
+        size: usize,
+        query: &str,
+        vector: Option<&[f32]>,
+        scope: &str,
+        filters: &[SearchFilterRequest],
+        expected: usize,
+    ) {
+        // Core runs always check first and repeated queries on the full fixture.
+        // Opt in to ten warm timing samples only for isolated profiling runs.
+        let benchmark = std::env::var("LUMEN_QUERY_BENCHMARK").as_deref() == Ok("1");
+        let sample_count = if benchmark { 11 } else { 2 };
+        let mut samples = Vec::new();
+        for sample in 0..sample_count {
+            let started = Instant::now();
+            let hits = runtime
+                .hybrid_search_filtered(
+                    query,
+                    vector,
+                    "fixture",
+                    5,
+                    ranking::RankingWeights::default(),
+                    scope,
+                    filters,
+                )
+                .unwrap();
+            samples.push(started.elapsed().as_secs_f64() * 1000.0);
+            if sample == 0 {
+                println!(
+                    "seeded-query-first rows={size} query={query:?} ms={:.3}",
+                    samples[0]
+                );
+            }
+            assert_eq!(hits.items.len(), expected);
+            assert_eq!(runtime.database.query_hydrated_rows(), expected);
+            if vector.is_some() {
+                assert_eq!(hits.semantic.phase, SemanticPhase::Ready);
+            }
+        }
+        if !benchmark {
+            println!(
+                "seeded-query-checks rows={size} query={query:?} vector={} scope={scope} samples={sample_count} hydrated={expected}",
+                vector.is_some()
+            );
+            return;
+        }
+        let first = samples.remove(0);
+        samples.sort_by(f64::total_cmp);
+        println!(
+            "seeded-query rows={size} query={query:?} vector={} scope={scope} first_ms={first:.3} warm_p50_ms={:.3} warm_p95_ms={:.3} hydrated={expected}",
+            vector.is_some(),
+            (samples[4] + samples[5]) / 2.0,
+            samples[9]
+        );
+    }
+
+    #[test]
+    fn query_finds_eligible_names_beyond_global_inventory_cap() {
+        let fixture = SearchFixture::new("query-cap-boundary");
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let mut runtime =
+            IndexRuntime::open(&database_path, Path::new("missing.dll"), false).unwrap();
+        // Synthetic DB rows have no admitted filesystem roots. Join the owned
+        // watcher/extractor before seeding so periodic policy cleanup cannot
+        // contend with or remove this query-core fixture.
+        drop(runtime.worker.take());
+        let connection = rusqlite::Connection::open(&database_path).unwrap();
+        connection.execute_batch(
+            "BEGIN;
+             WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<250001)
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             SELECT 'decoy-'||x, 'root-a', 'root-a/'||x, 'aaaa-'||x||'.tmp', '', 'metadata', 1 FROM n;
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             VALUES('wanted','root-b','root-b/zz-target.md','zz-target.md','','metadata',1);
+             INSERT INTO file_inventory(file_id,metadata)
+             SELECT id,json_object('path',path,'relativePath',name,'name',name,'kind',
+                 CASE WHEN stable_id='wanted' THEN 'document' ELSE 'unknown' END,
+                 'extension',CASE WHEN stable_id='wanted' THEN 'md' ELSE 'tmp' END,
+                 'sizeBytes',0,'modifiedMs',NULL) FROM files;
+             INSERT INTO chunks(file_id,ordinal,text,extraction_kind,content_hash,index_revision)
+             SELECT id,0,'boundarybody text','text','',1 FROM files;
+             INSERT INTO search_fts(file_id,chunk_id,name,path,body)
+             SELECT files.id,chunks.id,files.name,files.path,chunks.text FROM chunks JOIN files ON files.id=chunks.file_id;
+             COMMIT;"
+        ).unwrap();
+        for (scope, filters) in [
+            ("all", vec![]),
+            ("documents", vec![]),
+            (
+                "files",
+                vec![SearchFilterRequest {
+                    id: "extension".into(),
+                    value: ".MD".into(),
+                }],
+            ),
+        ] {
+            let hits = runtime
+                .hybrid_search_filtered(
+                    "target",
+                    None,
+                    "missing",
+                    1,
+                    ranking::RankingWeights::default(),
+                    scope,
+                    &filters,
+                )
+                .unwrap()
+                .items;
+            assert_eq!(
+                hits.iter()
+                    .map(|hit| hit.hit.stable_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["wanted"]
+            );
+            assert_eq!(runtime.database.query_hydrated_rows(), 1);
+        }
+        report_seeded_size(&connection, 250_002);
+        let filters = [SearchFilterRequest {
+            id: "extension".into(),
+            value: ".md".into(),
+        }];
+        let body = runtime
+            .hybrid_search_filtered(
+                "boundarybody",
+                None,
+                "missing",
+                1,
+                ranking::RankingWeights::default(),
+                "documents",
+                &filters,
+            )
+            .unwrap()
+            .items;
+        assert_eq!(body[0].hit.stable_id, "wanted");
+        assert_eq!(body[0].hit.snippet, "boundarybody text");
+        assert_eq!(runtime.database.query_hydrated_rows(), 1);
+        measure_seeded_query(&runtime, 250_002, "target", None, "all", &[], 1);
+        measure_seeded_query(
+            &runtime,
+            250_002,
+            "boundarybody",
+            None,
+            "documents",
+            &filters,
+            1,
+        );
+        measure_seeded_query(&runtime, 250_002, "nevermatches", None, "all", &[], 0);
+    }
+
+    #[test]
+    fn query_scaling_uses_selected_hydration_on_fifty_thousand_rows() {
+        let fixture = SearchFixture::new("query-scaling");
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let extension = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/vector.dll");
+        let mut runtime = IndexRuntime::open(&database_path, &extension, false).unwrap();
+        drop(runtime.worker.take());
+        let connection = rusqlite::Connection::open(&database_path).unwrap();
+        connection.execute_batch(
+            "BEGIN;
+             WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<50000)
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             SELECT 'decoy-'||x, 'root-a', 'root-a/'||x, 'aaaa-'||x||'.tmp', 'hash', 'text', 1 FROM n;
+             INSERT INTO files(stable_id,root_path,path,name,content_hash,extraction_version,index_revision)
+             VALUES('wanted','root-b','root-b/zz-target.md','zz-target.md','hash','text',1);
+             INSERT INTO file_inventory(file_id,metadata)
+             SELECT id,json_object('path',path,'relativePath',name,'name',name,'kind',
+                 CASE WHEN stable_id='wanted' THEN 'document' ELSE 'unknown' END,
+                 'extension',CASE WHEN stable_id='wanted' THEN 'md' ELSE 'tmp' END,
+                 'sizeBytes',100,'modifiedMs',NULL) FROM files;
+             INSERT INTO chunks(file_id,ordinal,text,extraction_kind,content_hash,index_revision)
+             SELECT id,0,CASE WHEN stable_id='wanted' THEN 'needle text' ELSE 'common text' END,'text','hash',1 FROM files;
+             INSERT INTO search_fts(file_id,chunk_id,name,path,body)
+             SELECT files.id,chunks.id,files.name,files.path,chunks.text FROM chunks JOIN files ON files.id=chunks.file_id;
+             COMMIT;"
+        ).unwrap();
+        let vector = [1.0_f32, 0.0]
+            .into_iter()
+            .flat_map(f32::to_le_bytes)
+            .collect::<Vec<_>>();
+        connection.execute("INSERT INTO vector_embeddings(chunk_id,embedding,embedding_model,dimension,distance_metric,content_hash,index_revision) SELECT id,?1,'fixture',2,'cosine','hash',1 FROM chunks", [vector]).unwrap();
+        report_seeded_size(&connection, 50_001);
+        let filters = [SearchFilterRequest {
+            id: "kind".into(),
+            value: "DOCUMENT".into(),
+        }];
+        measure_seeded_query(&runtime, 50_001, "nevermatches", None, "all", &[], 0);
+        measure_seeded_query(&runtime, 50_001, "target", None, "files", &[], 1);
+        measure_seeded_query(&runtime, 50_001, "needle", None, "documents", &filters, 1);
+        measure_seeded_query(&runtime, 50_001, "aaaa", None, "files", &[], 5);
+        measure_seeded_query(
+            &runtime,
+            50_001,
+            "seafaring",
+            Some(&[1.0, 0.0]),
+            "documents",
+            &filters,
+            1,
+        );
+        let related = runtime
+            .related_search_filtered("decoy-1", &[1.0, 0.0], "fixture", 1, &filters)
+            .unwrap();
+        assert_eq!(related[0].hit.stable_id, "wanted");
+        assert_eq!(related[0].hit.snippet, "needle text");
+        assert_eq!(runtime.database.query_hydrated_rows(), 1);
+    }
+
+    #[test]
+    fn sql_query_preserves_exact_unicode_fuzzy_and_combined_preferences() {
+        let fixture = SearchFixture::new("query-native-ranking");
+        for name in [
+            "Report.md",
+            "report-prefix.md",
+            "r-e-p-o-r-t.md",
+            "Årsrapport.md",
+            "notes.md",
+        ] {
+            fixture.file(
+                name,
+                if name == "notes.md" {
+                    b"quasar body only"
+                } else {
+                    b"unrelated body"
+                },
+            );
+        }
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let runtime = IndexRuntime::open(&database_path, Path::new("missing.dll"), false).unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let connection = rusqlite::Connection::open(&database_path).unwrap();
+        connection
+            .execute(
+                "UPDATE file_inventory SET metadata=json_set(metadata,'$.modifiedMs',NULL)",
+                [],
+            )
+            .unwrap();
+        let fuzzy_id: String = connection
+            .query_row(
+                "SELECT stable_id FROM files WHERE name='r-e-p-o-r-t.md'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        runtime.set_pinned(&fuzzy_id, true).unwrap();
+        runtime.set_history_enabled(true);
+        assert!(runtime.record_file_open(&fuzzy_id).unwrap());
+        let weights = ranking::RankingWeights {
+            lexical: 0.5,
+            semantic: 0.0,
+            recency: 0.3,
+            pin: 0.2,
+        };
+        let hits = runtime
+            .hybrid_search("report", None, "missing", 3, weights)
+            .unwrap();
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Report.md", "r-e-p-o-r-t.md", "report-prefix.md"]
+        );
+        // FTS finds both exact and prefix; fuzzy name has gaps=5 => score .63.
+        assert!((hits[1].hit.rank - (1.0 - (0.63 * 0.5 + 0.3 + 0.2))).abs() < 0.00001);
+        assert!(hits[1].pinned);
+        assert_eq!(runtime.database.query_hydrated_rows(), 3);
+        let unicode = runtime
+            .hybrid_search("ÅRS", None, "missing", 1, weights)
+            .unwrap();
+        assert_eq!(unicode[0].hit.name, "Årsrapport.md");
+        assert_eq!(unicode[0].match_source, "filename");
+        let content = runtime
+            .hybrid_search("quasar", None, "missing", 1, weights)
+            .unwrap();
+        assert_eq!(content[0].hit.name, "notes.md");
+        assert_eq!(content[0].hit.snippet, "quasar body only");
+        assert_eq!(content[0].match_source, "content");
+        // An unrelated corrupt metadata row must not be parsed for sparse or missing names.
+        connection.execute("UPDATE file_inventory SET metadata='{}' WHERE file_id=(SELECT id FROM files WHERE name='report-prefix.md')", []).unwrap();
+        assert!(
+            runtime
+                .hybrid_search("nevermatches", None, "missing", 5, weights)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(runtime.database.query_hydrated_rows(), 0);
+        assert_eq!(
+            runtime
+                .hybrid_search("quasar", None, "missing", 1, weights)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(runtime.database.query_hydrated_rows(), 1);
+    }
+
+    #[test]
+    fn sql_query_ties_preserve_native_path_component_order() {
+        let fixture = SearchFixture::new("query-path-order");
+        fixture.file("a-b.txt", b"");
+        fixture.file("a/b.txt", b"");
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let runtime = IndexRuntime::open(&database_path, Path::new("missing.dll"), false).unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let connection = rusqlite::Connection::open(database_path).unwrap();
+        connection
+            .execute(
+                "UPDATE file_inventory SET metadata=json_set(metadata,'$.modifiedMs',NULL)",
+                [],
+            )
+            .unwrap();
+        let hits = runtime
+            .hybrid_search_filtered(
+                "",
+                None,
+                "missing",
+                2,
+                ranking::RankingWeights::default(),
+                "files",
+                &[],
+            )
+            .unwrap()
+            .items;
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<Vec<_>>(),
+            ["b.txt", "a-b.txt"]
+        );
+    }
+
+    #[test]
+    fn missing_vector_extension_preserves_content_only_and_filename_hits() {
+        let fixture = SearchFixture::new("missing-vector-lexical");
+        fixture.file("notes.md", b"quasar is only in this document body");
+        fixture.file("quasar.md", b"unrelated body");
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            &fixture.root().parent().unwrap().join("missing-vector.dll"),
+            false,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let response = runtime
+            .hybrid_search_filtered(
+                "quasar",
+                Some(&[0.5, 0.5]),
+                "missing",
+                10,
+                ranking::RankingWeights::default(),
+                "all",
+                &[],
+            )
+            .unwrap();
+        assert_eq!(response.semantic.phase, SemanticPhase::Degraded);
+        assert!(
+            response
+                .semantic
+                .reason
+                .as_deref()
+                .unwrap()
+                .contains("filename and content")
+        );
+        let hits = response.items;
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<HashSet<_>>(),
+            HashSet::from(["notes.md", "quasar.md"])
+        );
+        assert_eq!(
+            hits.iter()
+                .find(|hit| hit.hit.name == "notes.md")
+                .unwrap()
+                .match_source,
+            "content"
+        );
+        let empty = runtime
+            .hybrid_search_filtered(
+                "nevermatches",
+                Some(&[0.5, 0.5]),
+                "missing",
+                10,
+                ranking::RankingWeights::default(),
+                "all",
+                &[],
+            )
+            .unwrap();
+        assert!(empty.items.is_empty());
+        assert_eq!(empty.semantic.phase, SemanticPhase::Degraded);
+    }
+
+    #[test]
+    fn recency_uses_file_modification_and_open_history_instead_of_index_time() {
+        let fixture = SearchFixture::new("meaningful-recency");
+        let old = fixture.file("old-report.md", b"report");
+        let recent = fixture.file("new-report.md", b"report");
+        let now = std::time::SystemTime::now();
+        for (path, age_days) in [(&old, 180), (&recent, 2)] {
+            std::fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_times(
+                    std::fs::FileTimes::new()
+                        .set_modified(now - std::time::Duration::from_secs(age_days * 86400)),
+                )
+                .unwrap();
+        }
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            Path::new("missing-vector.dll"),
+            true,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let old_id = runtime
+            .stable_id_for_path(&std::fs::canonicalize(old).unwrap())
+            .unwrap()
+            .unwrap();
+        let new_id = runtime
+            .stable_id_for_path(&std::fs::canonicalize(recent).unwrap())
+            .unwrap()
+            .unwrap();
+        let old_score = runtime.database.ranking_signals(&old_id).unwrap().0;
+        let new_score = runtime.database.ranking_signals(&new_id).unwrap().0;
+        assert!(
+            old_score < new_score,
+            "indexing both today must not make their recency equal"
+        );
+        runtime.database.record_file_open(&old_id).unwrap();
+        assert!(runtime.database.ranking_signals(&old_id).unwrap().0 > new_score);
+    }
+
+    #[test]
+    fn unified_inventory_retains_folders_empty_and_unsupported_files() {
+        let fixture = SearchFixture::new("unified-inventory");
+        fixture.file("report.md", b"");
+        fixture.file("report.tmp", &[0, 1]);
+        fixture.file("report-folder/child.bin", &[0]);
+        fixture.file("cache/report.md", b"excluded");
+        fixture.file(".report.md", b"hidden");
+        fixture.file("oversize-report.bin", &vec![0; 1024 * 1024 + 1]);
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let runtime =
+            IndexRuntime::open(&database_path, Path::new("missing-vector.dll"), false).unwrap();
+        let roots = vec![IndexRootRequest {
+            path: fixture.root().to_string_lossy().into_owned(),
+            cloud_enrichment: false,
+            exclusions: vec!["cache".into()],
+            include_hidden: false,
+            max_file_size_mb: 1,
+        }];
+        runtime.synchronize_with_content(roots, true).unwrap();
+        let hits = runtime
+            .hybrid_search(
+                "report",
+                None,
+                "missing",
+                100,
+                ranking::RankingWeights::default(),
+            )
+            .unwrap();
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.hit.name.as_str())
+                .collect::<HashSet<_>>(),
+            HashSet::from(["report.md", "report.tmp", "report-folder"])
+        );
+        assert!(hits.iter().all(|hit| (0.0..=1.0).contains(&hit.hit.rank)));
+        let md = vec![SearchFilterRequest {
+            id: "extension".into(),
+            value: ".md".into(),
+        }];
+        assert_eq!(
+            hits.iter().filter(|hit| matches_filters(hit, &md)).count(),
+            1
+        );
+        assert_eq!(
+            hits.iter()
+                .filter(|hit| matches_scope(hit, "folders"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            hits.iter()
+                .filter(|hit| matches_scope(hit, "files"))
+                .count(),
+            2
+        );
+        let kind = vec![SearchFilterRequest {
+            id: "kind".into(),
+            value: "unknown".into(),
+        }];
+        assert_eq!(
+            hits.iter()
+                .filter(|hit| matches_filters(hit, &kind))
+                .count(),
+            1
+        );
+        drop(runtime);
+        let reopened =
+            IndexRuntime::open(&database_path, Path::new("missing-vector.dll"), false).unwrap();
+        assert_eq!(
+            reopened
+                .hybrid_search(
+                    "report",
+                    None,
+                    "missing",
+                    100,
+                    ranking::RankingWeights::default()
+                )
+                .unwrap()
+                .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn applies_filters_before_limit_for_filename_and_content_candidates() {
+        let fixture = SearchFixture::new("filtered-native-order");
+        fixture.file("report.tmp", b"report");
+        fixture.file("z-report.md", b"report");
+        fixture.file("report-folder/child.bin", b"");
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            Path::new("missing-vector.dll"),
+            false,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        let filters = [SearchFilterRequest {
+            id: "extension".into(),
+            value: ".md".into(),
+        }];
+        let filtered = runtime
+            .hybrid_search_filtered(
+                "report",
+                None,
+                "missing",
+                1,
+                ranking::RankingWeights::default(),
+                "files",
+                &filters,
+            )
+            .unwrap();
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.items[0].hit.name, "z-report.md");
+        let folders = runtime
+            .hybrid_search_filtered(
+                "report",
+                None,
+                "missing",
+                1,
+                ranking::RankingWeights::default(),
+                "folders",
+                &[],
+            )
+            .unwrap();
+        assert_eq!(folders.items[0].metadata.kind, FileKind::Folder);
+    }
+
+    #[test]
+    fn metadata_reconciliation_prunes_revoked_roots_and_their_jobs_while_paused() {
+        let fixture = SearchFixture::new("paused-root-revocation");
+        fixture.file("scan.png", &[0, 1, 2]);
+        let runtime = IndexRuntime::open(
+            &fixture.root().parent().unwrap().join("index.sqlite"),
+            Path::new("missing-vector.dll"),
+            true,
+        )
+        .unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: true,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        assert!(!runtime.pending_enrichment().unwrap().is_empty());
+        runtime.synchronize_with_content(vec![], false).unwrap();
+        assert!(runtime.pending_enrichment().unwrap().is_empty());
+        assert!(
+            runtime
+                .hybrid_search(
+                    "scan",
+                    None,
+                    "missing",
+                    10,
+                    ranking::RankingWeights::default()
+                )
+                .unwrap()
+                .is_empty()
+        );
+    }
+
     #[test]
     fn runtime_history_and_diagnostics_are_durable_and_redacted() {
         let fixture = SearchFixture::new("runtime-privacy-data");
@@ -1265,7 +2760,7 @@ mod tests {
         assert_eq!(diagnostics.indexed_files, 1);
         assert_eq!(diagnostics.indexed_chunks, 1);
         assert_eq!(diagnostics.phase, "ready");
-        assert_eq!(diagnostics.schema_version, 3);
+        assert_eq!(diagnostics.schema_version, 4);
         assert_eq!(diagnostics.history_entries, 1);
         assert!(vector.available);
         let serialized = serde_json::to_string(&diagnostics).unwrap();
@@ -1477,6 +2972,7 @@ mod tests {
             .unwrap();
         assert_eq!(recovered[0].hit.name, "alpha.txt");
         assert_eq!(recovered[0].match_source, "semantic");
+        assert_eq!(recovered[0].hit.snippet, "quiet lighthouse notes");
         let source_id = recovered[0].hit.stable_id.clone();
 
         let related = runtime
@@ -1484,6 +2980,91 @@ mod tests {
             .unwrap();
         assert!(!related.iter().any(|hit| hit.hit.stable_id == source_id));
         assert_eq!(related[0].hit.name, "beta.txt");
+        assert_eq!(related[0].hit.snippet, "harbor navigation notes");
         assert!(related.iter().all(|hit| hit.match_source == "related"));
+    }
+
+    #[test]
+    fn selected_semantic_and_content_snippets_use_the_matching_current_chunk() {
+        let fixture = SearchFixture::new("selected-chunk-snippet");
+        let text = format!("{}needle {}", "a".repeat(32 * 1024), "東京".repeat(600));
+        fixture.file("notes.txt", text.as_bytes());
+        let database_path = fixture.root().parent().unwrap().join("index.sqlite");
+        let extension = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/vector.dll");
+        let runtime = IndexRuntime::open(&database_path, &extension, false).unwrap();
+        runtime
+            .synchronize_with_content(
+                vec![IndexRootRequest {
+                    path: fixture.root().to_string_lossy().into_owned(),
+                    cloud_enrichment: false,
+                    exclusions: vec![],
+                    include_hidden: false,
+                    max_file_size_mb: 1,
+                }],
+                true,
+            )
+            .unwrap();
+        runtime.queue_embedding_jobs("fixture").unwrap();
+        let jobs = runtime.pending_embedding_jobs("fixture", 8).unwrap();
+        assert_eq!(jobs.len(), 2);
+        let (hash, revision) = (jobs[1].content_hash.clone(), jobs[1].index_revision);
+        for job in jobs {
+            runtime
+                .complete_embedding_job(
+                    &job,
+                    if job.text.starts_with("needle") {
+                        &[1.0, 0.0]
+                    } else {
+                        &[0.0, 1.0]
+                    },
+                )
+                .unwrap();
+        }
+        let lexical = runtime
+            .hybrid_search(
+                "needle",
+                None,
+                "fixture",
+                1,
+                ranking::RankingWeights::default(),
+            )
+            .unwrap();
+        let semantic = runtime
+            .hybrid_search(
+                "seafaring",
+                Some(&[1.0, 0.0]),
+                "fixture",
+                1,
+                ranking::RankingWeights::default(),
+            )
+            .unwrap();
+        let related = runtime
+            .related_search("unrelated-source", &[1.0, 0.0], "fixture", 1)
+            .unwrap();
+        for hit in [&lexical[0], &semantic[0], &related[0]] {
+            assert!(hit.hit.snippet.starts_with("needle "));
+            assert_eq!(hit.hit.snippet.chars().count(), 1000);
+            assert_eq!(hit.hit.content_hash, hash);
+            assert_eq!(hit.hit.index_revision, revision);
+            assert_eq!(hit.hit.extraction_kind, "text");
+        }
+        let connection = rusqlite::Connection::open(database_path).unwrap();
+        connection
+            .execute("UPDATE vector_embeddings SET content_hash='obsolete'", [])
+            .unwrap();
+        let stale = runtime
+            .hybrid_search_filtered(
+                "seafaring",
+                Some(&[1.0, 0.0]),
+                "fixture",
+                1,
+                ranking::RankingWeights::default(),
+                "all",
+                &[],
+            )
+            .unwrap();
+        assert_eq!(stale.semantic.phase, SemanticPhase::Ready);
+        assert!(stale.items.is_empty());
+        assert_eq!(runtime.database.query_hydrated_rows(), 0);
     }
 }

@@ -74,7 +74,7 @@ export function ResultRow({
       aria-label={accessibilityLabel(result)}
       aria-posinset={positionIndex === undefined ? undefined : positionIndex + 1}
       aria-setsize={totalCount}
-      className="group relative z-20 grid min-h-[var(--lumen-result-row-height)] min-w-0 cursor-default grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-[10px] rounded-control border border-transparent px-[12px] text-[color:var(--einui-command-text)] outline-none transition-[background-color,color,transform] duration-[var(--lumen-duration-hover)] ease-standard data-[hovered]:bg-[var(--einui-command-row-hover)] data-[focus-visible]:ring-2 data-[focus-visible]:ring-[var(--lumen-focus)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-65 data-[opening]:scale-[.992] @min-[560px]/results:grid-cols-[32px_minmax(0,1fr)_auto_auto] @min-[680px]/results:grid-cols-[32px_minmax(0,1fr)_auto_auto_42px]"
+      className="group relative z-20 grid min-h-[var(--lumen-result-row-height)] min-w-0 cursor-default grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-[10px] rounded-control border border-transparent px-[12px] text-[color:var(--einui-command-text)] outline-none transition-[background-color,color,transform] duration-[var(--lumen-duration-hover)] ease-standard reduced-motion:transition-none data-[hovered]:bg-[var(--einui-command-row-hover)] data-[focus-visible]:ring-2 data-[focus-visible]:ring-[var(--lumen-focus)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-65 data-[opening]:scale-[.992] @min-[560px]/results:grid-cols-[32px_minmax(0,1fr)_auto_auto] @min-[680px]/results:grid-cols-[32px_minmax(0,1fr)_auto_auto_42px]"
       data-opening={isOpening || undefined}
       data-result-id={result.id}
       isDisabled={isDisabled}

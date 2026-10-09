@@ -1,7 +1,10 @@
 use std::path::Path;
 use std::time::Instant;
 
-use super::traversal::{MAX_RESPONSE_ITEMS, traverse};
+use super::indexing::{
+    SearchFilterRequest, matches_metadata_filters, matches_metadata_scope, validate_search_options,
+};
+use super::traversal::{MAX_RESPONSE_ITEMS, TraversalPolicy, traverse_with_policy};
 use super::types::{FilenameMatch, FilenameSearchResponse, SearchFailure};
 
 #[derive(Debug, PartialEq)]
@@ -10,7 +13,7 @@ struct MatchQuality {
     ranges: Vec<[usize; 2]>,
 }
 
-fn filename_match(name: &str, query: &str) -> Option<MatchQuality> {
+fn filename_match(name: &str, query: &str, include_ranges: bool) -> Option<MatchQuality> {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
         return Some(MatchQuality {
@@ -23,58 +26,93 @@ fn filename_match(name: &str, query: &str) -> Option<MatchQuality> {
     if normalized == query {
         return Some(MatchQuality {
             score: 1.0,
-            ranges: vec![[0, name.chars().count()]],
+            ranges: if include_ranges {
+                vec![[0, name.chars().count()]]
+            } else {
+                Vec::new()
+            },
         });
     }
     if normalized.starts_with(&query) {
         return Some(MatchQuality {
             score: 0.94,
-            ranges: vec![[0, query.chars().count()]],
+            ranges: if include_ranges {
+                vec![[0, query.chars().count()]]
+            } else {
+                Vec::new()
+            },
         });
     }
     if let Some(byte_index) = normalized.find(&query) {
         let start = normalized[..byte_index].chars().count();
         return Some(MatchQuality {
             score: (0.86 - (start as f64 * 0.002)).max(0.72),
-            ranges: vec![[start, start + query.chars().count()]],
+            ranges: if include_ranges {
+                vec![[start, start + query.chars().count()]]
+            } else {
+                Vec::new()
+            },
         });
     }
 
-    let name_chars = normalized.chars().collect::<Vec<_>>();
-    let mut search_index = 0;
-    let mut matched = Vec::new();
+    let mut name_chars = normalized.chars().enumerate();
+    let mut first = None;
+    let mut last = 0;
+    let mut ranges = Vec::new();
     for query_character in query.chars() {
-        let offset = name_chars[search_index..]
-            .iter()
-            .position(|candidate| *candidate == query_character)?;
-        search_index += offset;
-        matched.push(search_index);
-        search_index += 1;
+        let (index, _) = name_chars.find(|(_, candidate)| *candidate == query_character)?;
+        first.get_or_insert(index);
+        last = index;
+        if include_ranges {
+            ranges.push([index, index + 1]);
+        }
     }
-    let span = matched.last().copied().unwrap_or_default()
-        - matched.first().copied().unwrap_or_default()
-        + 1;
-    let ranges = matched
-        .into_iter()
-        .map(|index| [index, index + 1])
-        .collect();
+    let span = last - first.unwrap_or_default() + 1;
     Some(MatchQuality {
         score: (0.68 - (span.saturating_sub(query.chars().count()) as f64 * 0.01)).max(0.5),
         ranges,
     })
 }
 
+pub(super) fn filename_score(name: &str, query: &str) -> Option<f64> {
+    filename_match(name, query, false).map(|quality| quality.score)
+}
+
+#[cfg(test)]
 pub fn search_filenames_impl(
     root: &Path,
     query: &str,
 ) -> Result<FilenameSearchResponse, SearchFailure> {
+    search_filenames_with_policy(root, query, &TraversalPolicy::default())
+}
+
+#[cfg(test)]
+pub fn search_filenames_with_policy(
+    root: &Path,
+    query: &str,
+    policy: &TraversalPolicy,
+) -> Result<FilenameSearchResponse, SearchFailure> {
+    search_filenames_filtered(root, query, policy, "all", &[])
+}
+
+pub fn search_filenames_filtered(
+    root: &Path,
+    query: &str,
+    policy: &TraversalPolicy,
+    scope: &str,
+    filters: &[SearchFilterRequest],
+) -> Result<FilenameSearchResponse, SearchFailure> {
+    validate_search_options(scope, filters, 82, "balanced")?;
     let started = Instant::now();
-    let outcome = traverse(root)?;
+    let outcome = traverse_with_policy(root, policy)?;
     let mut items = outcome
         .records
         .into_iter()
+        .filter(|file| {
+            matches_metadata_scope(file, scope) && matches_metadata_filters(file, filters)
+        })
         .filter_map(|file| {
-            filename_match(&file.name, query).map(|quality| FilenameMatch {
+            filename_match(&file.name, query, true).map(|quality| FilenameMatch {
                 file,
                 score: quality.score,
                 ranges: quality.ranges,
@@ -116,6 +154,52 @@ pub fn search_filenames_impl(
 mod tests {
     use super::*;
     use crate::search::test_support::SearchFixture;
+
+    #[test]
+    fn fallback_filters_admit_eligible_files_below_ten_thousand_matches() {
+        let fixture = SearchFixture::new("fallback-filter-cap");
+        for index in 0..10_001 {
+            fixture.file(&format!("report-{index:05}.tmp"), b"");
+        }
+        fixture.file("z-long-report.md", b"");
+        for (scope, filters) in [
+            (
+                "all",
+                vec![SearchFilterRequest {
+                    id: "extension".into(),
+                    value: ".MD".into(),
+                }],
+            ),
+            (
+                "all",
+                vec![SearchFilterRequest {
+                    id: "kind".into(),
+                    value: "document".into(),
+                }],
+            ),
+            ("documents", vec![]),
+        ] {
+            let response = search_filenames_filtered(
+                fixture.root(),
+                "report",
+                &TraversalPolicy::default(),
+                scope,
+                &filters,
+            )
+            .unwrap();
+            assert_eq!(
+                response
+                    .items
+                    .iter()
+                    .take(1)
+                    .map(|item| item.file.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["z-long-report.md"]
+            );
+            assert_eq!(response.total, 1);
+            assert!(!response.truncated);
+        }
+    }
 
     #[test]
     fn ranks_exact_prefix_substring_and_fuzzy_matches_in_order() {

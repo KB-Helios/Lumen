@@ -1,4 +1,5 @@
 import {invoke} from '@tauri-apps/api/core';
+import {z} from 'zod';
 
 import type {RuntimeMode} from '../answer/answer.types';
 
@@ -41,13 +42,16 @@ export interface EnrichmentHealth {
   detail?: string;
 }
 
-export interface IndexStatus {
-  phase: string;
-  indexedItems: number;
-  queuedEnrichment: number;
-  skippedItems: number;
-  message: string;
-}
+export const indexStatusSchema = z.object({
+  phase: z.enum(['indexing', 'ready', 'paused', 'degraded']),
+  generation: z.number().int().nonnegative(),
+  pendingItems: z.number().int().nonnegative(),
+  indexedItems: z.number().int().nonnegative(),
+  queuedEnrichment: z.number().int().nonnegative(),
+  skippedItems: z.number().int().nonnegative(),
+  message: z.string(),
+});
+export type IndexStatus = z.infer<typeof indexStatusSchema>;
 
 export interface IndexRootInput {
   path: string;
@@ -55,6 +59,47 @@ export interface IndexRootInput {
   exclusions: string[];
   includeHidden: boolean;
   maxFileSizeMb: number;
+}
+
+type NativeCommand = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+let rootAdmissionTail: Promise<void> | undefined;
+let latestRootAdmission = 0;
+let latestRootAdmissionResult: Promise<IndexStatus | undefined> | undefined;
+let latestRootAdmissionSignature = '';
+
+// Every supported root mutation shares this lane; reads and content work never enter it.
+export function admitIndexRoots(
+  roots: IndexRootInput[],
+  command: NativeCommand = invoke,
+  isCurrent?: () => boolean,
+): Promise<IndexStatus | undefined> {
+  const captured = roots.map(root => ({...root, exclusions: [...root.exclusions]}));
+  const signature = JSON.stringify(captured);
+  const admission = ++latestRootAdmission;
+  latestRootAdmissionSignature = signature;
+  const run = async () => {
+    if (admission !== latestRootAdmission || isCurrent?.() === false) return undefined;
+    return indexStatusSchema.parse(await command('synchronize_index_roots', {roots: captured}));
+  };
+  const result = rootAdmissionTail ? rootAdmissionTail.then(run) : run();
+  const tail = result.then(() => undefined, () => undefined);
+  rootAdmissionTail = tail;
+  void tail.then(() => {
+    if (rootAdmissionTail === tail) rootAdmissionTail = undefined;
+  });
+  // The mutation tail must settle before a successor can run. The caller's
+  // completion separately follows supersession, so reads cannot overtake it.
+  const completion: Promise<IndexStatus | undefined> = result.then(async status => {
+    if (status || isCurrent?.() === false) return status;
+    const successor = latestRootAdmissionResult;
+    const admitted = successor === completion ? undefined : await successor;
+    if (isCurrent?.() && signature !== latestRootAdmissionSignature) {
+      return admitIndexRoots(captured, command, isCurrent);
+    }
+    return admitted;
+  });
+  latestRootAdmissionResult = completion;
+  return completion;
 }
 
 export function isNativeRuntime() {
@@ -73,6 +118,7 @@ export const nativeAiService = {
   pauseEnrichment: () => invoke<void>('pause_enrichment'),
   resumeEnrichment: () => invoke<void>('resume_enrichment'),
   restartEnrichment: () => invoke<void>('restart_enrichment'),
-  indexStatus: () => invoke<IndexStatus>('get_index_status'),
-  synchronizeRoots: (roots: IndexRootInput[]) => invoke<IndexStatus>('synchronize_index_roots', {roots}),
+  indexStatus: async () => indexStatusSchema.parse(await invoke<unknown>('get_index_status')),
+  synchronizeRoots: async (roots: IndexRootInput[]) => await admitIndexRoots(roots)
+    ?? indexStatusSchema.parse(await invoke<unknown>('get_index_status')),
 };

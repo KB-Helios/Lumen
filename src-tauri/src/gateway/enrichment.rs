@@ -248,9 +248,9 @@ impl EnrichmentSupervisor {
         format!("http://127.0.0.1:{}{path}", self.control_port)
     }
 
-    pub async fn sync_jobs(&self, jobs: &[EnrichmentJobRecord]) {
+    pub async fn sync_jobs(&self, jobs: &[EnrichmentJobRecord]) -> bool {
         if self.is_paused() {
-            return;
+            return false;
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
@@ -270,9 +270,10 @@ impl EnrichmentSupervisor {
                     .lock()
                     .unwrap_or_else(|value| value.into_inner()) =
                     Some(format!("Rivet queue sync is waiting: {error}"));
-                break;
+                return false;
             }
         }
+        true
     }
 
     pub async fn queue_status(&self) -> Result<serde_json::Value, String> {
@@ -416,6 +417,68 @@ pub fn restart_enrichment(state: State<'_, EnrichmentSupervisor>) -> Result<(), 
 mod tests {
     use super::*;
     use std::{thread, time::Duration};
+
+    #[test]
+    fn queue_transport_failure_reports_stop_before_another_submission() {
+        use std::io::{Read, Write};
+        for (healthy, expected_requests) in [(false, 1), (true, 2)] {
+            let fixture =
+                crate::search::test_support::SearchFixture::new("enrichment-transport-stop");
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let mut supervisor = EnrichmentSupervisor::new(
+                PathBuf::from("unused-worker.exe"),
+                PathBuf::from("unused-engine.exe"),
+                fixture.root().join("runtime"),
+            )
+            .unwrap();
+            supervisor.control_port = listener.local_addr().unwrap().port();
+            let server = thread::spawn(move || {
+                let mut requests = 0;
+                let mut deadline = std::time::Instant::now() + Duration::from_secs(2);
+                while std::time::Instant::now() < deadline {
+                    match listener.accept() {
+                        Ok((mut stream, _)) => {
+                            stream
+                                .set_read_timeout(Some(Duration::from_secs(1)))
+                                .unwrap();
+                            let mut request = [0u8; 1024];
+                            assert!(stream.read(&mut request).unwrap() > 0);
+                            requests += 1;
+                            stream.write_all(if healthy {
+                            b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        } else {
+                            b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        }).unwrap();
+                            deadline = std::time::Instant::now() + Duration::from_millis(100);
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(5))
+                        }
+                        Err(error) => panic!("owned loopback listener failed: {error}"),
+                    }
+                }
+                requests
+            });
+            let job = EnrichmentJobRecord {
+                idempotency_key: "fixture:hash:ocr:route".into(),
+                file_id: "fixture".into(),
+                content_hash: "hash".into(),
+                kind: "ocr".into(),
+                route: "lumen.vision.cloud".into(),
+            };
+            let outcome = tauri::async_runtime::block_on(supervisor.sync_jobs(&[job.clone(), job]));
+            assert_eq!(
+                server.join().unwrap(),
+                expected_requests,
+                "failed requests stop while healthy requests complete the batch"
+            );
+            assert_eq!(
+                outcome, healthy,
+                "callers need the dispatch outcome to stop their outer batch"
+            );
+        }
+    }
 
     #[test]
     fn worker_ports_are_loopback_selected_and_token_is_not_in_paths() {

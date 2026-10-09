@@ -1,0 +1,485 @@
+{
+  "browser": "155.0.4283.45",
+  "samples": [
+    {
+      "start": 6762.699999988079,
+      "nominal": 6761,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.5,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 1.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 2.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 3.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 6.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 7.100000023841858,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6815.899999976158,
+      "nominal": 6815.1,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.40000003576278687,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 2.199999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 3.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 4.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.900000035762787,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6857.5,
+      "nominal": 6856.9,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.19999998807907104,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 1.699999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 3.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 4.599999964237213,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8.099999964237213,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6903.199999988079,
+      "nominal": 6902.6,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.30000001192092896,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 1.699999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 4,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 4.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 8.100000023841858,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8.199999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6936.699999988079,
+      "nominal": 6936.1,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.3999999761581421,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 1.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 4,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 4.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8.100000023841858,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 6982.699999988079,
+      "nominal": 6981.9,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.5,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 2.300000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 4,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 5,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7024.300000011921,
+      "nominal": 7023.6,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.3999999761581421,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 1.7999999523162842,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 3.799999952316284,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 4.799999952316284,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8.199999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7074.699999988079,
+      "nominal": 7073.7,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.5,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 1.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 3.399999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 4.300000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.699999988079071,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 7.899999976158142,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7116.199999988079,
+      "nominal": 7115.2,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.30000001192092896,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 1.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 4,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 5,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8.300000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    },
+    {
+      "start": 7149.399999976158,
+      "nominal": 7148.6,
+      "states": [
+        {
+          "phase": "callback",
+          "frame": 1,
+          "elapsed": 0.40000003576278687,
+          "hovered": false,
+          "bg": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 1,
+          "elapsed": 2,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 2,
+          "elapsed": 4,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 2,
+          "elapsed": 4.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "callback",
+          "frame": 3,
+          "elapsed": 7.800000011920929,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        },
+        {
+          "phase": "post-render-task",
+          "frame": 3,
+          "elapsed": 8,
+          "hovered": true,
+          "bg": "color(srgb 0.980392 0.980392 0.976471 / 0.0576471)"
+        }
+      ]
+    }
+  ]
+}
