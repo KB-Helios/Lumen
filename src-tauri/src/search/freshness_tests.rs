@@ -153,7 +153,7 @@ fn reopened_periodic_worker_distinguishes_uninitialized_from_admitted_empty_poli
 }
 
 #[test]
-fn native_inventory_boundary_defers_failed_admission_and_stop() {
+fn native_inventory_boundary_recovers_invalid_metadata_and_defers_stop() {
     let (fixture, runtime, mut roots) = manual_setup("failed-admission-stop");
     let path = fixture.file("saved.txt", b"savedquasar");
     admit(&runtime, roots.clone(), true);
@@ -167,10 +167,13 @@ fn native_inventory_boundary_defers_failed_admission_and_stop() {
         .execute("UPDATE file_inventory SET metadata = 'invalid'", [])
         .unwrap();
     roots[0].include_hidden = true;
-    assert!(runtime.configure_roots(roots.clone(), false).is_err());
-    assert!(!runtime.work.configured.load(Ordering::SeqCst));
-    assert!(!runtime.reconcile_inventory(true).unwrap());
-    assert!(!runtime.refresh_paths(vec![path.clone()]).unwrap());
+    assert!(
+        runtime.database.policy_inventory().unwrap()[0]
+            .metadata
+            .is_none()
+    );
+    runtime.configure_roots(roots.clone(), false).unwrap();
+    assert!(runtime.work.configured.load(Ordering::SeqCst));
     assert_eq!(runtime.database.search("savedquasar", 10).unwrap().len(), 1);
     connection
         .execute("UPDATE file_inventory SET metadata = ?1", [metadata])
@@ -444,6 +447,63 @@ fn permanent_invalid_utf8_has_bounded_retries_and_truthful_metadata_only_state()
             .is_empty()
     );
     assert_eq!(runtime.snapshot().skipped_items, 0);
+}
+
+#[test]
+fn schema_three_inventory_backfill_preserves_chunks_vectors_and_enrichment() {
+    let (fixture, runtime, mut roots) = manual_setup("legacy-content-backfill");
+    fixture.file("saved.txt", b"savedquasar");
+    roots[0].cloud_enrichment = true;
+    admit(&runtime, roots.clone(), true);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let db_path = runtime.owned_database_path.as_ref().clone();
+    drop(runtime);
+    let connection = rusqlite::Connection::open(&db_path).unwrap();
+    connection.execute_batch(
+        "INSERT INTO vector_embeddings
+         SELECT id, zeroblob(8), 'fixture', 2, 'cosine', content_hash, index_revision FROM chunks;
+         INSERT INTO enrichment_artifacts(file_id, chunk_id, kind, provider, model, content_hash, payload)
+         SELECT file_id, id, 'ocr', 'fixture', 'fixture', content_hash, '{}' FROM chunks;"
+    ).unwrap();
+    let snapshot = |connection: &rusqlite::Connection| {
+        [
+            "files",
+            "chunks",
+            "vector_embeddings",
+            "enrichment_artifacts",
+        ]
+        .map(|table| {
+            let mut statement = connection
+                .prepare(&format!("SELECT * FROM {table} ORDER BY rowid"))
+                .unwrap();
+            let columns = statement.column_count();
+            statement
+                .query_map([], |row| {
+                    (0..columns)
+                        .map(|column| row.get::<_, rusqlite::types::Value>(column))
+                        .collect::<rusqlite::Result<Vec<_>>>()
+                })
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap()
+        })
+    };
+    let before = snapshot(&connection);
+    assert!(before.iter().all(|rows| !rows.is_empty()));
+    connection
+        .execute_batch("DROP TABLE file_inventory; PRAGMA user_version = 3;")
+        .unwrap();
+    drop(connection);
+    let mut runtime = IndexRuntime::open(&db_path, Path::new("missing-vector.dll"), true).unwrap();
+    drop(runtime.worker.take());
+    runtime.work.stop.store(false, Ordering::SeqCst);
+    admit(&runtime, roots, false);
+    assert!(runtime.reconcile_inventory(false).unwrap());
+    let connection = rusqlite::Connection::open(&db_path).unwrap();
+    assert_eq!(snapshot(&connection), before);
+    assert_eq!(runtime.database.inventory().unwrap().len(), 1);
+    assert_eq!(runtime.database.search("savedquasar", 10).unwrap().len(), 1);
 }
 
 #[test]

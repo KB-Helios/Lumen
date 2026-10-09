@@ -9,6 +9,7 @@ import {dirname, join, resolve} from 'node:path';
 export const CLIPROXY_VERSION = 'v8.0.21';
 export const CLIPROXY_ARCHIVE_SHA256 = 'eaf609497cd1b01256370847adcf4c79469010e5918a24b9538871d8d266f105';
 export const CLIPROXY_EXECUTABLE_SHA256 = '417e118bd81af7a8a1c20c3fa437f2c763d405e13e41924e2b97d18968b5f87a';
+export const CLIPROXY_MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const projectRoot = join(import.meta.dirname, '..');
 const output = join(projectRoot, 'src-tauri', 'binaries', 'cliproxy-sidecar-x86_64-pc-windows-msvc.exe');
 
@@ -49,7 +50,25 @@ export async function stageCliproxy(options: StageOptions = {}): Promise<void> {
     try {
       const response = await fetch(options.url ?? `https://github.com/router-for-me/CLIProxyAPI/releases/download/${CLIPROXY_VERSION}/CLIProxyAPI_8.0.21_windows_amd64.zip`, {signal});
       if (!response.ok) throw new Error(`CLIProxyAPI download failed: HTTP ${response.status}`);
-      bytes = new Uint8Array(await response.arrayBuffer());
+      if (!response.body) throw new Error('CLIProxyAPI download has no body');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        while (true) {
+          const {done, value} = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > CLIPROXY_MAX_ARCHIVE_BYTES) {
+            await reader.cancel();
+            throw new Error('CLIProxyAPI archive exceeds the 64 MiB size limit');
+          }
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      bytes = Buffer.concat(chunks, size);
     } catch (error) {
       if (signal.aborted) throw new Error('CLIProxyAPI download timed out', {cause: error});
       throw error;

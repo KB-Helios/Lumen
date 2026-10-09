@@ -265,8 +265,9 @@ async function profile(baseUrl) {
       refresh.p95FrameIntervalMs,
       targetFrameBudgetMs,
     ) + frameSchedulingToleranceMs;
+    // Nominal rendering cadence is independent of response callback execution times.
     const effectiveHoverFrameBudgetMs = Math.max(
-      measured.hoverFrameIntervalP95Ms,
+      measured.hoverNominalFrameIntervalP95Ms,
       targetFrameBudgetMs,
     );
     const strict240Hz = {
@@ -277,8 +278,8 @@ async function profile(baseUrl) {
     strict240Hz.passed = Object.values(strict240Hz).every(Boolean);
     const cadenceMeasurementAvailable = Number.isFinite(refresh.p95FrameIntervalMs) &&
       refresh.p95FrameIntervalMs > 0;
-    const hoverCadenceMeasurementAvailable = Number.isFinite(measured.hoverFrameIntervalP95Ms) &&
-      measured.hoverFrameIntervalP95Ms > 0;
+    const hoverCadenceMeasurementAvailable = Number.isFinite(measured.hoverNominalFrameIntervalP95Ms) &&
+      measured.hoverNominalFrameIntervalP95Ms > 0;
     const environmentEligibility = {
       cadenceMeasurementAvailable,
       hoverCadenceMeasurementAvailable,

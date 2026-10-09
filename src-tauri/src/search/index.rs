@@ -456,17 +456,7 @@ impl IndexDatabase {
         let mut statement = connection.prepare("SELECT files.stable_id, files.root_path, files.path, file_inventory.metadata FROM files LEFT JOIN file_inventory ON file_inventory.file_id = files.id")?;
         let rows = statement.query_map([], |row| {
             let raw: Option<String> = row.get(3)?;
-            let metadata = raw
-                .map(|raw| {
-                    serde_json::from_str(&raw).map_err(|error| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            3,
-                            rusqlite::types::Type::Text,
-                            Box::new(error),
-                        )
-                    })
-                })
-                .transpose()?;
+            let metadata = raw.and_then(|raw| serde_json::from_str(&raw).ok());
             Ok(PolicyInventoryItem {
                 stable_id: row.get(0)?,
                 root_path: PathBuf::from(row.get::<_, String>(1)?),
@@ -1245,7 +1235,10 @@ impl IndexDatabase {
                     |row| row.get(0),
                 )
                 .optional()?;
-            let changed = previous.as_deref() != Some(metadata.as_str());
+            // Missing inventory is a schema backfill, not evidence of a file change.
+            let changed = previous
+                .as_deref()
+                .is_some_and(|previous| previous != metadata);
             if changed {
                 transaction.execute("DELETE FROM vector_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)", [file_id])?;
                 transaction.execute("DELETE FROM enrichment_jobs WHERE file_id = ?1", [file_id])?;

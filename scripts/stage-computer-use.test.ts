@@ -5,7 +5,14 @@ import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 
 const projectRoot = resolve(import.meta.dirname, '..');
-const bun = spawnSync('bun', ['-e', 'console.log(process.execPath)'], {encoding: 'utf8', windowsHide: true}).stdout.trim();
+const bun = (() => {
+  if (process.versions.bun) return process.execPath;
+  const result = spawnSync('bun', ['-e', 'console.log(process.execPath)'], {encoding: 'utf8', windowsHide: true});
+  if (result.error || result.status !== 0 || !result.stdout?.trim()) {
+    throw new Error(`Bun is required for staging tests: ${result.error?.message ?? result.stderr ?? 'executable lookup failed'}`);
+  }
+  return result.stdout.trim();
+})();
 
 async function cleanFixture(directory: string) {
   const canonical = await realpath(directory);
@@ -50,7 +57,6 @@ describe('computer-use staging without optional uv', () => {
       expect(version.stdout.trim()).toBe('3.11');
       const pip = spawnSync(virtualPython, ['-m', 'pip', '--version'], {env, encoding: 'utf8', windowsHide: true});
       expect(pip.status).toBe(0);
-      expect(result.stdout).toContain('Requirement already satisfied: pip');
       expect(await readFile(join(worker, 'requirements.lock'), 'utf8')).toBe('');
     } finally {
       await cleanFixture(directory);

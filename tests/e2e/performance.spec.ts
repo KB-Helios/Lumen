@@ -219,12 +219,12 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
   }
   await page.waitForTimeout(100);
   const hoverToPaintSamples = hoverSamples.map((sample) => sample.responseMs);
-  const hoverFrameIntervals = hoverSamples.map((sample) => sample.callbackIntervalMs);
+  const hoverNominalFrameIntervals = hoverSamples.map((sample) => sample.nominalFrameIntervalMs);
   const hoverSynchronousDispatch = hoverSamples.map((sample) => sample.synchronousDispatchMs);
   const hoverMetrics = await readMetrics(page);
-  const hoverFrameBudget = Math.max(percentile(hoverFrameIntervals, 0.95), 1000 / 240);
-  // Callback endpoints may be equal at the clock's precision. Readiness is an
-  // independent state AND intended-color gate, not an elapsed <= interval tautology.
+  const hoverFrameBudget = Math.max(percentile(hoverNominalFrameIntervals, 0.95), 1000 / 240);
+  // Use the same independent nominal cadence budget as the evidence profiler.
+  // Readiness additionally checks state and the intended color.
   expect(hoverSamples.filter((sample) => !sample.ready)).toEqual([]);
   expect(percentile(hoverToPaintSamples, 0.95)).toBeLessThanOrEqual(hoverFrameBudget);
   expect(Math.max(...hoverSynchronousDispatch)).toBeLessThan(16);

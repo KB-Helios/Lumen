@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildCliproxyArgs } from "./stage-clipproxy.js";
-import {stageCliproxy} from './stage-clipproxy';
+import {CLIPROXY_MAX_ARCHIVE_BYTES, stageCliproxy} from './stage-clipproxy';
 import {createHash} from 'node:crypto';
 import {mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -67,6 +67,40 @@ describe("stage-clipproxy", () => {
       await cleanFixture(directory);
     }
   }, 3000);
+
+  it('rejects an oversized chunked body before completion and preserves the destination', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'lumen-proxy-stage-'));
+    const output = join(directory, 'proxy.exe');
+    await writeFile(output, 'previous trusted binary');
+    const chunk = Buffer.alloc(1024 * 1024);
+    const server = createServer((_request, response) => {
+      response.writeHead(200); // No Content-Length: enforce the limit on bytes read.
+      let sent = 0;
+      const send = () => {
+        while (!response.destroyed && sent <= CLIPROXY_MAX_ARCHIVE_BYTES) {
+          sent += chunk.length;
+          if (!response.write(chunk)) {
+            response.once('drain', send);
+            return;
+          }
+        }
+        // Leave the body open so buffering it to completion would time out.
+      };
+      send();
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address() as {port: number};
+    try {
+      await expect(stageInBun({output, url: `http://127.0.0.1:${address.port}/oversized.zip`,
+        downloadTimeoutMs: 2000})).rejects.toThrow(/exceeds the 64 MiB size limit/);
+      expect(await readFile(output, 'utf8')).toBe('previous trusted binary');
+      expect(await readdir(directory)).toEqual(['proxy.exe']);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await cleanFixture(directory);
+    }
+  });
 
   it.each(['archive', 'executable'] as const)('preserves the previous output on a bad %s checksum', async (badChecksum) => {
     const directory = await mkdtemp(join(tmpdir(), 'lumen-proxy-stage-'));

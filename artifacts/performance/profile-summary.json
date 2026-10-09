@@ -12,7 +12,7 @@
     "frameBudgetMs": 4.166666666666667,
     "frameSchedulingToleranceMs": 2,
     "effectivePaintFrameBudgetMs": 6.399999999999636,
-    "effectiveHoverFrameBudgetMs": 9.300000011920929
+    "effectiveHoverFrameBudgetMs": 12
   },
   "environmentEligibility": {
     "cadenceMeasurementAvailable": true,
@@ -24,10 +24,10 @@
     "warmLauncherP95Ms": 20,
     "nominal240HzPaintFrameMs": 4.166666666666667,
     "effectivePaintFrameBudgetMs": 6.399999999999636,
-    "effectiveHoverFrameBudgetMs": 9.300000011920929,
+    "effectiveHoverFrameBudgetMs": 12,
     "inputResponseP95Ms": 6.399999999999636,
     "selectionToPaintP95Ms": 6.399999999999636,
-    "hoverToPaintP95Ms": 9.300000011920929,
+    "hoverToPaintP95Ms": 12,
     "ordinaryReactCommitP95Ms": 3,
     "synchronousWorkMs": 16,
     "browserLongTaskMs": 50,
