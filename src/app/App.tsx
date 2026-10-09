@@ -59,6 +59,7 @@ function createDefaultSearchService() {
     return new DevelopmentSearchService();
   }
   return new DevelopmentFileSearchService({
+    isReady: () => useSettingsStore.getState().hydrated,
     getRoots: () => {
       const settingsRoots = useSettingsStore
         .getState()
@@ -439,7 +440,7 @@ export function App({
               </kbd>
             </div>
           </LumenSurface>
-        ) : showOnboarding ? (
+        ) : !settingsHydrated ? null : showOnboarding ? (
           <Suspense fallback={null}>
             <OnboardingFlow windowService={windowService} onComplete={completeOnboarding} />
           </Suspense>

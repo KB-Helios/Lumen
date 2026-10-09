@@ -22,7 +22,7 @@ interface SearchService {
 | `MemorySearchService` | Unit/component tests | Controllable test state |
 | `FutureProductionSearchService` | Explicit future boundary | Throws an unavailable error in phase one |
 
-The browser-only preview uses the file adapter without Tauri IPC; deterministic acceptance selects the memory service only when Vite is in development mode and the URL explicitly contains `service=memory`. No production bundle route can select it. After hydration, unpaused Indexed Roots settings are authoritative, including an empty set. Onboarding persists its selected root into those settings before completion. Cached preview and opener IDs recheck the current grants, and a preview read is checked again before its response is admitted.
+The browser-only preview uses the file adapter without Tauri IPC; deterministic acceptance selects the memory service only when Vite is in development mode and the URL explicitly contains `service=memory`. No production bundle route can select it. The default App waits for settings hydration before mounting search or onboarding. Its file adapter independently checks settings readiness before native admission, queries, preview/open actions and status polling; initial empty defaults cannot revoke persisted roots. A held query becomes actionable when search mounts after hydration. After hydration, unpaused Indexed Roots settings are authoritative, including an empty set. Onboarding persists its selected root into those settings before completion. Cached preview and opener IDs recheck the current grants, and a preview read is checked again before its response is admitted.
 
 ## Request flow
 
@@ -37,9 +37,9 @@ Every Tauri response is parsed with Zod before entering UI state. Invalid payloa
 
 Normal queries use one native metadata/content inventory. Files without extractable text and folders remain searchable with their stored kind, extension, size, and modification time. Scope and extension/kind filters apply before the result limit. React preserves the native order and bounded rank instead of appending a separately ranked traversal. A revoked root is checked again when pending results arrive.
 
-Filename traversal is an explicitly degraded fallback when the index is unavailable. It receives the same exclusions, hidden-file policy, file-size bound, scope, and extension/kind filters. Native filtering precedes the 10,000 response cap. Malformed fallback payloads reject with `invalid-response` when no root returns a valid contract; partial malformed roots are identified in the degraded status while usable results remain available. Recent and Related failures remain errors; they cannot be replaced by ordinary filename results. An empty root configuration still reconciles the native inventory and clears cached admission.
+Filename traversal is an explicitly degraded fallback when the index is unavailable. It receives the same exclusions, hidden-file policy, file-size bound, scope, and extension/kind filters. Native filtering precedes the 10,000 response cap. Malformed fallback payloads reject with `invalid-response` when no root returns a valid contract; partial malformed roots are identified in the degraded status while usable results remain available. The bounded fallback status also counts rejected roots, traversal warnings and truncated roots without exposing rejected error text or warning paths. Recent and Related failures remain errors; they cannot be replaced by ordinary filename results. An empty root configuration still reconciles the native inventory and clears cached admission.
 
-`search_hybrid` returns `{items: HybridHit[], semantic: {phase: 'disabled' | 'ready' | 'degraded', reason: string | null}}`, including empty searches. `search_related` retains its `HybridHit[]` response. The adapter Zod-parses both contracts and preserves native identity, metadata, rank, provenance, and pin state. Semantic embedding or vector lookup failure keeps working filename/content retrieval and reports `degraded` with a fixed sanitized reason; a successful vector lookup reports `ready`, even when it has no matches. Recent and requests without semantic retrieval report `disabled`. Admission under current roots precedes duplicate-path suppression.
+`search_hybrid` returns `{items: HybridHit[], semantic: {phase: 'disabled' | 'ready' | 'degraded', reason: string | null}}`, including empty searches. `search_related` retains its `HybridHit[]` response. The adapter Zod-parses both contracts and preserves native identity, metadata, rank, provenance, and pin state. Typed native snippets populate `match.fragment` for content, OCR, semantic and Related matches, bounded to 1,000 characters; filename display remains unchanged. Semantic embedding or vector lookup failure keeps working filename/content retrieval and reports `degraded` with a fixed sanitized reason; a successful vector lookup reports `ready`, even when it has no matches. Recent and requests without semantic retrieval report `disabled`. Admission under current roots precedes duplicate-path suppression.
 
 ## Freshness and worker lifecycle
 
@@ -91,7 +91,7 @@ Generated dependency and build directories are skipped by name: `.git`, `.next`,
 - Text/source/Markdown previews read at most 64 KiB and reject NUL-containing or invalid UTF-8 data.
 - Raster image previews read at most 4 MiB and use passive data URLs.
 - PDF, Office, archive, executable, model, audio, and video previews remain passive metadata states.
-- Paths are displayed without the Windows canonical `\\?\` prefix, while filesystem operations retain canonical paths.
+- Paths are displayed without the Windows canonical `\\?\` prefix, with extended UNC `\\?\UNC\server\share` normalized to `\\server\share` for display and admission comparisons, while filesystem operations retain canonical paths.
 - Openers use Tauri's opener plugin only after confinement succeeds.
 
 ## Durable SQLite and vector retrieval

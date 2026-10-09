@@ -51,6 +51,7 @@ const rustIndexedHitSchema = z.object({
   contentHash: z.string().min(1),
   indexRevision: z.number().int().positive(),
   extractionKind: z.string().min(1),
+  snippet: z.string().transform(value => value.slice(0, 1000)).optional(),
   page: z.number().int().positive().nullable().optional(),
   timeStartMs: z.number().int().nonnegative().nullable().optional(),
   timeEndMs: z.number().int().nonnegative().nullable().optional(),
@@ -92,6 +93,7 @@ interface KnownFile {
 }
 
 export interface DevelopmentFileSearchServiceOptions {
+  isReady?(): boolean;
   getRoots(): readonly string[];
   getRootConfigurations?(): readonly {
     id: string;
@@ -120,11 +122,11 @@ const defaultSearchPreferences = {
 } as const;
 
 function normalizedPath(value: string) {
-  return value.replace(/\\/g, '/').replace(/\/+$/, '').toLocaleLowerCase();
+  return displayPath(value).replace(/\\/g, '/').replace(/\/+$/, '').toLocaleLowerCase();
 }
 
 function displayPath(value: string) {
-  return value.replace(/^\\\\\?\\/, '');
+  return value.replace(/^\\\\\?\\UNC\\/i, '\\\\').replace(/^\\\\\?\\/, '');
 }
 
 function formatBytes(value: string) {
@@ -217,6 +219,7 @@ function commandFailure(error: unknown, fallbackMessage: string): SearchError {
 }
 
 export class DevelopmentFileSearchService implements SearchService {
+  private readonly isReady: () => boolean;
   private readonly getRoots: () => readonly string[];
   private readonly getRootConfigurations?: DevelopmentFileSearchServiceOptions['getRootConfigurations'];
   private readonly getSearchPreferences: NonNullable<DevelopmentFileSearchServiceOptions['getSearchPreferences']>;
@@ -233,7 +236,8 @@ export class DevelopmentFileSearchService implements SearchService {
   private statusPollRunning = false;
   private statusPollFailed = false;
 
-  constructor({getRoots, getRootConfigurations, getSearchPreferences = () => defaultSearchPreferences, invoke = defaultInvoke}: DevelopmentFileSearchServiceOptions) {
+  constructor({getRoots, getRootConfigurations, getSearchPreferences = () => defaultSearchPreferences, isReady = () => true, invoke = defaultInvoke}: DevelopmentFileSearchServiceOptions) {
+    this.isReady = isReady;
     this.getRoots = getRoots;
     this.getRootConfigurations = getRootConfigurations;
     this.getSearchPreferences = getSearchPreferences;
@@ -242,6 +246,7 @@ export class DevelopmentFileSearchService implements SearchService {
 
   async search(request: SearchRequest, signal?: AbortSignal): Promise<SearchResponse> {
     throwIfAborted(signal);
+    this.requireReady();
     let roots = uniqueRoots(this.getRoots());
     const startedAt = performance.now();
     let raw: unknown;
@@ -258,6 +263,7 @@ export class DevelopmentFileSearchService implements SearchService {
       let desired = this.rootSignature(this.rootConfigurations(roots));
       for (;;) {
         await abortable(this.synchronizeRoots(roots), signal);
+        this.requireReady();
         const currentRoots = uniqueRoots(this.getRoots());
         const currentPolicy = this.rootSignature(this.rootConfigurations(currentRoots));
         if (currentPolicy === desired) break;
@@ -267,6 +273,7 @@ export class DevelopmentFileSearchService implements SearchService {
       }
     } catch (error) {
       throwIfAborted(signal);
+      this.requireReady();
       const failure = commandFailure(error, 'Local root synchronization failed.');
       if (failure.code === 'permission-denied' || request.scope === 'recent' || request.scope === 'related') throw failure;
       fallback = error;
@@ -299,6 +306,7 @@ export class DevelopmentFileSearchService implements SearchService {
       }
     }
     throwIfAborted(signal);
+    this.requireReady();
     let mapped: SearchResult[];
     if (!usedFallback) {
       const parsed = request.scope === 'related'
@@ -318,7 +326,8 @@ export class DevelopmentFileSearchService implements SearchService {
         this.knownFiles.set(item.stableId, {root: item.rootPath, path: item.path});
         return {
           id: item.stableId, name: item.name, path: displayPath(item.path), kind: item.metadata.kind,
-          match: {source: item.matchSource, score: 1 - item.rank},
+          match: {source: item.matchSource, score: 1 - item.rank,
+            fragment: ['content', 'ocr', 'semantic', 'related'].includes(item.matchSource) ? item.snippet : undefined},
           metadata: {extension: item.metadata.extension ?? undefined, sizeBytes: item.metadata.sizeBytes,
             modifiedAt: item.metadata.modifiedMs == null ? undefined : new Date(item.metadata.modifiedMs).toISOString()},
           pinned: item.pinned,
@@ -336,14 +345,20 @@ export class DevelopmentFileSearchService implements SearchService {
         policy: {exclusions: root.exclusions, includeHidden: root.includeHidden, maxFileSizeMb: root.maxFileSizeMb},
       }))), signal);
       throwIfAborted(signal);
+      this.requireReady();
       mapped = [];
       let usable = 0;
       let malformed = 0;
+      let failed = 0;
+      let warnings = 0;
+      let truncated = 0;
       for (const [index, response] of settled.entries()) {
-        if (response.status === 'rejected') continue;
+        if (response.status === 'rejected') {failed++; continue;}
         const parsed = rustSearchResponseSchema.safeParse(response.value);
         if (!parsed.success) {malformed++; continue;}
         usable++;
+        warnings += parsed.data.warnings.length;
+        if (parsed.data.truncated) truncated++;
         const root = configurations[index]!.path;
         if (!uniqueRoots(this.getRoots()).some(current => normalizedPath(displayPath(current)) === normalizedPath(displayPath(root)))) continue;
         for (const item of parsed.data.items) {
@@ -361,7 +376,11 @@ export class DevelopmentFileSearchService implements SearchService {
       if (!usable && malformed) throw {code: 'invalid-response', message: 'The local filename adapter returned an invalid response.', recoverable: true} satisfies SearchError;
       if (!usable) throw commandFailure(fallback, 'Local search failed.');
       degradationMessage = 'Local index unavailable; using policy-aware filename search';
+      if (failed) degradationMessage += `; ${failed} root${failed === 1 ? '' : 's'} failed`;
       if (malformed) degradationMessage += `; ${malformed} roots returned an invalid response`;
+      if (warnings) degradationMessage += `; ${warnings} traversal warning${warnings === 1 ? '' : 's'}`;
+      if (truncated) degradationMessage += `; ${truncated} root${truncated === 1 ? '' : 's'} truncated`;
+      degradationMessage = degradationMessage.slice(0, 256);
       mapped.sort((left, right) => (right.match.score ?? 0) - (left.match.score ?? 0) || left.path.localeCompare(right.path));
       const seen = new Set<string>();
       mapped = mapped.filter(item => {const path = normalizedPath(item.path); if (seen.has(path)) return false; seen.add(path); return true;});
@@ -456,10 +475,11 @@ export class DevelopmentFileSearchService implements SearchService {
   }
 
   private async pollStatus() {
-    if (this.statusPollRunning || !this.listeners.size || !this.getRoots().length) return;
+    if (this.statusPollRunning || !this.listeners.size || !this.isReady() || !this.getRoots().length) return;
     this.statusPollRunning = true;
     try {
       const status = indexStatusSchema.parse(await this.invoke('get_index_status'));
+      if (!this.isReady()) return;
       if (!this.statusPollFailed && JSON.stringify(status) === JSON.stringify(this.nativeStatus)) return;
       this.statusPollFailed = false;
       if (status.generation !== this.nativeStatus?.generation) this.synchronizedRootSignature = '';
@@ -475,6 +495,7 @@ export class DevelopmentFileSearchService implements SearchService {
   }
 
   private createStatus(): SearchStatus {
+    if (!this.isReady()) return {phase: 'indexing', message: 'Loading indexed root settings', updatedAt: new Date().toISOString()};
     const roots = uniqueRoots(this.getRoots());
     return roots.length > 0
       ? {
@@ -503,7 +524,7 @@ export class DevelopmentFileSearchService implements SearchService {
     const operation = ++this.configurationOperation;
     const configuredRoots = this.rootConfigurations(roots);
     const signature = this.rootSignature(configuredRoots);
-    const stillDesired = () => signature === this.rootSignature(this.rootConfigurations(uniqueRoots(this.getRoots())));
+    const stillDesired = () => this.isReady() && signature === this.rootSignature(this.rootConfigurations(uniqueRoots(this.getRoots())));
     const current = () => operation === this.configurationOperation
       && stillDesired();
     if (signature === this.synchronizedRootSignature && !this.pendingRootSignature) {
@@ -546,6 +567,7 @@ export class DevelopmentFileSearchService implements SearchService {
   }
 
   private requireKnownFile(fileId: string) {
+    this.requireReady();
     const known = this.knownFiles.get(fileId);
     if (!known) {
       throw {
@@ -566,5 +588,9 @@ export class DevelopmentFileSearchService implements SearchService {
       } satisfies SearchError;
     }
     return known;
+  }
+
+  private requireReady() {
+    if (!this.isReady()) throw {code: 'unavailable', message: 'Indexed root settings are still loading.', recoverable: true} satisfies SearchError;
   }
 }

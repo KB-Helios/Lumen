@@ -7,7 +7,8 @@ import {useActivityStore} from '../features/activity/activity.store';
 import {useLauncherStore} from '../features/launcher/launcher.store';
 import {useQueryStore} from '../features/launcher/query.store';
 import {useOnboardingStore} from '../features/onboarding/onboarding.store';
-import {useSettingsStore} from '../features/settings/settings.store';
+import {settingsPersistence, useSettingsStore} from '../features/settings/settings.store';
+import {defaultSettings, type LumenSettings} from '../features/settings/settings.schema';
 import {useWindowsAiStore} from '../features/windows-ai/windows-ai.store';
 import {BrowserWindowService} from '../platform/window/browser-window-service';
 import type {ActivityService} from '../services/activity/activity-service';
@@ -18,10 +19,13 @@ import {App} from './App';
 import {createIndexedRoot} from '../features/settings/indexed-root';
 import {DevelopmentFileSearchService} from '../services/search/development-file-search-service';
 
+const nativeCalls = vi.hoisted(() => [] as {command: string; args?: Record<string, unknown>}[]);
+const nativeState = vi.hoisted(() => ({generation: 1}));
 vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tauri-apps/api/core')>(),
-  invoke: async (command: string) => {
-    if (command === 'synchronize_index_roots' || command === 'get_index_status') return {phase: 'ready', generation: 1, pendingItems: 0, indexedItems: 0, queuedEnrichment: 0, skippedItems: 0, message: 'Ready'};
+  invoke: async (command: string, args?: Record<string, unknown>) => {
+    nativeCalls.push({command, args});
+    if (command === 'synchronize_index_roots' || command === 'get_index_status') return {phase: 'ready', generation: nativeState.generation, pendingItems: 0, indexedItems: 0, queuedEnrichment: 0, skippedItems: 0, message: 'Ready'};
     if (command === 'search_hybrid') return {items: [], semantic: {phase: 'disabled', reason: null}};
     if (command === 'search_filenames') return {
       items: [{path: 'C:\\Projects\\Readme.md', relativePath: 'Readme.md', name: 'Readme.md',
@@ -49,6 +53,38 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it.each(['configured', 'empty', 'paused'] as const)('waits for real settings hydration before making a held query actionable with %s roots', async savedPolicy => {
+    let finishHydration!: (settings: LumenSettings) => void;
+    vi.spyOn(settingsPersistence, 'read').mockImplementation(() => new Promise(resolve => {finishHydration = resolve;}));
+    useOnboardingStore.setState({hydrated: true, completed: true, root: 'C:\\OldOnboardingRoot'});
+    useQueryStore.getState().setDraft('readme');
+    useQueryStore.getState().commit();
+    nativeState.generation++;
+    nativeCalls.length = 0;
+    const search = vi.spyOn(DevelopmentFileSearchService.prototype, 'search');
+    render(<App windowService={new BrowserWindowService()} />);
+    await waitFor(() => expect(finishHydration).toBeDefined());
+    // A persisted query must not treat the store's initial empty roots as revocation.
+    await act(async () => {await new Promise(resolve => setTimeout(resolve, 120));});
+    expect(nativeCalls.filter(call => /synchronize_index_roots|search_hybrid|search_filenames|open_file|open_containing_folder/.test(call.command))).toEqual([]);
+    const roots = savedPolicy === 'empty' ? [] : [{...createIndexedRoot('C:\\Projects'), paused: savedPolicy === 'paused'}];
+    act(() => finishHydration({...defaultSettings, roots}));
+    await waitFor(() => expect(nativeCalls.some(call => call.command === 'synchronize_index_roots')).toBe(true));
+    expect(nativeCalls.find(call => call.command === 'synchronize_index_roots')?.args?.roots).toEqual(savedPolicy === 'configured'
+      ? [{path: 'C:\\Projects', cloudEnrichment: false, exclusions: roots[0]!.exclusions, includeHidden: roots[0]!.includeHidden, maxFileSizeMb: roots[0]!.maxFileSizeMb}]
+      : []);
+    await waitFor(() => expect(screen.getByRole('searchbox', {name: 'Search files'})).toHaveValue('readme'));
+    if (savedPolicy === 'configured') {
+      await waitFor(() => expect(nativeCalls.some(call => call.command === 'search_hybrid')).toBe(true));
+      // Exercise the actual default service's readiness callback independently
+      // of the component gate, so another consumer cannot prune during hydration.
+      const service = search.mock.contexts[search.mock.contexts.length - 1] as DevelopmentFileSearchService;
+      act(() => useSettingsStore.setState({hydrated: false}));
+      nativeCalls.length = 0;
+      await expect(service.search({requestId: 99, query: 'readme', scope: 'all', filters: [], limit: 10})).rejects.toMatchObject({code: 'unavailable'});
+      expect(nativeCalls.filter(call => /synchronize_index_roots|search_hybrid|search_filenames/.test(call.command))).toEqual([]);
+    } else expect(nativeCalls.some(call => call.command === 'search_hybrid')).toBe(false);
+  });
   it.each(['empty', 'paused'] as const)('keeps %s saved roots authoritative after onboarding in the default composition', async (rootState) => {
     const user = userEvent.setup();
     useOnboardingStore.setState({hydrated: true, completed: true, root: 'C:\\Projects'});

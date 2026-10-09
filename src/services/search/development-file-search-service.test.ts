@@ -51,6 +51,155 @@ function nativeResponse(items: unknown[]) {
 }
 
 describe('DevelopmentFileSearchService', () => {
+  it('blocks native reads and admissions until root policy is ready, then admits configured and empty policies', async () => {
+    let ready = false;
+    let roots = ['C:\\Projects'];
+    const invoke = vi.fn(async (command: string) => command === 'search_hybrid' ? nativeResponse([indexedHit('Readme.md')]) : undefined);
+    const options = {getRoots: () => roots, isReady: () => ready, invoke};
+    const service = createService(options);
+    await expect(service.search(request)).rejects.toMatchObject({code: 'unavailable'});
+    expect(invoke).not.toHaveBeenCalled();
+    ready = true;
+    expect((await service.search(request)).total).toBe(1);
+    ready = false;
+    invoke.mockClear();
+    await expect(service.openFile('indexed:Readme.md')).rejects.toMatchObject({code: 'unavailable'});
+    await expect(service.getPreview('indexed:Readme.md')).rejects.toMatchObject({code: 'unavailable'});
+    expect(invoke).not.toHaveBeenCalled();
+    ready = true;
+    roots = [];
+    expect((await service.search(request)).total).toBe(0);
+    expect(invoke).toHaveBeenCalledWith('synchronize_index_roots', {roots: []});
+  });
+
+  it.each(['UNC', 'unc'])('admits extended %s paths under ordinary UNC roots and preserves canonical opener paths', async prefix => {
+    let roots = ['\\\\server\\share'];
+    const root = `\\\\?\\${prefix}\\server\\share`;
+    const path = `${root}\\Readme.md`;
+    const hit = {...indexedHit('Readme.md'), rootPath: root, path};
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'search_hybrid') return nativeResponse([hit, {...hit, stableId: 'indexed:duplicate', rootPath: roots[0], path: '\\\\server\\share\\Readme.md'}]);
+      if (command === 'get_basic_preview') return {kind: 'markdown', title: 'Readme.md', subtitle: path, text: '# Readme', children: [], metadata: {}};
+    });
+    const service = createService({getRoots: () => roots,
+      getRootConfigurations: () => [{id: 'unc', path: root, cloudEnrichment: false, exclusions: [], includeHidden: false, maxFileSizeMb: 256}], invoke});
+    const response = await service.search(request);
+    expect(invoke).toHaveBeenCalledWith('synchronize_index_roots', {roots: [{path: root, cloudEnrichment: false, exclusions: [], includeHidden: false, maxFileSizeMb: 256}]});
+    expect(response.groups[0]?.items.map(item => [item.id, item.path])).toEqual([['indexed:Readme.md', '\\\\server\\share\\Readme.md']]);
+    await expect(service.getPreview('indexed:Readme.md')).resolves.toMatchObject({subtitle: '\\\\server\\share\\Readme.md'});
+    await service.openFile('indexed:Readme.md');
+    await service.openContainingFolder('indexed:Readme.md');
+    expect(invoke).toHaveBeenCalledWith('open_file', {root, path});
+    expect(invoke).toHaveBeenCalledWith('open_containing_folder', {root, path});
+    roots = [];
+    invoke.mockClear();
+    await expect(service.openFile('indexed:Readme.md')).rejects.toMatchObject({code: 'permission-denied'});
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('blocks status polling until the root-policy provider is ready', async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn(async () => readyStatus);
+    const options = {getRoots: () => ['C:\\Projects'], isReady: () => false, invoke};
+    const service = createService(options);
+    const statuses: string[] = [];
+    const unsubscribe = service.subscribeToStatus(status => statuses.push(status.message ?? ''));
+    try {
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(statuses[0]).toMatch(/loading/i);
+    } finally { unsubscribe(); vi.useRealTimers(); }
+  });
+
+  it('closes query and fallback admission when readiness is withdrawn during root synchronization', async () => {
+    let ready = true;
+    let finish!: () => void;
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'synchronize_index_roots') await new Promise<void>(resolve => {finish = resolve;});
+      return readyStatus;
+    });
+    const options = {getRoots: () => ['C:\\Projects'], isReady: () => ready, invoke};
+    const service = createService(options);
+    const pending = service.search(request);
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    ready = false;
+    finish();
+    await expect(pending).rejects.toMatchObject({code: 'unavailable'});
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports rejected fallback roots and incomplete traversal without exposing native details', async () => {
+    const statuses: string[] = [];
+    const service = createService({getRoots: () => ['C:\\Projects', 'C:\\Private'], invoke: async (command, args) => {
+      if (command === 'search_hybrid') throw new Error('index offline');
+      if (command === 'search_filenames') {
+        if (args?.root === 'C:\\Private') throw new Error('secret-token private path');
+        return {...rustResponse(), truncated: true, warnings: [{path: 'secret path', message: 'secret-token'}]};
+      }
+    }});
+    const unsubscribe = service.subscribeToStatus(status => statuses.push(status.message ?? ''));
+    try {
+      expect((await service.search(request)).total).toBe(1);
+      const message = statuses[statuses.length - 1]!;
+      expect(message).toMatch(/1 root.*failed/i);
+      expect(message).toMatch(/1 traversal warning/i);
+      expect(message).toMatch(/truncat/i);
+      expect(message).not.toMatch(/secret|private/i);
+      expect(message.length).toBeLessThanOrEqual(256);
+    } finally { unsubscribe(); }
+  });
+
+  it('keeps an entirely rejected fallback a structured failure', async () => {
+    const service = createService({getRoots: () => ['C:\\Projects', 'C:\\Other'], invoke: async command => {
+      if (command.startsWith('search_')) throw {code: 'search-failed', message: 'Index unavailable', recoverable: true};
+    }});
+    await expect(service.search(request)).rejects.toMatchObject({code: 'search-failed', recoverable: true});
+  });
+
+  it.each(['abort', 'revoke'] as const)('does not admit fallback files after pending traversal %s', async action => {
+    let roots = ['C:\\Projects'];
+    let finish!: (value: unknown) => void;
+    const statuses: string[] = [];
+    const service = createService({getRoots: () => roots, invoke: async command => {
+      if (command === 'search_hybrid') throw new Error('offline');
+      if (command === 'search_filenames') return new Promise(resolve => {finish = resolve;});
+    }});
+    const unsubscribe = service.subscribeToStatus(status => statuses.push(status.message ?? ''));
+    const controller = new AbortController();
+    const pending = service.search(request, controller.signal);
+    try {
+      await vi.waitFor(() => expect(finish).toBeDefined());
+      if (action === 'abort') controller.abort();
+      else roots = [];
+      finish({...rustResponse(), warnings: [{path: 'private', message: 'secret'}], truncated: true});
+      if (action === 'abort') {
+        await expect(pending).rejects.toMatchObject({name: 'AbortError'});
+        expect(statuses).toHaveLength(1);
+      } else await expect(pending).resolves.toMatchObject({groups: [], total: 0});
+      await expect(service.openFile('local:c%3A%2Fprojects%00readme.md')).rejects.toMatchObject({code: 'unavailable'});
+    } finally { unsubscribe(); }
+  });
+
+  it.each(['content', 'ocr', 'semantic', 'related'] as const)('preserves the bounded native %s excerpt', async matchSource => {
+    const snippet = 'excerpt '.repeat(200);
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      const items = [{...indexedHit('Readme.md'), matchSource, snippet}];
+      if (command === 'search_related') return items;
+      if (command === 'search_hybrid') return nativeResponse(items);
+    }});
+    const result = await service.search({...request, scope: matchSource === 'related' ? 'related' : 'all', relatedTo: 'indexed:source'});
+    expect(result.groups[0]?.items[0]?.match.fragment).toBe(snippet.slice(0, 1000));
+  });
+
+  it('keeps filename display independent of a native excerpt and rejects untyped excerpts', async () => {
+    let snippet: unknown = 'content body';
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'search_hybrid') return nativeResponse([{...indexedHit('Readme.md'), snippet}]);
+    }});
+    expect((await service.search(request)).groups[0]?.items[0]?.match.fragment).toBeUndefined();
+    snippet = {text: 'untyped body'};
+    await expect(service.search(request)).rejects.toMatchObject({code: 'invalid-response'});
+  });
   it.each([false, true])('orders already-issued admission mutations and discards superseded queued roots=%s', async queueSuperseded => {
     let roots = ['C:\\Old'];
     let nativeRoots: string[] = [];
