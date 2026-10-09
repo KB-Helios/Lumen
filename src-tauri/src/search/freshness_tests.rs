@@ -45,6 +45,424 @@ fn setup(label: &str) -> (SearchFixture, IndexRuntime, Vec<IndexRootRequest>) {
     (fixture, runtime, roots)
 }
 
+fn manual_setup(label: &str) -> (SearchFixture, IndexRuntime, Vec<IndexRootRequest>) {
+    let (fixture, mut runtime, roots) = setup(label);
+    drop(runtime.worker.take());
+    runtime.work.stop.store(false, Ordering::SeqCst);
+    (fixture, runtime, roots)
+}
+
+#[test]
+fn metadata_outcome_reports_changed_revision_and_file_to_folder_drops_body() {
+    let (fixture, runtime, _) = manual_setup("metadata-outcomes");
+    let path = fixture.file("notes.txt", b"oldquasar");
+    assert!(matches!(
+        runtime
+            .database
+            .upsert_metadata(fixture.root(), "id", &path, "one")
+            .unwrap(),
+        super::super::index::UpsertOutcome::Updated { revision: 1 }
+    ));
+    assert!(matches!(
+        runtime
+            .database
+            .upsert_metadata(fixture.root(), "id", &path, "one")
+            .unwrap(),
+        super::super::index::UpsertOutcome::Unchanged { revision: 1 }
+    ));
+    std::fs::write(&path, b"changedlonger").unwrap();
+    assert!(matches!(
+        runtime
+            .database
+            .upsert_metadata(fixture.root(), "id", &path, "two")
+            .unwrap(),
+        super::super::index::UpsertOutcome::Updated { revision: 2 }
+    ));
+    runtime
+        .database
+        .upsert_document(
+            fixture.root(),
+            &IndexedDocument {
+                stable_id: "id".into(),
+                path: path.clone(),
+                content_hash: "body".into(),
+                extraction_version: "text-v1".into(),
+                chunks: vec![super::super::index::IndexedChunk {
+                    text: "oldquasar".into(),
+                    extraction_kind: "text".into(),
+                    page: None,
+                    time_start_ms: None,
+                    time_end_ms: None,
+                }],
+            },
+        )
+        .unwrap();
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    runtime
+        .database
+        .upsert_metadata(fixture.root(), "id", &path, "folder")
+        .unwrap();
+    assert!(runtime.database.search("oldquasar", 10).unwrap().is_empty());
+    assert_eq!(
+        runtime
+            .database
+            .inventory_record("id")
+            .unwrap()
+            .unwrap()
+            .kind,
+        FileKind::Folder
+    );
+}
+
+#[test]
+fn directory_events_preserve_existing_body_and_enrichment() {
+    let (fixture, runtime, mut roots) = manual_setup("directory-metadata-events");
+    let path = fixture.file("notes.txt", b"keepquasar");
+    let outside = fixture.outside_file("other-root/other.txt", b"otherquasar");
+    roots.push(IndexRootRequest {
+        path: outside.parent().unwrap().to_string_lossy().into_owned(),
+        ..roots[0].clone()
+    });
+    admit(&runtime, roots, true);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    runtime.extract_pending().unwrap();
+    let canonical = std::fs::canonicalize(&path).unwrap();
+    let id = stable_id(&std::fs::canonicalize(fixture.root()).unwrap(), &canonical);
+    runtime
+        .database
+        .enqueue_enrichment(&id, "ocr", "lumen.vision.cloud")
+        .unwrap();
+    let before = runtime.database.counts().unwrap();
+    let directory = fixture.root().join("new-folder");
+    std::fs::create_dir(&directory).unwrap();
+    runtime.refresh_paths(vec![directory.clone()]).unwrap();
+    assert!(
+        !runtime
+            .database
+            .search("keepquasar", 10)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(runtime.database.counts().unwrap().1, before.1);
+    assert!(
+        !runtime
+            .database
+            .search("otherquasar", 10)
+            .unwrap()
+            .is_empty()
+    );
+    #[cfg(windows)]
+    {
+        let linked = fixture.root().join("linked-directory");
+        std::os::windows::fs::symlink_dir(outside.parent().unwrap(), &linked).unwrap();
+        runtime.refresh_paths(vec![linked]).unwrap();
+        assert!(
+            !runtime
+                .database
+                .search("keepquasar", 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !runtime
+                .database
+                .search("otherquasar", 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(runtime.database.counts().unwrap().1, before.1);
+    }
+    let renamed = fixture.root().join("renamed-folder");
+    std::fs::rename(&directory, &renamed).unwrap();
+    runtime.refresh_paths(vec![directory, renamed]).unwrap();
+    assert!(
+        !runtime
+            .database
+            .search("keepquasar", 10)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(runtime.database.counts().unwrap().1, before.1);
+}
+
+#[test]
+fn permanent_invalid_utf8_has_bounded_retries_and_truthful_metadata_only_state() {
+    let (fixture, runtime, roots) = manual_setup("terminal-extraction");
+    let path = fixture.file("broken.txt", &[0xff, 0xfe, 0xff]);
+    admit(&runtime, roots, true);
+    runtime.reconcile_inventory(false).unwrap();
+    for attempt in 1..=6 {
+        for pending in runtime.work.pending.lock().unwrap().values_mut() {
+            pending.retry_at = Instant::now();
+        }
+        runtime.extract_pending().unwrap();
+        assert_eq!(runtime.snapshot().skipped_items, 1);
+        if attempt < 3 {
+            let pending = runtime.work.pending.lock().unwrap();
+            let job = pending.values().next().unwrap();
+            assert_eq!(job.attempts, attempt);
+            assert!(
+                job.retry_at.duration_since(Instant::now())
+                    > Duration::from_secs(if attempt == 1 { 4 } else { 9 })
+            );
+        }
+    }
+    assert!(
+        runtime.work.pending.lock().unwrap().is_empty(),
+        "permanent failure must reach a terminal signature"
+    );
+    assert_eq!(runtime.snapshot().phase, "degraded");
+    assert_eq!(runtime.snapshot().skipped_items, 1);
+    runtime.reconcile_inventory(false).unwrap();
+    assert!(runtime.work.pending.lock().unwrap().is_empty());
+    runtime.refresh_paths(vec![path.clone()]).unwrap();
+    assert_eq!(
+        runtime.work.pending.lock().unwrap().len(),
+        1,
+        "explicit dirty refresh retries a terminal signature"
+    );
+    runtime.extract_pending().unwrap();
+    std::fs::write(&path, b"repairedquasar").unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    assert!(
+        !runtime
+            .database
+            .search("repairedquasar", 10)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(runtime.snapshot().skipped_items, 0);
+}
+
+#[test]
+fn schema_three_admission_and_scoped_deletion_preserve_legacy_siblings_and_history() {
+    let (fixture, runtime, roots) = manual_setup("legacy-policy");
+    let keep = fixture.file("keep.txt", b"keepquasar");
+    let sibling = fixture.file("folder2/sibling.txt", b"siblingquasar");
+    let removed = fixture.file("folder/removed.txt", b"removedquasar");
+    let other = fixture.outside_file("other-root.txt", b"otherquasar");
+    for (id, path, root) in [
+        ("keep", &keep, fixture.root()),
+        ("sibling", &sibling, fixture.root()),
+        ("removed", &removed, fixture.root()),
+        ("other", &other, other.parent().unwrap()),
+    ] {
+        runtime
+            .database
+            .upsert_metadata(root, id, path, "one")
+            .unwrap();
+    }
+    runtime.database.set_pinned("keep", true).unwrap();
+    let db_path = runtime.owned_database_path.as_ref().clone();
+    drop(runtime);
+    let connection = rusqlite::Connection::open(&db_path).unwrap();
+    connection.execute("INSERT INTO file_access_history(file_id) SELECT id FROM files WHERE stable_id = 'keep'", []).unwrap();
+    connection
+        .execute_batch("DROP TABLE file_inventory; PRAGMA user_version = 3;")
+        .unwrap();
+    drop(connection);
+    let mut runtime = IndexRuntime::open(&db_path, Path::new("missing-vector.dll"), true).unwrap();
+    drop(runtime.worker.take());
+    runtime.work.stop.store(false, Ordering::SeqCst);
+    // Direct subtree removal must not derive its keep set from capped joined inventory.
+    let canonical_root = std::fs::canonicalize(fixture.root()).unwrap();
+    runtime
+        .database
+        .remove_inventory_path(&canonical_root, &canonical_root.join("folder"))
+        .unwrap();
+    let connection = rusqlite::Connection::open(&db_path).unwrap();
+    let count: i64 = connection
+        .query_row("SELECT count(*) FROM files", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(
+        count, 3,
+        "siblings and other roots survive scoped removal without inventory rows"
+    );
+    admit(&runtime, roots, false);
+    let count: i64 = connection
+        .query_row("SELECT count(*) FROM files", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(
+        count, 2,
+        "admitted legacy files survive and revoked roots are pruned"
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM pins", [], |row| row.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM file_access_history", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn incomplete_valid_root_keeps_inventory_pending_and_completed_until_complete_retry() {
+    let (fixture, runtime, roots) = manual_setup("incomplete-inventory");
+    fixture.file("a.txt", b"alphaquasar");
+    fixture.file("b.txt", b"betaquasar");
+    fixture.file("c.txt", b"gammaquasar");
+    admit(&runtime, roots, true);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    runtime.extract_pending().unwrap();
+    assert_eq!(runtime.work.pending.lock().unwrap().len(), 1);
+    assert_eq!(runtime.work.completed.lock().unwrap().len(), 2);
+    runtime.work.traversal_limit.store(1, Ordering::SeqCst);
+    runtime.reconcile_inventory(false).unwrap();
+    assert_eq!(runtime.database.inventory().unwrap().len(), 3);
+    assert_eq!(runtime.work.pending.lock().unwrap().len(), 1);
+    assert_eq!(runtime.work.completed.lock().unwrap().len(), 2);
+    runtime.work.traversal_limit.store(0, Ordering::SeqCst);
+    std::fs::remove_file(fixture.root().join("b.txt")).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    assert_eq!(runtime.database.inventory().unwrap().len(), 2);
+    assert_eq!(runtime.work.completed.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(fixture.root()).unwrap();
+    runtime.work.traversal_limit.store(1, Ordering::SeqCst);
+    runtime.reconcile_inventory(false).unwrap();
+    assert!(runtime.database.inventory().unwrap().is_empty());
+    assert!(runtime.work.pending.lock().unwrap().is_empty());
+    assert!(runtime.work.completed.lock().unwrap().is_empty());
+}
+
+#[cfg(windows)]
+#[test]
+fn redirected_root_is_pruned_even_after_incomplete_inventory() {
+    let (fixture, runtime, mut roots) = manual_setup("incomplete-root-redirect");
+    let path = fixture.file("parent/root/a.txt", b"safequasar");
+    fixture.file("parent/root/z.txt", b"safequasar");
+    let root = path.parent().unwrap();
+    roots[0].path = root.to_string_lossy().into_owned();
+    admit(&runtime, roots, false);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.work.traversal_limit.store(1, Ordering::SeqCst);
+    runtime.reconcile_inventory(false).unwrap();
+    assert_eq!(runtime.database.inventory().unwrap().len(), 2);
+    let redirected = fixture.outside_file("outside-root/forbidden.txt", b"forbiddenquasar");
+    std::fs::rename(root, root.with_file_name("saved-root")).unwrap();
+    std::os::windows::fs::symlink_dir(redirected.parent().unwrap(), root).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    assert!(runtime.database.inventory().unwrap().is_empty());
+    assert!(runtime.work.pending.lock().unwrap().is_empty());
+    assert_eq!(runtime.snapshot().phase, "degraded");
+}
+
+#[test]
+fn vanished_inventory_record_does_not_abort_other_private_files() {
+    let (fixture, runtime, roots) = manual_setup("vanished-metadata");
+    fixture.file("a-vanished.txt", b"gonequasar");
+    fixture.file("z-keep.txt", b"keepquasar");
+    admit(&runtime, roots, false);
+    *runtime.work.inventory_record_gate.lock().unwrap() = Some(Arc::new(|path| {
+        if path.file_name().unwrap() == "a-vanished.txt" {
+            std::fs::remove_file(path).unwrap();
+        }
+    }));
+    runtime.reconcile_inventory(false).unwrap();
+    assert_eq!(runtime.database.inventory().unwrap().len(), 1);
+    assert_eq!(runtime.work.pending.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn safety_inventory_is_uncapped_and_single_path_deletion_does_not_parse_other_rows() {
+    let (fixture, runtime, _) = manual_setup("uncapped-policy-inventory");
+    let path = fixture.file("keep.txt", b"keepquasar");
+    runtime
+        .database
+        .upsert_metadata(fixture.root(), "seed", &path, "one")
+        .unwrap();
+    let connection = rusqlite::Connection::open(runtime.owned_database_path.as_ref()).unwrap();
+    connection.execute_batch("WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n < 250001)
+        INSERT INTO files(stable_id, root_path, path, name, content_hash, extraction_version, index_revision)
+        SELECT 'row-' || n, root_path, path || '-' || n, name, content_hash, extraction_version, index_revision FROM ids, files WHERE stable_id = 'seed';
+        INSERT INTO file_inventory(file_id, metadata) SELECT id,
+        json_set((SELECT metadata FROM file_inventory WHERE file_id = (SELECT id FROM files WHERE stable_id = 'seed')), '$.path', path, '$.relativePath', 'keep.txt-' || id)
+        FROM files WHERE stable_id != 'seed';").unwrap();
+    assert_eq!(runtime.database.policy_inventory().unwrap().len(), 250002);
+    // A corrupt unrelated row cannot turn scoped deletion into an inventory read.
+    connection.execute("UPDATE file_inventory SET metadata = 'invalid' WHERE file_id = (SELECT id FROM files WHERE stable_id = 'seed')", []).unwrap();
+    let root = std::fs::canonicalize(fixture.root()).unwrap();
+    assert!(
+        runtime
+            .database
+            .remove_inventory_path(&root, &root.join("absent-subtree"))
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM files", [], |row| row.get::<_, i64>(0))
+            .unwrap(),
+        250002
+    );
+}
+
+#[test]
+fn forced_overflow_retries_signature_preserving_content_after_sqlite_failure() {
+    let (fixture, mut runtime, roots) = manual_setup("overflow-retry");
+    let path = fixture.file("notes.txt", b"firstquasar");
+    admit(&runtime, roots, true);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    runtime.set_content_enabled(false);
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, b"nextnebulaa").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    let connection = rusqlite::Connection::open(runtime.owned_database_path.as_ref()).unwrap();
+    connection.execute_batch("CREATE TRIGGER fail_inventory BEFORE UPDATE ON file_inventory BEGIN SELECT RAISE(ABORT, 'controlled failure'); END;").unwrap();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Mutex::new(release_rx);
+    let once = std::sync::atomic::AtomicBool::new(false);
+    *runtime.work.inventory_cycle_gate.lock().unwrap() = Some(Arc::new(move |_, before| {
+        if before && !once.swap(true, Ordering::SeqCst) {
+            entered_tx.send(()).unwrap();
+            let _ = release_rx.lock().unwrap().recv();
+        }
+    }));
+    runtime.worker = Some(index_worker::IndexWorker::start(runtime.clone()));
+    entered_rx.recv_timeout(Duration::from_secs(4)).unwrap();
+    assert!(runtime.worker.as_ref().unwrap().overflow_for_test() > 0);
+    release_tx.send(()).unwrap();
+    eventually("controlled forced reconciliation fails", || {
+        runtime.work.inventory_failed.load(Ordering::SeqCst)
+    });
+    connection
+        .execute_batch("DROP TRIGGER fail_inventory;")
+        .unwrap();
+    runtime.work.periodic_due.store(true, Ordering::SeqCst);
+    runtime.worker.as_ref().unwrap().wake();
+    eventually("forced retry invalidates same-signature body", || {
+        runtime
+            .database
+            .search("firstquasar", 10)
+            .unwrap()
+            .is_empty()
+    });
+    runtime.set_content_enabled(true);
+    eventually("forced retry extracts changed body", || {
+        !runtime
+            .database
+            .search("nextnebulaa", 10)
+            .unwrap()
+            .is_empty()
+    });
+}
+
 // Baseline exercises the current real synchronization core on its native worker pool.
 fn admit(runtime: &IndexRuntime, roots: Vec<IndexRootRequest>, enabled: bool) {
     runtime.configure_roots(roots, enabled).unwrap();

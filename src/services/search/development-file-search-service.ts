@@ -242,7 +242,7 @@ export class DevelopmentFileSearchService implements SearchService {
 
   async search(request: SearchRequest, signal?: AbortSignal): Promise<SearchResponse> {
     throwIfAborted(signal);
-    const roots = uniqueRoots(this.getRoots());
+    let roots = uniqueRoots(this.getRoots());
     const startedAt = performance.now();
     let raw: unknown;
     let fallback: unknown;
@@ -253,7 +253,18 @@ export class DevelopmentFileSearchService implements SearchService {
     }
     if (!roots.length) this.knownFiles.clear();
     try {
-      await abortable(this.synchronizeRoots(roots), signal);
+      // Settings may change while an already-issued admission is held. Recheck
+      // the desired policy after completion before reading indexed content.
+      let desired = this.rootSignature(this.rootConfigurations(roots));
+      for (;;) {
+        await abortable(this.synchronizeRoots(roots), signal);
+        const currentRoots = uniqueRoots(this.getRoots());
+        const currentPolicy = this.rootSignature(this.rootConfigurations(currentRoots));
+        if (currentPolicy === desired) break;
+        roots = currentRoots;
+        desired = currentPolicy;
+        if (desired === this.synchronizedRootSignature && !this.pendingRootSignature) break;
+      }
     } catch (error) {
       throwIfAborted(signal);
       const failure = commandFailure(error, 'Local root synchronization failed.');
@@ -491,15 +502,8 @@ export class DevelopmentFileSearchService implements SearchService {
   private async synchronizeRoots(roots: readonly string[]): Promise<void> {
     const operation = ++this.configurationOperation;
     const configuredRoots = this.rootConfigurations(roots);
-    const signatureOf = (configurations: ReturnType<NonNullable<DevelopmentFileSearchServiceOptions['getRootConfigurations']>>) => JSON.stringify(configurations.map((root) => ({
-      path: normalizedPath(root.path),
-      cloudEnrichment: root.cloudEnrichment,
-      exclusions: root.exclusions,
-      includeHidden: root.includeHidden,
-      maxFileSizeMb: root.maxFileSizeMb,
-    })));
-    const signature = signatureOf(configuredRoots);
-    const stillDesired = () => signature === signatureOf(this.rootConfigurations(uniqueRoots(this.getRoots())));
+    const signature = this.rootSignature(configuredRoots);
+    const stillDesired = () => signature === this.rootSignature(this.rootConfigurations(uniqueRoots(this.getRoots())));
     const current = () => operation === this.configurationOperation
       && stillDesired();
     if (signature === this.synchronizedRootSignature && !this.pendingRootSignature) {
@@ -534,6 +538,11 @@ export class DevelopmentFileSearchService implements SearchService {
         this.pendingRootSignature = '';
       }
     });
+  }
+
+  private rootSignature(configurations: ReturnType<NonNullable<DevelopmentFileSearchServiceOptions['getRootConfigurations']>>) {
+    return JSON.stringify(configurations.map(root => ({path: normalizedPath(root.path), cloudEnrichment: root.cloudEnrichment,
+      exclusions: root.exclusions, includeHidden: root.includeHidden, maxFileSizeMb: root.maxFileSizeMb})));
   }
 
   private requireKnownFile(fileId: string) {

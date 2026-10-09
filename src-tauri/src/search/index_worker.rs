@@ -12,9 +12,12 @@ pub(super) const QUEUE_CAPACITY: usize = 256;
 const MAX_DIRTY_PATHS: usize = 1024;
 const DEBOUNCE: Duration = Duration::from_millis(150);
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
+const RECONCILE_RETRY: Duration = Duration::from_secs(5);
 
 #[cfg(test)]
 type InventoryCycleGate = Arc<dyn Fn(bool, bool) + Send + Sync>;
+#[cfg(test)]
+type InventoryRecordGate = Arc<dyn Fn(&Path) + Send + Sync>;
 
 #[derive(Clone)]
 pub(super) struct PendingContent {
@@ -25,6 +28,7 @@ pub(super) struct PendingContent {
     pub admission: u64,
     pub cloud_enrichment: bool,
     pub retry_at: Instant,
+    pub attempts: u32,
 }
 
 #[derive(Default)]
@@ -33,10 +37,15 @@ pub(super) struct WorkState {
     pub inventory_cycle_gate: Mutex<Option<InventoryCycleGate>>,
     #[cfg(test)]
     pub periodic_due: AtomicBool,
+    #[cfg(test)]
+    pub traversal_limit: AtomicU64,
+    #[cfg(test)]
+    pub inventory_record_gate: Mutex<Option<InventoryRecordGate>>,
     pub roots: Mutex<Vec<IndexRootRequest>>,
     pub configured: AtomicBool,
     pub pending: Mutex<HashMap<String, PendingContent>>,
     pub completed: Mutex<HashMap<String, String>>,
+    pub failed: Mutex<HashMap<String, String>>,
     pub next_admission: AtomicU64,
     pub content_enabled: AtomicBool,
     pub reconcile: AtomicBool,
@@ -44,6 +53,7 @@ pub(super) struct WorkState {
     pub inventory_running: AtomicBool,
     pub watcher_degraded: AtomicBool,
     pub inventory_failed: AtomicBool,
+    pub inventory_incomplete: AtomicBool,
 }
 
 pub(super) struct IndexWorker {
@@ -158,6 +168,8 @@ fn inventory_loop(
     let mut dirty = HashSet::new();
     let mut due = Instant::now();
     let mut last_reconcile = Instant::now();
+    let mut retry_at = None;
+    let mut forced_retry = false;
     while !runtime.work.stop.load(Ordering::SeqCst) {
         if let Ok(paths) = receiver.recv_timeout(Duration::from_millis(50)) {
             if dirty.is_empty() {
@@ -180,9 +192,11 @@ fn inventory_loop(
         let periodic_reconcile =
             periodic_reconcile || runtime.work.periodic_due.swap(false, Ordering::SeqCst);
         let missed_events = overflow.swap(false, Ordering::SeqCst);
+        forced_retry |= missed_events;
         let reconcile = runtime.work.reconcile.swap(false, Ordering::SeqCst)
             || missed_events
-            || periodic_reconcile;
+            || periodic_reconcile
+            || retry_at.is_some_and(|deadline| Instant::now() >= deadline);
         if reconcile {
             let roots = runtime
                 .work
@@ -215,14 +229,27 @@ fn inventory_loop(
                 .watcher_degraded
                 .store(degraded, Ordering::SeqCst);
             runtime.work.inventory_running.store(true, Ordering::SeqCst);
-            let result = runtime.reconcile_inventory(missed_events);
+            let result = runtime.reconcile_inventory(forced_retry);
             runtime
                 .work
                 .inventory_running
                 .store(false, Ordering::SeqCst);
-            if let Err(error) = result {
-                runtime.work.inventory_failed.store(true, Ordering::SeqCst);
-                runtime.worker_failed(&error.message);
+            match result {
+                Err(error) => {
+                    retry_at = Some(Instant::now() + RECONCILE_RETRY);
+                    runtime.work.inventory_failed.store(true, Ordering::SeqCst);
+                    runtime.worker_failed(&error.message);
+                }
+                Ok(())
+                    if runtime.work.inventory_incomplete.load(Ordering::SeqCst) && forced_retry =>
+                {
+                    // A partial traversal cannot establish content freshness.
+                    retry_at = Some(Instant::now() + RECONCILE_RETRY);
+                }
+                Ok(()) => {
+                    forced_retry = false;
+                    retry_at = None;
+                }
             }
             if missed_events {
                 dirty.clear();

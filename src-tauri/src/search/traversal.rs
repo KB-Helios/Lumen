@@ -190,10 +190,36 @@ pub(super) fn policy_record(
 
 pub(super) fn record_matches_policy(record: &FileRecord, policy: &TraversalPolicy) -> bool {
     let relative = record.relative_path.replace('\\', "/").to_ascii_lowercase();
+    let mut parts = relative.split('/').rev();
+    let leaf = parts.next();
+    let generated = parts.any(|part| GENERATED_DIRECTORIES.contains(&part))
+        || (record.kind == super::types::FileKind::Folder
+            && leaf.is_some_and(|part| GENERATED_DIRECTORIES.contains(&part)));
     !is_excluded(&relative, &policy.exclusions)
+        && !generated
         && (policy.include_hidden || !is_hidden(&relative))
         && (record.kind == super::types::FileKind::Folder
             || record.size_bytes <= policy.max_file_size_bytes)
+}
+
+pub(super) fn stored_path_is_safe(root: &Path, path: &Path) -> bool {
+    if !admitted_root_is_current(root) {
+        return false;
+    }
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false;
+    };
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        if !matches!(component, std::path::Component::Normal(_)) {
+            return false;
+        }
+        current.push(component);
+        if fs::symlink_metadata(&current).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn traverse_with_policy(
@@ -207,6 +233,15 @@ pub(super) fn traverse_with_policy_until(
     root: &Path,
     policy: &TraversalPolicy,
     cancelled: impl Fn() -> bool,
+) -> Result<TraversalOutcome, SearchFailure> {
+    traverse_with_policy_until_limit(root, policy, cancelled, MAX_TRAVERSED_ITEMS)
+}
+
+pub(super) fn traverse_with_policy_until_limit(
+    root: &Path,
+    policy: &TraversalPolicy,
+    cancelled: impl Fn() -> bool,
+    limit: usize,
 ) -> Result<TraversalOutcome, SearchFailure> {
     let root = canonicalize_root(root)?;
     let mut records = Vec::new();
@@ -269,7 +304,7 @@ pub(super) fn traverse_with_policy_until(
             if cancelled() {
                 break 'walk;
             }
-            if records.len() >= MAX_TRAVERSED_ITEMS {
+            if records.len() >= limit {
                 truncated = true;
                 break 'walk;
             }

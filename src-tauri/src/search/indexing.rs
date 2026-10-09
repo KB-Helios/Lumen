@@ -889,6 +889,11 @@ impl IndexRuntime {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        self.work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.work.reconcile.store(true, Ordering::SeqCst);
         if let Some(worker) = &self.worker {
             worker.wake();
@@ -942,20 +947,31 @@ impl IndexRuntime {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .clear();
+            self.work
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
             let inventory = self
                 .database
-                .inventory()
+                .policy_inventory()
                 .map_err(|e| search_failure("read root inventory", e))?;
             let mut retained = HashMap::<String, HashSet<String>>::new();
             for item in inventory {
-                if policies
-                    .get(item.hit.root_path.to_string_lossy().as_ref())
-                    .is_some_and(|policy| traversal::record_matches_policy(&item.metadata, policy))
-                {
+                let Some(policy) = policies.get(item.root_path.to_string_lossy().as_ref()) else {
+                    continue;
+                };
+                let allowed = if let Some(metadata) = &item.metadata {
+                    traversal::record_matches_policy(metadata, policy)
+                        && traversal::stored_path_is_safe(&item.root_path, &item.path)
+                } else {
+                    traversal::policy_record(&item.root_path, &item.path, policy)?.is_some()
+                };
+                if allowed {
                     retained
-                        .entry(item.hit.root_path.to_string_lossy().into_owned())
+                        .entry(item.root_path.to_string_lossy().into_owned())
                         .or_default()
-                        .insert(item.hit.stable_id);
+                        .insert(item.stable_id);
                 }
             }
             self.database
@@ -1039,7 +1055,7 @@ impl IndexRuntime {
         status.phase = "degraded".into();
         status.message =
             "Some local indexing work could not finish; pending content will retry.".into();
-        status.skipped_items = status.skipped_items.saturating_add(1);
+        status.skipped_items = status.skipped_items.max(1);
         self.set_status(status);
     }
 
@@ -1050,20 +1066,24 @@ impl IndexRuntime {
             .map_err(|e| search_failure("read index status", e))?;
         let pending = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
         let pending_items = pending.len() as u64;
-        let retries = pending
-            .values()
-            .filter(|item| item.retry_at > Instant::now())
-            .count() as u64;
+        let retries = pending.values().filter(|item| item.attempts > 0).count() as u64;
         drop(pending);
+        let failures = self
+            .work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len() as u64;
         let indexing = self.work.inventory_running.load(Ordering::SeqCst)
             || self.work.reconcile.load(Ordering::SeqCst);
         let paused = !self.work.content_enabled.load(Ordering::SeqCst) && pending_items > 0;
         let degraded = self.work.watcher_degraded.load(Ordering::SeqCst);
-        let inventory_failed = self.work.inventory_failed.load(Ordering::SeqCst);
+        let inventory_failed = self.work.inventory_failed.load(Ordering::SeqCst)
+            || self.work.inventory_incomplete.load(Ordering::SeqCst);
         self.set_status(IndexStatus {
             phase: if paused {
                 "paused"
-            } else if retries > 0 || inventory_failed {
+            } else if retries > 0 || failures > 0 || inventory_failed {
                 "degraded"
             } else if indexing || pending_items > 0 {
                 "indexing"
@@ -1077,9 +1097,11 @@ impl IndexRuntime {
             pending_items,
             indexed_items,
             queued_enrichment,
-            skipped_items: retries,
+            skipped_items: retries + failures + u64::from(inventory_failed),
             message: if paused {
                 "Content indexing paused; filenames remain searchable"
+            } else if failures > 0 {
+                "Some files remain searchable by metadata after bounded extraction retries"
             } else if retries > 0 {
                 "Some content could not be extracted; pending work will retry"
             } else if inventory_failed {
@@ -1102,10 +1124,10 @@ impl IndexRuntime {
         record: &FileRecord,
         generation: u64,
         force_content: bool,
-    ) -> Result<(), SearchFailure> {
+    ) -> Result<bool, SearchFailure> {
         let path = PathBuf::from(&record.path);
         if self.is_owned_index_path(&path) {
-            return Ok(());
+            return Ok(false);
         }
         let root_path = PathBuf::from(&root.path);
         let id = stable_id(&root_path, &path);
@@ -1117,20 +1139,40 @@ impl IndexRuntime {
         if self.generation.load(Ordering::SeqCst) != generation
             || self.work.stop.load(Ordering::SeqCst)
         {
-            return Ok(());
+            return Ok(false);
         }
         // Revalidate policy and symlink ancestors at the commit boundary.
         if traversal::policy_record(&root_path, &path, &Self::root_traversal_policy(root)?)?
             .is_none()
         {
-            return Ok(());
+            return Ok(false);
         }
-        self.database
+        #[cfg(test)]
+        if let Some(gate) = self.work.inventory_record_gate.lock().unwrap().clone() {
+            gate(&path);
+        }
+        if let Err(error) = self
+            .database
             .upsert_metadata(&root_path, &id, &path, &signature)
-            .map_err(|e| search_failure("update inventory", e))?;
+        {
+            // Only a filesystem policy failure on this now-vanished path is
+            // skippable. Database errors and safety/permission refusals propagate.
+            if matches!(&error, super::index::IndexError::Policy(failure) if failure.code == "search-failed" && failure.path.as_deref() == Some(path.to_string_lossy().as_ref()))
+                && std::fs::symlink_metadata(&path)
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            {
+                return Ok(false);
+            }
+            return Err(search_failure("update inventory", error));
+        }
         if force_content && record.kind != FileKind::Folder {
             self.work
                 .completed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+            self.work
+                .failed
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(&id);
@@ -1147,7 +1189,28 @@ impl IndexRuntime {
                 )
                 .map_err(|e| search_failure("invalidate dirty content", e))?;
         }
+        if self
+            .work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .is_some_and(|failed| failed != &signature)
+        {
+            self.work
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+        }
         if record.kind != FileKind::Folder
+            && self
+                .work
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&id)
+                != Some(&signature)
             && self
                 .work
                 .completed
@@ -1172,11 +1235,12 @@ impl IndexRuntime {
                         admission: self.work.next_admission.fetch_add(1, Ordering::SeqCst),
                         cloud_enrichment: root.cloud_enrichment,
                         retry_at: Instant::now(),
+                        attempts: 0,
                     },
                 );
             }
         }
-        Ok(())
+        Ok(true)
     }
 
     pub(super) fn reconcile_inventory(&self, force_content: bool) -> Result<(), SearchFailure> {
@@ -1188,8 +1252,9 @@ impl IndexRuntime {
             .unwrap_or_else(|e| e.into_inner())
             .clone();
         let mut inventory = HashMap::<String, HashSet<String>>::new();
+        let mut incomplete = HashSet::new();
         let mut truncated = false;
-        for root in roots {
+        for root in &roots {
             if self.generation.load(Ordering::SeqCst) != generation {
                 return Ok(());
             }
@@ -1199,15 +1264,32 @@ impl IndexRuntime {
                 truncated = true;
                 continue;
             }
+            #[cfg(test)]
+            let outcome = traversal::traverse_with_policy_until_limit(
+                &root_path,
+                &Self::root_traversal_policy(root)?,
+                || {
+                    self.generation.load(Ordering::SeqCst) != generation
+                        || self.work.stop.load(Ordering::SeqCst)
+                },
+                match self.work.traversal_limit.load(Ordering::SeqCst) {
+                    0 => 250_000,
+                    limit => limit as usize,
+                },
+            )?;
+            #[cfg(not(test))]
             let outcome = traversal::traverse_with_policy_until(
                 &root_path,
-                &Self::root_traversal_policy(&root)?,
+                &Self::root_traversal_policy(root)?,
                 || {
                     self.generation.load(Ordering::SeqCst) != generation
                         || self.work.stop.load(Ordering::SeqCst)
                 },
             )?;
             truncated |= outcome.truncated || !outcome.warnings.is_empty();
+            if outcome.truncated || !outcome.warnings.is_empty() {
+                incomplete.insert(root.path.clone());
+            }
             let observed = inventory.entry(root.path.clone()).or_default();
             for record in outcome.records {
                 if self.is_owned_index_path(Path::new(&record.path)) {
@@ -1218,8 +1300,9 @@ impl IndexRuntime {
                 {
                     return Ok(());
                 }
-                observed.insert(stable_id(&root_path, Path::new(&record.path)));
-                self.inventory_record(&root, &record, generation, force_content)?;
+                if self.inventory_record(root, &record, generation, force_content)? {
+                    observed.insert(stable_id(&root_path, Path::new(&record.path)));
+                }
             }
         }
         let _commit = self
@@ -1228,6 +1311,32 @@ impl IndexRuntime {
             .map_err(|e| search_failure("reconcile inventory", e))?;
         if self.generation.load(Ordering::SeqCst) != generation {
             return Ok(());
+        }
+        if !incomplete.is_empty() {
+            for item in self
+                .database
+                .policy_inventory()
+                .map_err(|e| search_failure("preserve incomplete inventory", e))?
+            {
+                let Some(root) = roots.iter().find(|root| {
+                    Path::new(&root.path) == item.root_path && incomplete.contains(&root.path)
+                }) else {
+                    continue;
+                };
+                let policy = Self::root_traversal_policy(root)?;
+                let allowed = if let Some(metadata) = &item.metadata {
+                    traversal::record_matches_policy(metadata, &policy)
+                        && traversal::stored_path_is_safe(&item.root_path, &item.path)
+                } else {
+                    traversal::policy_record(&item.root_path, &item.path, &policy)?.is_some()
+                };
+                if allowed {
+                    inventory
+                        .entry(root.path.clone())
+                        .or_default()
+                        .insert(item.stable_id);
+                }
+            }
         }
         self.database
             .retain_inventory(&inventory)
@@ -1239,6 +1348,11 @@ impl IndexRuntime {
             .unwrap_or_else(|e| e.into_inner())
             .retain(|id, _| current.contains(id));
         self.work
+            .failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|id, _| current.contains(id));
+        self.work
             .completed
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1246,6 +1360,9 @@ impl IndexRuntime {
         if truncated {
             self.work.watcher_degraded.store(true, Ordering::SeqCst);
         }
+        self.work
+            .inventory_incomplete
+            .store(truncated, Ordering::SeqCst);
         self.work.inventory_running.store(false, Ordering::SeqCst);
         self.work.inventory_failed.store(false, Ordering::SeqCst);
         self.refresh_worker_status()
@@ -1259,6 +1376,7 @@ impl IndexRuntime {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
+        let mut directory_changed = false;
         for event in paths {
             for root in &roots {
                 let root_path = PathBuf::from(&root.path);
@@ -1268,8 +1386,15 @@ impl IndexRuntime {
                 if self.is_owned_index_path(&path) {
                     continue;
                 }
-                if path == root_path || path.is_dir() {
-                    return self.reconcile_inventory(true);
+                if path == root_path
+                    || std::fs::symlink_metadata(&path).is_ok_and(|metadata| {
+                        metadata.is_dir() && !metadata.file_type().is_symlink()
+                    })
+                {
+                    // Directory events observe metadata changes; unchanged files retain
+                    // extracted and paid content. Overflow is the explicit forced lane.
+                    directory_changed = true;
+                    continue;
                 }
                 if let Some(record) = traversal::policy_record(
                     &root_path,
@@ -1303,9 +1428,17 @@ impl IndexRuntime {
                         .unwrap_or_else(|e| e.into_inner());
                     for id in removed {
                         completed.remove(&id);
+                        self.work
+                            .failed
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(&id);
                     }
                 }
             }
+        }
+        if directory_changed {
+            return self.reconcile_inventory(false);
         }
         self.work.inventory_running.store(false, Ordering::SeqCst);
         self.refresh_worker_status()
@@ -1421,12 +1554,22 @@ impl IndexRuntime {
             Ok(extracted) => extracted,
             Err(_) => {
                 if let Some(job) = jobs.get_mut(&id) {
-                    job.retry_at = Instant::now() + std::time::Duration::from_secs(5);
+                    job.attempts += 1;
+                    if job.attempts >= 3 {
+                        self.work
+                            .failed
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .insert(id.clone(), job.signature.clone());
+                        jobs.remove(&id);
+                    } else {
+                        job.retry_at = Instant::now()
+                            + std::time::Duration::from_secs(5 * (1 << (job.attempts - 1)));
+                    }
                 }
                 drop(jobs);
                 drop(roots);
-                self.worker_failed("extraction failed");
-                return Ok(());
+                return self.refresh_worker_status();
             }
         };
         let document = IndexedDocument {

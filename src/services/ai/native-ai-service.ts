@@ -64,17 +64,21 @@ export interface IndexRootInput {
 type NativeCommand = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 let rootAdmissionTail: Promise<void> | undefined;
 let latestRootAdmission = 0;
+let latestRootAdmissionResult: Promise<IndexStatus | undefined> | undefined;
+let latestRootAdmissionSignature = '';
 
 // Every supported root mutation shares this lane; reads and content work never enter it.
 export function admitIndexRoots(
   roots: IndexRootInput[],
   command: NativeCommand = invoke,
-  isCurrent: () => boolean = () => true,
+  isCurrent?: () => boolean,
 ): Promise<IndexStatus | undefined> {
-  const admission = ++latestRootAdmission;
   const captured = roots.map(root => ({...root, exclusions: [...root.exclusions]}));
+  const signature = JSON.stringify(captured);
+  const admission = ++latestRootAdmission;
+  latestRootAdmissionSignature = signature;
   const run = async () => {
-    if (admission !== latestRootAdmission || !isCurrent()) return undefined;
+    if (admission !== latestRootAdmission || isCurrent?.() === false) return undefined;
     return indexStatusSchema.parse(await command('synchronize_index_roots', {roots: captured}));
   };
   const result = rootAdmissionTail ? rootAdmissionTail.then(run) : run();
@@ -83,7 +87,19 @@ export function admitIndexRoots(
   void tail.then(() => {
     if (rootAdmissionTail === tail) rootAdmissionTail = undefined;
   });
-  return result;
+  // The mutation tail must settle before a successor can run. The caller's
+  // completion separately follows supersession, so reads cannot overtake it.
+  const completion: Promise<IndexStatus | undefined> = result.then(async status => {
+    if (status || isCurrent?.() === false) return status;
+    const successor = latestRootAdmissionResult;
+    const admitted = successor === completion ? undefined : await successor;
+    if (isCurrent?.() && signature !== latestRootAdmissionSignature) {
+      return admitIndexRoots(captured, command, isCurrent);
+    }
+    return admitted;
+  });
+  latestRootAdmissionResult = completion;
+  return completion;
 }
 
 export function isNativeRuntime() {

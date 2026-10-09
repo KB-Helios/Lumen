@@ -402,6 +402,14 @@ pub struct InventoryItem {
     pub pinned: bool,
 }
 
+// Safety pruning is independent of capped search candidates and schema-4 backfill.
+pub(super) struct PolicyInventoryItem {
+    pub stable_id: String,
+    pub root_path: PathBuf,
+    pub path: PathBuf,
+    pub metadata: Option<FileRecord>,
+}
+
 fn store_inventory(connection: &Connection, file_id: i64, metadata: &str) -> IndexResult<()> {
     connection.execute(
         "INSERT INTO file_inventory(file_id, metadata) VALUES (?1, ?2)
@@ -412,6 +420,32 @@ fn store_inventory(connection: &Connection, file_id: i64, metadata: &str) -> Ind
 }
 
 impl IndexDatabase {
+    pub(super) fn policy_inventory(&self) -> IndexResult<Vec<PolicyInventoryItem>> {
+        let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        let mut statement = connection.prepare("SELECT files.stable_id, files.root_path, files.path, file_inventory.metadata FROM files LEFT JOIN file_inventory ON file_inventory.file_id = files.id")?;
+        let rows = statement.query_map([], |row| {
+            let raw: Option<String> = row.get(3)?;
+            let metadata = raw
+                .map(|raw| {
+                    serde_json::from_str(&raw).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            3,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        )
+                    })
+                })
+                .transpose()?;
+            Ok(PolicyInventoryItem {
+                stable_id: row.get(0)?,
+                root_path: PathBuf::from(row.get::<_, String>(1)?),
+                path: PathBuf::from(row.get::<_, String>(2)?),
+                metadata,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(IndexError::from)
+    }
     pub fn inventory(&self) -> IndexResult<Vec<InventoryItem>> {
         let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
         let mut statement = connection.prepare(&format!(
@@ -1189,7 +1223,8 @@ impl IndexDatabase {
                     |row| row.get(0),
                 )
                 .optional()?;
-            if previous.as_deref() != Some(metadata.as_str()) {
+            let changed = previous.as_deref() != Some(metadata.as_str());
+            if changed {
                 transaction.execute("DELETE FROM vector_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)", [file_id])?;
                 transaction.execute("DELETE FROM enrichment_jobs WHERE file_id = ?1", [file_id])?;
                 transaction.execute(
@@ -1213,8 +1248,12 @@ impl IndexDatabase {
                 params![file_id, name, path],
             )?;
             transaction.commit()?;
-            return Ok(UpsertOutcome::Unchanged {
-                revision: u64::try_from(revision).map_err(|_| IndexError::IntegerOverflow)?,
+            let revision = u64::try_from(revision + i64::from(changed))
+                .map_err(|_| IndexError::IntegerOverflow)?;
+            return Ok(if changed {
+                UpsertOutcome::Updated { revision }
+            } else {
+                UpsertOutcome::Unchanged { revision }
             });
         }
         transaction.execute(
@@ -1436,22 +1475,30 @@ impl IndexDatabase {
     }
 
     pub fn remove_inventory_path(&self, root: &Path, path: &Path) -> IndexResult<Vec<String>> {
-        let inventory = self.inventory()?;
-        let mut retained = HashMap::<String, HashSet<String>>::new();
+        let mut connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        let transaction = connection.transaction()?;
+        let prefix = format!(
+            "{}{}",
+            path.to_string_lossy().trim_end_matches(['/', '\\']),
+            std::path::MAIN_SEPARATOR
+        );
+        let candidates = {
+            let mut statement = transaction.prepare("SELECT id, stable_id FROM files WHERE root_path = ?1 AND (path = ?2 OR substr(path, 1, length(?3)) = ?3)")?;
+            statement
+                .query_map(
+                    params![root.to_string_lossy(), path.to_string_lossy(), prefix],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )?
+                .collect::<Result<Vec<_>, _>>()?
+        };
         let mut removed = Vec::new();
-        for item in inventory {
-            if Path::new(&item.hit.root_path) != root
-                || !Path::new(&item.hit.path).starts_with(path)
-            {
-                retained
-                    .entry(item.hit.root_path.to_string_lossy().into_owned())
-                    .or_default()
-                    .insert(item.hit.stable_id);
-            } else {
-                removed.push(item.hit.stable_id);
-            }
+        for (file_id, stable_id) in candidates {
+            transaction.execute("DELETE FROM vector_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)", [file_id])?;
+            transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
+            transaction.execute("DELETE FROM files WHERE id = ?1", [file_id])?;
+            removed.push(stable_id);
         }
-        self.retain_inventory(&retained)?;
+        transaction.commit()?;
         Ok(removed)
     }
 
