@@ -52,6 +52,140 @@ fn manual_setup(label: &str) -> (SearchFixture, IndexRuntime, Vec<IndexRootReque
     (fixture, runtime, roots)
 }
 
+fn reopened_worker_preserves_unadmitted_policy(empty_policy: bool) {
+    let (fixture, runtime, roots) = manual_setup("unadmitted-reopen");
+    let path = fixture.file("saved.txt", b"savedquasar");
+    admit(&runtime, roots.clone(), true);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let id = runtime
+        .database
+        .stable_id_for_path(&std::fs::canonicalize(path).unwrap())
+        .unwrap()
+        .unwrap();
+    runtime.database.set_pinned(&id, true).unwrap();
+    runtime.database.record_file_open(&id).unwrap();
+    runtime
+        .database
+        .record_user_query("savedquasar", true)
+        .unwrap();
+    let db_path = runtime.owned_database_path.as_ref().clone();
+    drop(runtime);
+    let runtime = IndexRuntime::open(&db_path, Path::new("missing-vector.dll"), true).unwrap();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (done_tx, done_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Mutex::new(release_rx);
+    let stage = std::sync::atomic::AtomicU64::new(0);
+    *runtime.work.inventory_cycle_gate.lock().unwrap() = Some(Arc::new(move |_, before| {
+        if before
+            && stage
+                .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        {
+            entered_tx.send(()).unwrap();
+            let _ = release_rx.lock().unwrap().recv();
+        } else if !before
+            && stage
+                .compare_exchange(1, 2, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        {
+            done_tx.send(()).unwrap();
+        }
+    }));
+    runtime.worker.as_ref().unwrap().wake();
+    entered_rx.recv_timeout(Duration::from_secs(4)).unwrap();
+    assert!(!runtime.work.configured.load(Ordering::SeqCst));
+    runtime.work.periodic_due.store(true, Ordering::SeqCst);
+    assert!(runtime.worker.as_ref().unwrap().overflow_for_test() > 0);
+    release_tx.send(()).unwrap();
+    done_rx.recv_timeout(Duration::from_secs(4)).unwrap();
+    assert_eq!(
+        runtime.database.counts().unwrap().0,
+        1,
+        "unadmitted periodic work must preserve saved rows"
+    );
+    assert_eq!(runtime.database.search("savedquasar", 10).unwrap().len(), 1);
+    assert!(runtime.database.ranking_signals(&id).unwrap().1);
+    assert_eq!(runtime.database.history_status().unwrap().entry_count, 2);
+    assert!(runtime.work.pending.lock().unwrap().is_empty());
+    if empty_policy {
+        admit(&runtime, Vec::new(), false);
+        assert_eq!(runtime.database.counts().unwrap().0, 0);
+        assert!(
+            runtime
+                .database
+                .search("savedquasar", 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(runtime.database.history_status().unwrap().entry_count, 1);
+    } else {
+        admit(&runtime, roots, false);
+        eventually(
+            "deferred overflow forces content refresh after paused admission",
+            || {
+                !runtime.work.pending.lock().unwrap().is_empty()
+                    && runtime
+                        .database
+                        .search("savedquasar", 10)
+                        .unwrap()
+                        .is_empty()
+            },
+        );
+        assert!(runtime.database.ranking_signals(&id).unwrap().1);
+        assert_eq!(runtime.database.history_status().unwrap().entry_count, 2);
+        runtime.set_content_enabled(true);
+        eventually("admitted content resumes", || {
+            runtime.database.search("savedquasar", 10).unwrap().len() == 1
+        });
+    }
+}
+
+#[test]
+fn reopened_periodic_worker_preserves_saved_rows_until_paused_policy_admission() {
+    reopened_worker_preserves_unadmitted_policy(false);
+}
+
+#[test]
+fn reopened_periodic_worker_distinguishes_uninitialized_from_admitted_empty_policy() {
+    reopened_worker_preserves_unadmitted_policy(true);
+}
+
+#[test]
+fn native_inventory_boundary_defers_failed_admission_and_stop() {
+    let (fixture, runtime, mut roots) = manual_setup("failed-admission-stop");
+    let path = fixture.file("saved.txt", b"savedquasar");
+    admit(&runtime, roots.clone(), true);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let connection = rusqlite::Connection::open(runtime.owned_database_path.as_ref()).unwrap();
+    let metadata: String = connection
+        .query_row("SELECT metadata FROM file_inventory", [], |row| row.get(0))
+        .unwrap();
+    connection
+        .execute("UPDATE file_inventory SET metadata = 'invalid'", [])
+        .unwrap();
+    roots[0].include_hidden = true;
+    assert!(runtime.configure_roots(roots.clone(), false).is_err());
+    assert!(!runtime.work.configured.load(Ordering::SeqCst));
+    assert!(!runtime.reconcile_inventory(true).unwrap());
+    assert!(!runtime.refresh_paths(vec![path.clone()]).unwrap());
+    assert_eq!(runtime.database.search("savedquasar", 10).unwrap().len(), 1);
+    connection
+        .execute("UPDATE file_inventory SET metadata = ?1", [metadata])
+        .unwrap();
+    admit(&runtime, roots, false);
+    runtime.work.stop.store(true, Ordering::SeqCst);
+    std::fs::remove_file(&path).unwrap();
+    assert!(!runtime.reconcile_inventory(false).unwrap());
+    assert!(!runtime.refresh_paths(vec![path]).unwrap());
+    assert_eq!(runtime.database.search("savedquasar", 10).unwrap().len(), 1);
+    runtime.work.stop.store(false, Ordering::SeqCst);
+    assert!(runtime.reconcile_inventory(false).unwrap());
+    assert_eq!(runtime.database.counts().unwrap().0, 0);
+}
+
 #[test]
 fn metadata_outcome_reports_changed_revision_and_file_to_folder_drops_body() {
     let (fixture, runtime, _) = manual_setup("metadata-outcomes");

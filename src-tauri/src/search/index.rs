@@ -15,6 +15,10 @@ use super::types::{FileRecord, SearchFailure};
 #[path = "index_query.rs"]
 mod query;
 
+#[cfg(test)]
+#[path = "index_cleanup_tests.rs"]
+mod cleanup_tests;
+
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
     #[error(transparent)]
@@ -105,7 +109,27 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
          CREATE INDEX IF NOT EXISTS file_inventory_kind ON file_inventory(lower(CASE WHEN json_valid(metadata) THEN json_extract(metadata,'$.kind') END));
          CREATE INDEX IF NOT EXISTS file_inventory_extension ON file_inventory(lower(COALESCE(CASE WHEN json_valid(metadata) THEN json_extract(metadata,'$.extension') END,'')));
          PRAGMA user_version = 4;",
-    )
+    )?;
+    // Legacy databases can omit these optional derived-data tables.
+    for (table, indexes) in [
+        (
+            "enrichment_artifacts",
+            "CREATE INDEX IF NOT EXISTS enrichment_artifacts_file ON enrichment_artifacts(file_id); CREATE INDEX IF NOT EXISTS enrichment_artifacts_chunk ON enrichment_artifacts(chunk_id);",
+        ),
+        (
+            "answer_cache",
+            "CREATE INDEX IF NOT EXISTS answer_cache_file ON answer_cache(file_id);",
+        ),
+    ] {
+        if connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?1)",
+            [table],
+            |row| row.get::<_, bool>(0),
+        )? {
+            connection.execute_batch(indexes)?;
+        }
+    }
+    Ok(())
 }
 
 fn migrate_content(connection: &Connection) -> rusqlite::Result<()> {
@@ -1451,23 +1475,25 @@ impl IndexDatabase {
                 })?
                 .collect::<Result<Vec<_>, _>>()?
         };
-        let removed = candidates
-            .into_iter()
-            .filter(|(_, stable_id, root)| {
-                !inventory
-                    .get(root)
-                    .is_some_and(|observed| observed.contains(stable_id))
-            })
-            .try_fold(0_u64, |removed, (file_id, _, _)| {
-                transaction.execute(
-                    "DELETE FROM vector_embeddings WHERE chunk_id IN
-                     (SELECT id FROM chunks WHERE file_id = ?1)",
-                    [file_id],
-                )?;
-                transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
-                transaction.execute("DELETE FROM files WHERE id = ?1", [file_id])?;
-                Ok::<_, rusqlite::Error>(removed + 1)
-            })?;
+        transaction.execute(
+            "CREATE TEMP TABLE inventory_removals(id INTEGER PRIMARY KEY)",
+            [],
+        )?;
+        let mut removed = 0;
+        {
+            let mut insert =
+                transaction.prepare("INSERT INTO inventory_removals(id) VALUES (?1)")?;
+            for (file_id, stable_id, root) in candidates {
+                if !inventory
+                    .get(&root)
+                    .is_some_and(|observed| observed.contains(&stable_id))
+                {
+                    insert.execute([file_id])?;
+                    removed += 1;
+                }
+            }
+        }
+        Self::delete_staged_inventory(&transaction, removed > 0)?;
         transaction.commit()?;
         Ok(removed)
     }
@@ -1480,24 +1506,37 @@ impl IndexDatabase {
             path.to_string_lossy().trim_end_matches(['/', '\\']),
             std::path::MAIN_SEPARATOR
         );
-        let candidates = {
-            let mut statement = transaction.prepare("SELECT id, stable_id FROM files WHERE root_path = ?1 AND (path = ?2 OR substr(path, 1, length(?3)) = ?3)")?;
+        transaction.execute(
+            "CREATE TEMP TABLE inventory_removals(id INTEGER PRIMARY KEY)",
+            [],
+        )?;
+        transaction.execute("INSERT INTO inventory_removals(id) SELECT id FROM files WHERE root_path = ?1 AND (path = ?2 OR substr(path, 1, length(?3)) = ?3)", params![root.to_string_lossy(), path.to_string_lossy(), prefix])?;
+        let removed = {
+            let mut statement = transaction.prepare("SELECT stable_id FROM files JOIN inventory_removals ON files.id = inventory_removals.id")?;
             statement
-                .query_map(
-                    params![root.to_string_lossy(), path.to_string_lossy(), prefix],
-                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
-                )?
+                .query_map([], |row| row.get::<_, String>(0))?
                 .collect::<Result<Vec<_>, _>>()?
         };
-        let mut removed = Vec::new();
-        for (file_id, stable_id) in candidates {
-            transaction.execute("DELETE FROM vector_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)", [file_id])?;
-            transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
-            transaction.execute("DELETE FROM files WHERE id = ?1", [file_id])?;
-            removed.push(stable_id);
-        }
+        Self::delete_staged_inventory(&transaction, !removed.is_empty())?;
         transaction.commit()?;
         Ok(removed)
+    }
+
+    fn delete_staged_inventory(
+        transaction: &rusqlite::Transaction<'_>,
+        has_rows: bool,
+    ) -> IndexResult<()> {
+        if has_rows {
+            transaction.execute("DELETE FROM vector_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id IN (SELECT id FROM inventory_removals))", [])?;
+            // FTS file_id is unindexed: one membership scan replaces a scan per revoked file.
+            transaction.execute("DELETE FROM search_fts WHERE CAST(file_id AS INTEGER) IN (SELECT id FROM inventory_removals)", [])?;
+            transaction.execute(
+                "DELETE FROM files WHERE id IN (SELECT id FROM inventory_removals)",
+                [],
+            )?;
+        }
+        transaction.execute("DROP TABLE inventory_removals", [])?;
+        Ok(())
     }
 
     pub fn retain_enrichment_roots(&self, roots: &HashSet<String>) -> IndexResult<()> {

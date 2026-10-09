@@ -187,6 +187,18 @@ fn inventory_loop(
         if let Some(gate) = cycle_gate {
             gate(!dirty.is_empty(), true);
         }
+        // Defaults are not an authoritative empty policy; retain all queued obligations.
+        if !runtime.work.configured.load(Ordering::SeqCst)
+            || runtime.work.stop.load(Ordering::SeqCst)
+        {
+            #[cfg(test)]
+            let cycle_gate = runtime.work.inventory_cycle_gate.lock().unwrap().clone();
+            #[cfg(test)]
+            if let Some(gate) = cycle_gate {
+                gate(!dirty.is_empty(), false);
+            }
+            continue;
+        }
         let periodic_reconcile = last_reconcile.elapsed() >= RECONCILE_INTERVAL;
         #[cfg(test)]
         let periodic_reconcile =
@@ -240,13 +252,16 @@ fn inventory_loop(
                     runtime.work.inventory_failed.store(true, Ordering::SeqCst);
                     runtime.worker_failed(&error.message);
                 }
-                Ok(())
+                Ok(false) => {
+                    runtime.work.reconcile.store(true, Ordering::SeqCst);
+                }
+                Ok(true)
                     if runtime.work.inventory_incomplete.load(Ordering::SeqCst) && forced_retry =>
                 {
                     // A partial traversal cannot establish content freshness.
                     retry_at = Some(Instant::now() + RECONCILE_RETRY);
                 }
-                Ok(()) => {
+                Ok(true) => {
                     forced_retry = false;
                     retry_at = None;
                 }
@@ -259,14 +274,19 @@ fn inventory_loop(
         // Metadata reconciliation does not establish content freshness for delivered events.
         if !dirty.is_empty() && (reconcile || Instant::now() >= due) {
             runtime.work.inventory_running.store(true, Ordering::SeqCst);
-            let result = runtime.refresh_paths(dirty.drain().collect());
+            let result = runtime.refresh_paths(dirty.iter().cloned().collect());
             runtime
                 .work
                 .inventory_running
                 .store(false, Ordering::SeqCst);
-            if let Err(error) = result {
-                runtime.work.inventory_failed.store(true, Ordering::SeqCst);
-                runtime.worker_failed(&error.message);
+            match result {
+                Ok(true) => dirty.clear(),
+                Ok(false) => {}
+                Err(error) => {
+                    dirty.clear();
+                    runtime.work.inventory_failed.store(true, Ordering::SeqCst);
+                    runtime.worker_failed(&error.message);
+                }
             }
         }
         #[cfg(test)]

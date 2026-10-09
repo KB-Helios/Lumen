@@ -1073,6 +1073,7 @@ impl IndexRuntime {
             .lock()
             .map_err(|e| search_failure("commit inventory", e))?;
         if self.generation.load(Ordering::SeqCst) != generation
+            || !self.work.configured.load(Ordering::SeqCst)
             || self.work.stop.load(Ordering::SeqCst)
         {
             return Ok(false);
@@ -1179,20 +1180,32 @@ impl IndexRuntime {
         Ok(true)
     }
 
-    pub(super) fn reconcile_inventory(&self, force_content: bool) -> Result<(), SearchFailure> {
-        let generation = self.generation.load(Ordering::SeqCst);
-        let roots = self
-            .work
-            .roots
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
+    // False leaves the worker's refresh obligation outstanding after deferral/cancellation.
+    pub(super) fn reconcile_inventory(&self, force_content: bool) -> Result<bool, SearchFailure> {
+        let (generation, roots) = {
+            let _admission = self
+                .synchronization
+                .lock()
+                .map_err(|e| search_failure("admit inventory reconciliation", e))?;
+            if !self.work.configured.load(Ordering::SeqCst) || self.work.stop.load(Ordering::SeqCst)
+            {
+                return Ok(false);
+            }
+            (
+                self.current_generation(),
+                self.work
+                    .roots
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            )
+        };
         let mut inventory = HashMap::<String, HashSet<String>>::new();
         let mut incomplete = HashSet::new();
         let mut truncated = false;
         for root in &roots {
             if self.generation.load(Ordering::SeqCst) != generation {
-                return Ok(());
+                return Ok(false);
             }
             let root_path = PathBuf::from(&root.path);
             if !traversal::admitted_root_is_current(&root_path) {
@@ -1234,7 +1247,7 @@ impl IndexRuntime {
                 if self.generation.load(Ordering::SeqCst) != generation
                     || self.work.stop.load(Ordering::SeqCst)
                 {
-                    return Ok(());
+                    return Ok(false);
                 }
                 if self.inventory_record(root, &record, generation, force_content)? {
                     observed.insert(stable_id(&root_path, Path::new(&record.path)));
@@ -1245,8 +1258,11 @@ impl IndexRuntime {
             .synchronization
             .lock()
             .map_err(|e| search_failure("reconcile inventory", e))?;
-        if self.generation.load(Ordering::SeqCst) != generation {
-            return Ok(());
+        if self.generation.load(Ordering::SeqCst) != generation
+            || !self.work.configured.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(false);
         }
         if !incomplete.is_empty() {
             for item in self
@@ -1301,17 +1317,28 @@ impl IndexRuntime {
             .store(truncated, Ordering::SeqCst);
         self.work.inventory_running.store(false, Ordering::SeqCst);
         self.work.inventory_failed.store(false, Ordering::SeqCst);
-        self.refresh_worker_status()
+        self.refresh_worker_status().map(|()| true)
     }
 
-    pub(super) fn refresh_paths(&self, paths: Vec<PathBuf>) -> Result<(), SearchFailure> {
-        let generation = self.generation.load(Ordering::SeqCst);
-        let roots = self
-            .work
-            .roots
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
+    pub(super) fn refresh_paths(&self, paths: Vec<PathBuf>) -> Result<bool, SearchFailure> {
+        let (generation, roots) = {
+            let _admission = self
+                .synchronization
+                .lock()
+                .map_err(|e| search_failure("admit changed inventory", e))?;
+            if !self.work.configured.load(Ordering::SeqCst) || self.work.stop.load(Ordering::SeqCst)
+            {
+                return Ok(false);
+            }
+            (
+                self.current_generation(),
+                self.work
+                    .roots
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            )
+        };
         let mut directory_changed = false;
         for event in paths {
             for root in &roots {
@@ -1343,8 +1370,11 @@ impl IndexRuntime {
                         .synchronization
                         .lock()
                         .map_err(|e| search_failure("remove changed inventory", e))?;
-                    if self.generation.load(Ordering::SeqCst) != generation {
-                        return Ok(());
+                    if self.generation.load(Ordering::SeqCst) != generation
+                        || !self.work.configured.load(Ordering::SeqCst)
+                        || self.work.stop.load(Ordering::SeqCst)
+                    {
+                        return Ok(false);
                     }
                     let removed = self
                         .database
@@ -1376,8 +1406,14 @@ impl IndexRuntime {
         if directory_changed {
             return self.reconcile_inventory(false);
         }
+        if self.current_generation() != generation
+            || !self.work.configured.load(Ordering::SeqCst)
+            || self.work.stop.load(Ordering::SeqCst)
+        {
+            return Ok(false);
+        }
         self.work.inventory_running.store(false, Ordering::SeqCst);
-        self.refresh_worker_status()
+        self.refresh_worker_status().map(|()| true)
     }
 
     fn is_owned_index_path(&self, path: &Path) -> bool {
@@ -1408,6 +1444,7 @@ impl IndexRuntime {
                 .lock()
                 .map_err(|e| search_failure("admit pending extraction", e))?;
             if self.current_generation() != pending.generation
+                || !self.work.configured.load(Ordering::SeqCst)
                 || !self.work.content_enabled.load(Ordering::SeqCst)
                 || self.work.stop.load(Ordering::SeqCst)
             {
