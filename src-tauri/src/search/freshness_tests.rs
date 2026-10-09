@@ -186,6 +186,81 @@ fn native_inventory_boundary_defers_failed_admission_and_stop() {
     assert_eq!(runtime.database.counts().unwrap().0, 0);
 }
 
+fn controlled_directory_refresh_generation_change(after_reconcile: bool) {
+    let (fixture, runtime, mut roots) = manual_setup("mixed-refresh-generation");
+    let path = fixture.file("saved.txt", b"firstquasar");
+    admit(&runtime, roots.clone(), true);
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    runtime.set_content_enabled(false);
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, b"nextnebulaa").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Mutex::new(release_rx);
+    *runtime.work.path_refresh_gate.lock().unwrap() = Some(Arc::new(move |delegated, before| {
+        if (after_reconcile && delegated && !before) || (!after_reconcile && !delegated && before) {
+            entered_tx.send(()).unwrap();
+            let _ = release_rx.lock().unwrap().recv();
+        }
+    }));
+    let batch = if after_reconcile {
+        vec![fixture.root().to_path_buf()]
+    } else {
+        vec![fixture.root().to_path_buf(), path.clone()]
+    };
+    let original_generation = runtime.current_generation();
+    let refresh_runtime = runtime.clone();
+    let refresh_batch = batch.clone();
+    let refresh = std::thread::spawn(move || refresh_runtime.refresh_paths(refresh_batch));
+    entered_rx.recv_timeout(Duration::from_secs(4)).unwrap();
+    roots[0].include_hidden = true;
+    admit(&runtime, roots, false);
+    assert!(runtime.current_generation() > original_generation);
+    release_tx.send(()).unwrap();
+    let completed = refresh.join().unwrap().unwrap();
+    *runtime.work.path_refresh_gate.lock().unwrap() = None;
+    assert!(
+        !completed,
+        "a directory pass must not complete the original generation's deferred batch"
+    );
+    assert_eq!(runtime.database.search("firstquasar", 10).unwrap().len(), 1);
+    // The worker keeps a false-completion batch dirty; exercise that same real retry.
+    let retry = if after_reconcile {
+        vec![fixture.root().to_path_buf(), path]
+    } else {
+        batch
+    };
+    assert!(runtime.refresh_paths(retry).unwrap());
+    assert!(
+        runtime
+            .database
+            .search("firstquasar", 10)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(runtime.work.pending.lock().unwrap().len(), 1);
+    runtime.set_content_enabled(true);
+    runtime.extract_pending().unwrap();
+    assert_eq!(runtime.database.search("nextnebulaa", 10).unwrap().len(), 1);
+}
+
+#[test]
+fn mixed_directory_file_batch_defers_when_generation_changes_before_file_admission() {
+    controlled_directory_refresh_generation_change(false);
+}
+
+#[test]
+fn directory_batch_defers_when_generation_changes_after_delegated_reconciliation() {
+    controlled_directory_refresh_generation_change(true);
+}
+
 #[test]
 fn metadata_outcome_reports_changed_revision_and_file_to_folder_drops_body() {
     let (fixture, runtime, _) = manual_setup("metadata-outcomes");

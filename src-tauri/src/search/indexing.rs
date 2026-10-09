@@ -1339,6 +1339,10 @@ impl IndexRuntime {
                     .clone(),
             )
         };
+        #[cfg(test)]
+        if let Some(gate) = self.work.path_refresh_gate.lock().unwrap().clone() {
+            gate(false, true);
+        }
         let mut directory_changed = false;
         for event in paths {
             for root in &roots {
@@ -1364,7 +1368,9 @@ impl IndexRuntime {
                     &path,
                     &Self::root_traversal_policy(root)?,
                 )? {
-                    self.inventory_record(root, &record, generation, true)?;
+                    if !self.inventory_record(root, &record, generation, true)? {
+                        return Ok(false);
+                    }
                 } else {
                     let _commit = self
                         .synchronization
@@ -1404,8 +1410,20 @@ impl IndexRuntime {
             }
         }
         if directory_changed {
-            return self.reconcile_inventory(false);
+            let completed = self.reconcile_inventory(false)?;
+            #[cfg(test)]
+            if let Some(gate) = self.work.path_refresh_gate.lock().unwrap().clone() {
+                gate(true, false);
+            }
+            if !completed {
+                return Ok(false);
+            }
         }
+        // Delegation may admit a newer snapshot; completion still belongs to this batch.
+        let _completion = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("complete changed inventory", e))?;
         if self.current_generation() != generation
             || !self.work.configured.load(Ordering::SeqCst)
             || self.work.stop.load(Ordering::SeqCst)

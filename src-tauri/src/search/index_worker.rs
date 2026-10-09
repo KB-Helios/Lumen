@@ -36,6 +36,8 @@ pub(super) struct WorkState {
     #[cfg(test)]
     pub inventory_cycle_gate: Mutex<Option<InventoryCycleGate>>,
     #[cfg(test)]
+    pub path_refresh_gate: Mutex<Option<InventoryCycleGate>>,
+    #[cfg(test)]
     pub periodic_due: AtomicBool,
     #[cfg(test)]
     pub traversal_limit: AtomicU64,
