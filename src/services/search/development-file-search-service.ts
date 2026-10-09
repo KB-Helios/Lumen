@@ -51,7 +51,10 @@ const rustIndexedHitSchema = z.object({
   contentHash: z.string().min(1),
   indexRevision: z.number().int().positive(),
   extractionKind: z.string().min(1),
-  snippet: z.string().transform(value => value.slice(0, 1000)).optional(),
+  snippet: z.string().transform(value => {
+    const splitPair = /[\uD800-\uDBFF]/.test(value.charAt(999)) && /[\uDC00-\uDFFF]/.test(value.charAt(1000));
+    return value.slice(0, splitPair ? 999 : 1000);
+  }).optional(),
   page: z.number().int().positive().nullable().optional(),
   timeStartMs: z.number().int().nonnegative().nullable().optional(),
   timeEndMs: z.number().int().nonnegative().nullable().optional(),

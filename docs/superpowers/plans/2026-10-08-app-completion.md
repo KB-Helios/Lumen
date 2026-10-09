@@ -27,11 +27,13 @@
 
 - [ ] Reproduce empty/all-paused roots after completed onboarding using the actual default app composition; reproduce cached open/preview after revocation through the real file service.
 - [ ] Add native usage/config fixtures containing literal `sk-audit-secret` map keys and nested fields; assert serialized DTOs contain no secret and retain hand-derived counters.
+
   ```rust
   assert!(!serde_json::to_string(&safe).unwrap().contains("sk-audit-secret"));
   assert_eq!(safe[0].success, 3);
   assert_eq!(safe[0].failed, 2);
   ```
+
 - [ ] Stage the official pinned v8 proxy to unblock the native build script. Verify archive and extracted executable; test bad checksums fail and do not replace a valid output. Run the real executable with isolated configuration, without credentials or OAuth.
 - [ ] Observe security regressions fail, then remove onboarding fallback after saved settings, revalidate cached-file roots, aggregate management data in Rust, and Zod-parse safe DTOs before state.
 - [ ] Run focused App/file-service/usage tests and actual native proxy boundary tests; run typecheck/lint. Commit and write the task report with red/green evidence and exact pinned asset provenance.
@@ -43,10 +45,12 @@
 **Interfaces:** Search input keeps request IDs/scopes/filters/preferences. Indexed metadata includes unsupported-content files and folders; native results preserve stable ID, bounded rank, metadata, provenance, and pin state. Root changes prune revoked inventory even with content indexing paused.
 
 - [ ] Add failing production-service regressions: `.md` filter removes `.tmp`, root exclusions remove cache files, native order survives duplicate merge, Recent/Related index failures reject, actual fallback reports degraded, and empty roots clear cached admission.
+
   ```ts
   expect(response.groups.flatMap(group => group.items).map(item => item.name)).toEqual(['report.md']);
   await expect(service.search({...request, scope: 'recent'})).rejects.toMatchObject({recoverable: true});
   ```
+
 - [ ] Add native real-file/SQLite cases for each filter, policy, folder/file type, exact/recency/pin ordering, and revoked roots while paused. Observe expected failures.
 - [ ] Route queries through one policy-aware metadata/content inventory and native ranking; preserve exact search when models/vector extension are unavailable. Surface invalid index payloads and native failures accurately.
 - [ ] Run covering frontend and native search suites. Commit and write report; specify any new DTO fields consumed by Task 3 verbatim.
@@ -70,10 +74,12 @@
 **Interfaces:** An attempt boundary clears partial answer text/usage and updates provider/model while source citations remain bounded. Deadline/cancellation covers connecting, headers, error-body reads, and event streaming.
 
 - [ ] Reproduce cloud partial delta then local fallback through the real controller; expect only the replacement answer and local usage.
+
   ```ts
   expect(result.current.text).toBe('Replacement local answer.');
   expect(result.current.provider).toBe('local');
   ```
+
 - [ ] Add actual loopback server cases for stalled headers, blocked bodies, cancellation, split UTF-8, LF/CRLF, optional data-field spaces, multiline frames, provider errors, and incomplete completion.
 - [ ] Observe failures, then implement explicit attempt boundaries, fixed request deadlines/cancellation selects, bounded byte/event parsing, and validated event consumption.
 - [ ] Run covering controller/native protocol tests and fmt/clippy; commit and report cancellation timing and parser cases.

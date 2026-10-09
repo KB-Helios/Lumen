@@ -4,8 +4,8 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 #[test]
+#[cfg(windows)]
 fn pinned_executable_serves_isolated_authenticated_management() {
-    #[cfg(windows)]
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
@@ -60,7 +60,6 @@ fn pinned_executable_serves_isolated_authenticated_management() {
         .env_remove("CLIPROXY_MGMT_KEY")
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    #[cfg(windows)]
     command.creation_flags(0x0800_0000);
     let mut fixture = Fixture {
         child: command.spawn().expect("staged executable starts"),

@@ -83,6 +83,16 @@ function run(command: string[], cwd = workerRoot) {
   if (!result.success) throw new Error(`Worker build command failed (${result.exitCode})`);
 }
 
+function probeUv(args: string[]) {
+  try {
+    return spawn(['uv', ...args], workerRoot, true);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'
+        && 'path' in error && error.path === 'uv') return undefined;
+    throw error;
+  }
+}
+
 function pythonVersion(binary: string) {
   const result = spawn([binary, '-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'], projectRoot, true);
   return result.success ? result.stdout.toString().trim() : '';
@@ -115,7 +125,7 @@ async function ensureVirtualEnvironment() {
   if ((await stat(virtualPython).catch(() => undefined))?.isFile() && pythonVersion(virtualPython) === '3.11') return;
   await removeWorkerDirectory(virtualEnvironment);
   const configuredPython = process.env.LUMEN_PYTHON?.trim();
-  const managedPython = configuredPython ? undefined : spawn(['uv', 'python', 'find', '3.11'], workerRoot, true);
+  const managedPython = configuredPython ? undefined : probeUv(['python', 'find', '3.11']);
   const managedPath = managedPython?.success ? managedPython.stdout.toString().trim() : '';
   const interpreter = configuredPython || managedPath || 'python';
   if (pythonVersion(interpreter) !== '3.11') throw new Error('Computer Use staging requires Python 3.11');
@@ -155,7 +165,7 @@ export async function stageComputerUse() {
       return;
     }
   }
-  const hasUv = spawn(['uv', '--version'], workerRoot, true).success;
+  const hasUv = probeUv(['--version'])?.success;
   if (hasUv) {
     run(['uv', 'pip', 'install', '--python', virtualPython, '--require-hashes', '--only-binary', ':all:',
       '-r', join(workerRoot, 'requirements.lock')]);

@@ -21,6 +21,7 @@ interface StageOptions {
   url?: string;
   archiveSha256?: string;
   executableSha256?: string;
+  downloadTimeoutMs?: number;
 }
 
 const digest = (data: Uint8Array) => createHash('sha256').update(data).digest('hex');
@@ -43,9 +44,16 @@ export async function stageCliproxy(options: StageOptions = {}): Promise<void> {
   await mkdir(dirname(destination), {recursive: true});
   const temporary = await mkdtemp(join(dirname(destination), '.stage-cliproxy-'));
   try {
-    const response = await fetch(options.url ?? `https://github.com/router-for-me/CLIProxyAPI/releases/download/${CLIPROXY_VERSION}/CLIProxyAPI_8.0.21_windows_amd64.zip`);
-    if (!response.ok) throw new Error(`CLIProxyAPI download failed: HTTP ${response.status}`);
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const signal = AbortSignal.timeout(options.downloadTimeoutMs ?? 120_000);
+    let bytes: Uint8Array;
+    try {
+      const response = await fetch(options.url ?? `https://github.com/router-for-me/CLIProxyAPI/releases/download/${CLIPROXY_VERSION}/CLIProxyAPI_8.0.21_windows_amd64.zip`, {signal});
+      if (!response.ok) throw new Error(`CLIProxyAPI download failed: HTTP ${response.status}`);
+      bytes = new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      if (signal.aborted) throw new Error('CLIProxyAPI download timed out', {cause: error});
+      throw error;
+    }
     if (digest(bytes) !== archiveSha) throw new Error('CLIProxyAPI archive checksum mismatch');
     const archivePath = join(temporary, 'proxy.zip');
     await writeFile(archivePath, bytes);

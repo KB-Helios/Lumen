@@ -191,6 +191,19 @@ describe('DevelopmentFileSearchService', () => {
     expect(result.groups[0]?.items[0]?.match.fragment).toBe(snippet.slice(0, 1000));
   });
 
+  it.each([
+    ['a' + '🚀'.repeat(999), 'a' + '🚀'.repeat(499)],
+    ['🚀'.repeat(501), '🚀'.repeat(500)],
+    ['a'.repeat(1001), 'a'.repeat(1000)],
+  ])('truncates native excerpts at a valid UTF-16 boundary', async (snippet, expected) => {
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
+      if (command === 'search_hybrid') return nativeResponse([{...indexedHit('Readme.md'), matchSource: 'content', snippet}]);
+    }});
+    const fragment = (await service.search(request)).groups[0]?.items[0]?.match.fragment;
+    expect(fragment).toBe(expected);
+    expect(fragment!.length).toBeLessThanOrEqual(1000);
+  });
+
   it('keeps filename display independent of a native excerpt and rejects untyped excerpts', async () => {
     let snippet: unknown = 'content body';
     const service = createService({getRoots: () => ['C:\\Projects'], invoke: async command => {
