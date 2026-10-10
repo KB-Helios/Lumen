@@ -50,10 +50,22 @@ export function ResultGrid({
   const rowHeight = density === 'compact' ? compactResultHeight : comfortableResultHeight;
   const viewportRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const collection = useRef({results, generation: 0, autoFocus: false});
+  if (collection.current.results !== results) {
+    // Reset only React Aria's uncontrolled collection state. Keep the capsule,
+    // viewport and entrance owner mounted, and never take focus from the input.
+    collection.current = {
+      results,
+      generation: collection.current.generation + 1,
+      autoFocus: gridRef.current?.contains(document.activeElement) ?? false,
+    };
+  }
+  const enteredResults = useRef<readonly SearchResult[] | null>(null);
   useEffect(() => {
-    if (!animateRows) return;
+    if (!animateRows || enteredResults.current === results) return;
     const animations: Animation[] = [];
     const frame = requestAnimationFrame(() => {
+      enteredResults.current = results;
       if (document.visibilityState === 'hidden' || !useLauncherStore.getState().visible) return;
       const {duration, stagger, maxStaggered, reducedDuration} = motionTokens.rowEntrance;
       const rows = [...(gridRef.current?.querySelectorAll<HTMLElement>('[data-result-id]') ?? [])];
@@ -173,7 +185,9 @@ export function ResultGrid({
       />
       {isVirtualized ? (
         <GridList
+          key={collection.current.generation}
           ref={gridRef}
+          autoFocus={collection.current.autoFocus}
           aria-label="Search results"
           aria-rowcount={results.length}
           className={gridClassName}
@@ -203,7 +217,9 @@ export function ResultGrid({
         </GridList>
       ) : (
         <GridList
+          key={collection.current.generation}
           ref={gridRef}
+          autoFocus={collection.current.autoFocus}
           aria-label="Search results"
           aria-rowcount={results.length}
           className={gridClassName}

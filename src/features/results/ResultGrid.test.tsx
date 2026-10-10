@@ -24,6 +24,64 @@ function file(id: string, overrides: Partial<SearchResult> = {}): SearchResult {
 }
 
 describe('ResultGrid', () => {
+  it('navigates from the replacement selection when the grid owns keyboard focus', async () => {
+    const user = userEvent.setup();
+    const onSelectionChange = vi.fn();
+    const {rerender} = render(
+      <ResultGrid results={[file('a'), file('b')]} selectedId="b" onSelectionChange={onSelectionChange} />,
+    );
+    await user.click(screen.getByRole('row', {name: /b\.tsx/i}));
+    rerender(
+      <ResultGrid results={[file('x'), file('y'), file('z')]} selectedId="x" onSelectionChange={onSelectionChange} />,
+    );
+    await user.keyboard('{ArrowDown}');
+    expect(onSelectionChange).toHaveBeenLastCalledWith('y');
+    expect(screen.getByRole('row', {name: /y\.tsx/i})).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(onSelectionChange).toHaveBeenLastCalledWith('x');
+  });
+
+  it('cancels a consumed collection entrance without replaying it on motion-policy changes', async () => {
+    const cancel = vi.fn();
+    const animate = vi.fn(() => ({cancel} as unknown as Animation));
+    const rowAnimations = () => animate.mock.contexts.filter((element) =>
+      element instanceof HTMLElement && element.hasAttribute('data-result-id'),
+    );
+    const previousAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = animate;
+    try {
+      const results = [file('a'), file('b')];
+      const {rerender} = render(<ResultGrid animateRows results={results} selectedId="a" />);
+      await waitFor(() => expect(rowAnimations()).toHaveLength(2));
+      rerender(<ResultGrid animateRows reducedMotion results={results} selectedId="a" />);
+      expect(cancel).toHaveBeenCalledTimes(2);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(rowAnimations()).toHaveLength(2);
+      rerender(<ResultGrid animateRows results={results} selectedId="a" />);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(rowAnimations()).toHaveLength(2);
+    } finally { HTMLElement.prototype.animate = previousAnimate; }
+  });
+
+  it('preserves the input caret and capsule owner when replacing the internal collection', async () => {
+    const user = userEvent.setup();
+    const view = (results: SearchResult[]) => <>
+      <input aria-label="Query" defaultValue="query" />
+      <ResultGrid results={results} selectedId={results[0].id} />
+    </>;
+    const {container, rerender} = render(view([file('a'), file('b')]));
+    const input = screen.getByRole('textbox', {name: 'Query'}) as HTMLInputElement;
+    await user.click(input);
+    input.setSelectionRange(2, 2);
+    const capsule = container.querySelector('[data-selection-capsule]');
+    const viewport = capsule?.parentElement;
+    rerender(view([file('x'), file('y'), file('z')]));
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(2);
+    expect(container.querySelector('[data-selection-capsule]')).toBe(capsule);
+    expect(capsule?.parentElement).toBe(viewport);
+  });
+
   it('cascades each replacement once even when row IDs are retained', async () => {
     const cancel = vi.fn();
     const animate = vi.fn(() => ({cancel} as unknown as Animation));
