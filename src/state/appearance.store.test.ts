@@ -6,6 +6,28 @@ import {defaultAppearanceSettings} from './appearance.schema';
 import {createAppearanceStore} from './appearance.store';
 
 describe('appearance persistence', () => {
+  it('serializes saves so an older pending choice cannot overwrite the newest choice', async () => {
+    let finish!: () => void;
+    const writes: string[] = [];
+    const service: SettingsService = {
+      readAppearance: async () => defaultAppearanceSettings,
+      writeAppearance: async (value) => {
+        if (value.mode === 'dark') await new Promise<void>((resolve) => {finish = resolve;});
+        writes.push(value.mode);
+        return {ok: true};
+      },
+    };
+    const store = createAppearanceStore(service);
+    const first = store.getState().setMode('dark');
+    await Promise.resolve();
+    const second = store.getState().setMode('light');
+    await Promise.resolve();
+    expect(writes).toEqual([]);
+    finish();
+    await Promise.all([first, second]);
+    expect(writes).toEqual(['dark', 'light']);
+    expect(store.getState().mode).toBe('light');
+  });
   it('falls back safely when persisted appearance is invalid', async () => {
     const service = new BrowserSettingsService(
       new Map([['appearance', '{"mode":"neon"}']]),

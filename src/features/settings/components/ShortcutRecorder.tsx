@@ -28,16 +28,17 @@ function chordFromEvent(event: KeyboardEvent) {
 }
 
 export interface ShortcutRecorderProps {
+  isDisabled?: boolean;
   value: string;
   onChange(value: string): void;
   onInvalid?(message: string): void;
 }
 
-export function ShortcutRecorder({value, onChange, onInvalid}: ShortcutRecorderProps) {
+export function ShortcutRecorder({isDisabled, value, onChange, onInvalid}: ShortcutRecorderProps) {
   const [recording, setRecording] = useState(false);
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (!recording) {
+    if (!recording || isDisabled) {
       return;
     }
     event.preventDefault();
@@ -58,6 +59,7 @@ export function ShortcutRecorder({value, onChange, onInvalid}: ShortcutRecorderP
 
   return (
     <LumenButton
+      isDisabled={isDisabled}
       aria-label="Global shortcut"
       aria-pressed={recording}
       size="small"

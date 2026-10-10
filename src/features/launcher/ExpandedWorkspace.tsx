@@ -135,34 +135,17 @@ function SelectionBoundActions({
   onOpenContainingFolder(): void;
   onPin(): void;
 }) {
-  const resultLabelRef = useRef<HTMLSpanElement>(null);
-  const storedSelectedId = useSelectionStore.getState().selectedId;
+  const storedSelectedId = useSelectionStore((state) => state.selectedId);
   const selectedId = selectedIdOverride === undefined
     ? storedSelectedId
     : selectedIdOverride;
   const result = results.find((item) => item.id === selectedId) ??
     results.find((item) => (item.availability ?? 'available') === 'available') ??
     null;
-  useLayoutEffect(() => {
-    if (selectedIdOverride !== undefined) return;
-    const updateLabel = (fileId: string | null) => {
-      const selectedResult = results.find((item) => item.id === fileId) ?? null;
-      if (resultLabelRef.current) {
-        resultLabelRef.current.textContent = selectedResult?.name ?? 'Choose a result for actions';
-        resultLabelRef.current.title = selectedResult?.path ?? '';
-      }
-    };
-    updateLabel(useSelectionStore.getState().selectedId);
-    return useSelectionStore.subscribe(
-      (state) => state.selectedId,
-      updateLabel,
-    );
-  }, [results, selectedIdOverride]);
   return (
     <ContextActions
       isOpening={isOpening}
       result={result}
-      resultLabelRef={resultLabelRef}
       onDetails={onDetails}
       onOpen={onOpen}
       onOpenContainingFolder={onOpenContainingFolder}

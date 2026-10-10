@@ -34,7 +34,7 @@ interface SettingsActions {
   updateGeneral(patch: Partial<GeneralSettings>): Promise<boolean>;
   updatePresentation(patch: Partial<PresentationSettings>): Promise<boolean>;
   setRoots(roots: IndexedRoot[]): Promise<boolean>;
-  setRootsAndAi(roots: IndexedRoot[], patch: Partial<AiSettings>): Promise<boolean>;
+  removeRoot(id: string, admit: (roots: IndexedRoot[], cloudIds: string[]) => Promise<void>): Promise<boolean>;
   updateSearch(patch: Partial<SearchSettings>): Promise<boolean>;
   updateAi(patch: Partial<AiSettings>): Promise<boolean>;
   beginLocalRuntimeApplication(mode: AiSettings['runtimeMode'], keepWarm: boolean): number;
@@ -113,13 +113,13 @@ export const useSettingsStore = create<SettingsState>()(
 
     async function persist(
       settings: () => LumenSettings = () => stateSettings(get()),
-      afterWrite?: () => void,
+      afterWrite?: () => void | Promise<void>,
     ) {
       const revision = ++writeRevision;
       set({persistenceStatus: 'saving', persistenceError: null});
       const write = writeQueue.then(async () => {
         await settingsPersistence.write(settings());
-        afterWrite?.();
+        await afterWrite?.();
       });
       writeQueue = write.catch(() => undefined);
       try {
@@ -176,9 +176,19 @@ export const useSettingsStore = create<SettingsState>()(
         set({roots});
         return persist();
       },
-      setRootsAndAi: (roots, patch) => {
-        set((state) => ({roots, ai: {...state.ai, ...patch}}));
-        return persist();
+      removeRoot: (id, admit) => {
+        let removal = stateSettings(get());
+        return persist(
+          () => {
+            const settings = stateSettings(get());
+            removal = {...settings, roots: settings.roots.filter((root) => root.id !== id), ai: {...settings.ai, cloudEnrichedRootIds: settings.ai.cloudEnrichedRootIds.filter((rootId) => rootId !== id)}};
+            return removal;
+          },
+          async () => {
+            await admit(removal.roots, removal.ai.cloudEnrichedRootIds);
+            set((state) => ({roots: state.roots.filter((root) => root.id !== id), ai: {...state.ai, cloudEnrichedRootIds: state.ai.cloudEnrichedRootIds.filter((rootId) => rootId !== id)}}));
+          },
+        );
       },
       updateSearch: (patch) => {
         set((state) => ({search: {...state.search, ...patch}}));

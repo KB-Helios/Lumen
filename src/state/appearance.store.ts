@@ -58,12 +58,21 @@ export function createAppearanceStore(
   settingsService: SettingsService = createDefaultSettingsService(),
 ): StoreApi<AppearanceState> {
   let writeRevision = 0;
+  let writeQueue = Promise.resolve();
 
   return createStore<AppearanceState>((set, get) => {
     async function persist(): Promise<SettingsWriteResult> {
       const revision = ++writeRevision;
       set({persistenceStatus: 'saving', persistenceError: null});
-      const result = await settingsService.writeAppearance(selectSettings(get()));
+      const value = selectSettings(get());
+      const write = writeQueue.then(() => settingsService.writeAppearance(value));
+      writeQueue = write.then(() => undefined, () => undefined);
+      let result: SettingsWriteResult;
+      try {
+        result = await write;
+      } catch (error) {
+        result = {ok: false, error: {code: 'settings-write-failed', operation: 'write', recoverable: true, message: error instanceof Error ? error.message : 'Appearance could not be saved.'}};
+      }
 
       if (revision === writeRevision) {
         set(

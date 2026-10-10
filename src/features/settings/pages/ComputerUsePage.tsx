@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../../design-system/primitives/LumenButton';
 import {LumenText} from '../../../design-system/primitives/LumenText';
@@ -30,6 +30,11 @@ export function ComputerUsePage() {
   const [credential, setCredential] = useState('');
   const [initialUrl, setInitialUrl] = useState(settings.initialUrl);
   const [message, setMessage] = useState('');
+  const [credentialBusy, setCredentialBusy] = useState(false);
+  const credentialPending = useRef(false);
+  const credentialRevision = useRef(0);
+  const credentialInput = useRef('');
+  const mounted = useRef(true);
   const provider = settings.provider;
   const providerLabel = provider === 'openai' ? 'OpenAI' : 'Gemini';
   const model = provider === 'openai' ? settings.openaiModel : settings.model;
@@ -37,31 +42,49 @@ export function ComputerUsePage() {
   const unsupportedModel = !reviewedModels.includes(model);
   const modelOptions = [...reviewedModels, ...(unsupportedModel ? [model] : [])].map((id) => ({id, label: id === model && unsupportedModel ? `${id} · Unavailable` : id}));
   const refresh = useCallback(async () => {
-    setHealth(native ? await computerUseService.health() : unavailableComputerUseHealth('Native Computer Use and desktop control are unavailable in this browser preview.'));
+    const next = native ? await computerUseService.health() : unavailableComputerUseHealth('Native Computer Use and desktop control are unavailable in this browser preview.');
+    if (mounted.current) setHealth(next);
   }, [native]);
+  useEffect(() => {mounted.current = true; return () => {mounted.current = false; credentialRevision.current += 1;};}, []);
   useEffect(() => {void refresh().catch((error: unknown) => {setHealth(unavailableComputerUseHealth(String(error))); setMessage(String(error));});}, [refresh]);
   useEffect(() => {setInitialUrl(settings.initialUrl);}, [settings.initialUrl]);
-  useEffect(() => {setCredential('');}, [provider]);
+  useEffect(() => {credentialRevision.current += 1; credentialInput.current = ''; setCredential(''); setMessage('');}, [provider]);
 
   const saveCredential = async () => {
-    if (!credential.trim()) return;
+    if (!credential.trim() || credentialPending.current) return;
+    credentialPending.current = true;
+    setCredentialBusy(true);
+    const revision = ++credentialRevision.current;
+    const value = credential;
     const selectedProvider = provider;
+    const current = () => mounted.current && revision === credentialRevision.current;
     try {
-      await nativeAiService.saveCredential(selectedProvider, credential);
+      await nativeAiService.saveCredential(selectedProvider, value);
+      if (!current()) return;
       await refresh();
-      setMessage(`${providerLabel} API key saved in Windows Credential Manager.`);
-    } catch (error) {setMessage(`The ${providerLabel} credential could not be saved: ${error instanceof Error ? error.message : String(error)}`);}
-    finally {setCredential('');}
+      if (current()) {
+        setMessage(`${providerLabel} API key saved in Windows Credential Manager.`);
+        if (credentialInput.current === value) {credentialInput.current = ''; setCredential('');}
+      }
+    } catch (error) {if (current()) setMessage(`The ${providerLabel} credential could not be saved: ${error instanceof Error ? error.message : String(error)}`);}
+    finally {credentialPending.current = false; if (mounted.current) setCredentialBusy(false);}
   };
   const deleteCredential = async () => {
+    if (credentialPending.current) return;
+    credentialPending.current = true;
+    setCredentialBusy(true);
+    const revision = ++credentialRevision.current;
+    const current = () => mounted.current && revision === credentialRevision.current;
     try {
       await nativeAiService.deleteCredential(provider);
+      if (!current()) return;
       await refresh();
-      setMessage(`${providerLabel} API key removed.`);
+      if (current()) setMessage(`${providerLabel} API key removed.`);
     } catch (error) {
+      if (!current()) return;
       setMessage(`The ${providerLabel} credential may still be configured: ${error instanceof Error ? error.message : String(error)}`);
       await refresh().catch(() => undefined);
-    }
+    } finally {credentialPending.current = false; if (mounted.current) setCredentialBusy(false);}
   };
   const saveInitialUrl = async () => {
     if (!computerUseWebUrlSchema.safeParse(initialUrl).success) {setMessage('The start page must be an absolute HTTP or HTTPS URL.'); return;}
@@ -71,6 +94,7 @@ export function ComputerUsePage() {
     const saved = await setComputerUseConsent(granted, consent);
     if (!saved) setMessage(granted ? 'Consent could not be saved. Access has not been granted.' : 'Access was withdrawn locally, but the revocation could not be saved. Native warm-scope closure is not confirmed.');
     else if (!granted) setMessage('Consent revoked. Active tasks using this grant are stopped.');
+    return saved;
   };
   return <SettingsPage>
     <SettingsCallout>Computer Use works in a fresh Edge context or a selected Windows window. Provider keys stay in Windows Credential Manager. Browser cloud, desktop control and desktop cloud observations each need separate consent.</SettingsCallout>
@@ -103,11 +127,11 @@ export function ComputerUsePage() {
         <div className="grid min-w-0 gap-[4px]">
           <LumenText weight="medium">{providerLabel} API key</LumenText>
           <LumenText tone="tertiary" variant="meta">{health?.providers[provider].credentialConfigured ? 'A key is configured for this Windows account.' : `No ${providerLabel} key is configured.`}</LumenText>
-          <LumenTextField aria-label={`${providerLabel} API key`} type="password" placeholder="Enter API key" value={credential} onChange={setCredential} />
+          <LumenTextField aria-label={`${providerLabel} API key`} type="password" placeholder="Enter API key" value={credential} onChange={(value) => {credentialInput.current = value; setCredential(value);}} />
         </div>
         <div className="col-span-full flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:col-auto">
-          <LumenButton aria-label={`Save ${providerLabel} key`} size="small" variant="primary" onPress={() => void saveCredential()}>Save</LumenButton>
-          <LumenButton aria-label={`Delete ${providerLabel} key`} size="small" variant="quiet" onPress={() => void deleteCredential()}>Delete</LumenButton>
+          <LumenButton isDisabled={credentialBusy || !credential.trim()} aria-label={`Save ${providerLabel} key`} size="small" variant="primary" onPress={() => void saveCredential()}>Save</LumenButton>
+          <LumenButton isDisabled={credentialBusy} aria-label={`Delete ${providerLabel} key`} size="small" variant="quiet" onPress={() => void deleteCredential()}>Delete</LumenButton>
         </div>
       </div>
     </SettingSection> : null}
@@ -116,7 +140,7 @@ export function ComputerUsePage() {
         {settings[row.consent] ? <>
           <StatusBadge tone="success">Consent granted</StatusBadge>
           <LumenButton aria-label={`Revoke ${row.label.toLowerCase()} consent`} size="small" variant="quiet" onPress={() => void changeConsent(row.consent, false)}>Revoke</LumenButton>
-        </> : <ConfirmationDialog confirmLabel={row.confirmLabel} confirmVariant="primary" description={row.description} title={row.title} onConfirm={() => void changeConsent(row.consent, true)}>
+        </> : <ConfirmationDialog confirmLabel={row.confirmLabel} confirmVariant="primary" description={row.description} title={row.title} onConfirm={() => changeConsent(row.consent, true)}>
           <LumenButton aria-label={row.reviewLabel} size="small">Review consent</LumenButton>
         </ConfirmationDialog>}
       </SettingRow>)}

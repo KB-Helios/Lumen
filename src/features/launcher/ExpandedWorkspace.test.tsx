@@ -1,4 +1,4 @@
-import {render, screen} from '@testing-library/react';
+import {act, render, screen} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {AppProviders} from '../../app/AppProviders';
@@ -8,6 +8,7 @@ import type {SearchResult} from '../../services/search/search.types';
 import {appearanceStore} from '../../state/appearance.store';
 import type {AppearanceSettings} from '../../state/appearance.schema';
 import {ExpandedWorkspace} from './ExpandedWorkspace';
+import {useSelectionStore} from './selection.store';
 
 const appearance: AppearancePreferences = {
   effects: 'full',
@@ -78,6 +79,22 @@ afterEach(() => {
 });
 
 describe('ExpandedWorkspace preview policy', () => {
+  it('updates action pin and kind availability with selection without rendering the workspace owner', () => {
+    let renders = 0;
+    const pinned = {...result, pinned: true, provenance: {fileHash: 'fixture', indexRevision: 1, extractionKind: 'text'}};
+    const app = {...result, id: 'app', name: 'Application content', kind: 'app-content' as const};
+    useSelectionStore.getState().select(pinned.id);
+    const Owner = () => {renders += 1; return <ExpandedWorkspace activeFilters={[]} announcement="2 results" error={null} lifecycle="ready" openingId={null} results={[pinned, app]} service={new MemorySearchService()} onClearFilters={vi.fn()} onDetails={vi.fn()} onOpen={vi.fn()} onOpenContainingFolder={vi.fn()} onPin={vi.fn()} onRemoveFilter={vi.fn()} onSelectionChange={vi.fn()} />;};
+    render(<AppProviders><Owner /></AppProviders>);
+    expect(screen.getByRole('button', {name: 'Unpin selected result'})).toBeEnabled();
+    const initialRenders = renders;
+    act(() => useSelectionStore.getState().select(app.id));
+    expect(screen.getByRole('button', {name: 'Pin selected result'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Open containing folder'})).toBeDisabled();
+    expect(screen.getByLabelText('Result actions')).toHaveTextContent('Application content');
+    expect(renders).toBe(initialRenders);
+    act(() => useSelectionStore.getState().reset());
+  });
   it.each([
     ['automatic', 720, false],
     ['automatic', 800, true],

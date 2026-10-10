@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useRef, useState} from 'react';
 import {ImprovementActivityControls} from '../../improvement/ImprovementControls';
 
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
@@ -70,36 +70,57 @@ export function ActivityPage({
   const [overrideName, setOverrideName] = useState('');
   const [gameName, setGameName] = useState('');
   const [nativeMessage, setNativeMessage] = useState('');
+  const pending = useRef(false);
+  const pickerPending = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState(false);
 
   const applyPolicy = async (next: ActivitySettings, appliedMessage?: string) => {
-    if (!native) {
-      await updateActivity(next);
-      return;
-    }
-    const previous = activity;
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    const previous = useSettingsStore.getState().activity;
     try {
+      if (!native) {
+        await updateActivity(next);
+        return;
+      }
       const snapshot = await activityService.setPolicy(nativePolicy(next));
-      if (!await updateActivity(next)) {
-        await activityService.setPolicy(nativePolicy(previous));
-        setNativeMessage('Activity policy was restored because the device setting could not be saved.');
+      const saving = updateActivity(next);
+      const applied = useSettingsStore.getState().activity;
+      if (!await saving) {
+        if (applied === useSettingsStore.getState().activity) {
+          await activityService.setPolicy(nativePolicy(previous));
+          await updateActivity(previous);
+          setNativeMessage('Activity policy was restored because the device setting could not be saved.');
+        } else {
+          setNativeMessage('The earlier activity setting could not be saved. Your newer choices were retained.');
+        }
         return;
       }
       reflectSnapshot(snapshot, appliedMessage);
       setNativeMessage('');
     } catch (error) {
       setNativeMessage(error instanceof Error ? error.message : 'Activity policy could not be applied.');
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
   };
 
   const changePolicy = (patch: Partial<ActivitySettings>) => {
+    if (pickerPending.current) return;
     void applyPolicy({...activity, ...patch});
   };
 
   const pauseOrResume = async () => {
+    if (pending.current || pickerPending.current) return;
     if (!native) {
       toggleUserPause();
       return;
     }
+    pending.current = true;
+    setBusy(true);
     try {
       const paused = mode !== 'user';
       reflectSnapshot(
@@ -109,22 +130,31 @@ export function ActivityPage({
       setNativeMessage('');
     } catch (error) {
       setNativeMessage(error instanceof Error ? error.message : 'Background work could not be changed.');
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
   };
 
   const addOverride = async () => {
+    if (pending.current || pickerPending.current) return;
     if (native) {
-      const executable = await activityService.chooseExecutable();
-      if (!executable || activity.overrides.some((item) => item.identityHash === executable.identityHash)) return;
-      await applyPolicy({
-        ...activity,
-        overrides: [...activity.overrides, {
-          id: `app-${executable.identityHash}`,
-          application: executable.fileName,
-          identityHash: executable.identityHash,
-          policy: 'automatic',
-        }],
-      }, `${executable.fileName} added.`);
+      pickerPending.current = true;
+      setChoosing(true);
+      try {
+        const executable = await activityService.chooseExecutable();
+        if (!executable || activity.overrides.some((item) => item.identityHash === executable.identityHash)) return;
+        await applyPolicy({
+          ...activity,
+          overrides: [...activity.overrides, {
+            id: `app-${executable.identityHash}`,
+            application: executable.fileName,
+            identityHash: executable.identityHash,
+            policy: 'automatic',
+          }],
+        }, `${executable.fileName} added.`);
+      } catch (error) {setNativeMessage(error instanceof Error ? error.message : 'The executable picker could not be opened.');}
+      finally {pickerPending.current = false; setChoosing(false);}
       return;
     }
     const application = overrideName.trim();
@@ -141,17 +171,23 @@ export function ActivityPage({
   };
 
   const addGame = async () => {
+    if (pending.current || pickerPending.current) return;
     if (native) {
-      const executable = await activityService.chooseExecutable();
-      if (!executable || activity.userGames.some((item) => item.identityHash === executable.identityHash)) return;
-      await applyPolicy({
-        ...activity,
-        userGames: [...activity.userGames, {
-          id: `game-${executable.identityHash}`,
-          name: executable.fileName,
-          identityHash: executable.identityHash,
-        }],
-      }, `${executable.fileName} added as a game.`);
+      pickerPending.current = true;
+      setChoosing(true);
+      try {
+        const executable = await activityService.chooseExecutable();
+        if (!executable || activity.userGames.some((item) => item.identityHash === executable.identityHash)) return;
+        await applyPolicy({
+          ...activity,
+          userGames: [...activity.userGames, {
+            id: `game-${executable.identityHash}`,
+            name: executable.fileName,
+            identityHash: executable.identityHash,
+          }],
+        }, `${executable.fileName} added as a game.`);
+      } catch (error) {setNativeMessage(error instanceof Error ? error.message : 'The executable picker could not be opened.');}
+      finally {pickerPending.current = false; setChoosing(false);}
       return;
     }
     const game = gameName.trim();
@@ -163,6 +199,7 @@ export function ActivityPage({
   };
 
   const updateOverride = (nextOverride: ApplicationOverride) => {
+    if (pickerPending.current) return;
     void applyPolicy({
       ...activity,
       overrides: activity.overrides.map((item) => item.id === nextOverride.id ? nextOverride : item),
@@ -170,6 +207,7 @@ export function ActivityPage({
   };
 
   const resetAll = () => {
+    if (pending.current || pickerPending.current) return;
     void applyPolicy({...activity, overrides: [], userGames: []}, 'Automatic classifications reset.');
     if (!native) resetClassifications();
   };
@@ -194,7 +232,7 @@ export function ActivityPage({
             onChange={(next) => setMode(next)}
           />
         ) : <LumenText tone="secondary">Live Windows activity</LumenText>}
-        <LumenButton size="small" variant={mode === 'user' ? 'primary' : 'subtle'} onPress={() => void pauseOrResume()}>
+        <LumenButton isDisabled={busy || choosing} size="small" variant={mode === 'user' ? 'primary' : 'subtle'} onPress={() => void pauseOrResume()}>
           {mode === 'user' ? 'Resume indexing' : 'Pause indexing'}
         </LumenButton>
       </div>
@@ -202,26 +240,27 @@ export function ActivityPage({
       {nativeMessage || message ? <SettingsCallout>{nativeMessage || message}</SettingsCallout> : null}
       <SettingSection title="Automatic quiet modes" description="Classification changes background work only; the launcher remains available.">
         <SettingRow label="Detect configured games" description="Pause background indexing for executable identities you select below.">
-          <LumenSwitch aria-label="Detect games automatically" isSelected={activity.detectGames} onChange={(detectGames) => changePolicy({detectGames})} />
+          <LumenSwitch isDisabled={busy || choosing} aria-label="Detect games automatically" isSelected={activity.detectGames} onChange={(detectGames) => changePolicy({detectGames})} />
         </SettingRow>
         <SettingRow label="Detect fullscreen applications" description="Stay quiet when a foreground app occupies the display.">
-          <LumenSwitch aria-label="Detect fullscreen applications" isSelected={activity.detectFullscreen} onChange={(detectFullscreen) => changePolicy({detectFullscreen})} />
+          <LumenSwitch isDisabled={busy || choosing} aria-label="Detect fullscreen applications" isSelected={activity.detectFullscreen} onChange={(detectFullscreen) => changePolicy({detectFullscreen})} />
         </SettingRow>
         {!native ? (
           <>
             <SettingRow label="Allow indexing during video" description="Permit normal indexing instead of Cinema behavior.">
-              <LumenSwitch aria-label="Allow indexing during video" isSelected={activity.allowDuringVideo} onChange={(allowDuringVideo) => changePolicy({allowDuringVideo})} />
+              <LumenSwitch isDisabled={busy || choosing} aria-label="Allow indexing during video" isSelected={activity.allowDuringVideo} onChange={(allowDuringVideo) => changePolicy({allowDuringVideo})} />
             </SettingRow>
             <SettingRow label="Metadata-only Cinema mode" description="During playback, retain lightweight filename work while content work waits.">
-              <LumenSwitch aria-label="Metadata-only Cinema mode" isSelected={activity.cinemaMetadataOnly} onChange={(cinemaMetadataOnly) => changePolicy({cinemaMetadataOnly})} />
+              <LumenSwitch isDisabled={busy || choosing} aria-label="Metadata-only Cinema mode" isSelected={activity.cinemaMetadataOnly} onChange={(cinemaMetadataOnly) => changePolicy({cinemaMetadataOnly})} />
             </SettingRow>
           </>
         ) : null}
         <SettingRow label="Pause on battery" description="Protect battery life when the device is unplugged.">
-          <LumenSwitch aria-label="Pause on battery" isSelected={activity.pauseOnBattery} onChange={(pauseOnBattery) => changePolicy({pauseOnBattery})} />
+          <LumenSwitch isDisabled={busy || choosing} aria-label="Pause on battery" isSelected={activity.pauseOnBattery} onChange={(pauseOnBattery) => changePolicy({pauseOnBattery})} />
         </SettingRow>
         <SettingRow label="Resume delay" description="Wait after a restricted app closes before background work resumes.">
           <LumenSelect
+            isDisabled={busy || choosing}
             aria-label="Resume delay"
             options={[{id: '0', label: 'Immediately'}, {id: '15', label: '15 seconds'}, {id: '30', label: '30 seconds'}, {id: '60', label: '1 minute'}]}
             value={String(activity.resumeDelaySeconds) as '0' | '15' | '30' | '60'}
@@ -245,12 +284,13 @@ export function ActivityPage({
               }}
             />
           ) : null}
-          <LumenButton aria-label={native ? 'Choose application executable' : 'Add application override'} className="justify-self-start" size="small" onPress={() => void addOverride()}>
+          <LumenButton isDisabled={busy || choosing} aria-label={native ? 'Choose application executable' : 'Add application override'} className="justify-self-start" size="small" onPress={() => void addOverride()}>
             <LumenUiIcon name="add" size="small" /> {native ? 'Choose executable' : 'Add'}
           </LumenButton>
         </div>
         {activity.overrides.map((override) => (
           <ApplicationOverrideRow
+            isDisabled={busy || choosing}
             key={override.id}
             override={override}
             onChange={updateOverride}
@@ -261,7 +301,7 @@ export function ActivityPage({
       <SettingSection title="User-defined games" description="Select games that Windows may not classify consistently.">
         <div className={native ? 'flex min-w-0 flex-wrap justify-end p-[16px]' : 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[8px] p-[16px] @min-[32rem]/settings:grid-cols-[minmax(0,1fr)_auto]'}>
           {!native ? <LumenTextField aria-label="User-defined game" placeholder="Example: game.exe" value={gameName} onChange={setGameName} /> : null}
-          <LumenButton aria-label={native ? 'Choose game executable' : 'Add user-defined game'} className="justify-self-start" size="small" onPress={() => void addGame()}>
+          <LumenButton isDisabled={busy || choosing} aria-label={native ? 'Choose game executable' : 'Add user-defined game'} className="justify-self-start" size="small" onPress={() => void addGame()}>
             <LumenUiIcon name="tools" size="small" /> {native ? 'Choose game' : 'Add game'}
           </LumenButton>
         </div>
@@ -270,7 +310,7 @@ export function ActivityPage({
             {activity.userGames.map((game) => (
               <span key={game.id} className="inline-flex min-h-[36px] min-w-0 max-w-full items-center gap-[4px] rounded-pill bg-surface-inset pl-[12px] text-xs text-text-secondary">
                 <span className="min-w-0 [overflow-wrap:anywhere]">{game.name}</span>
-                <LumenIconButton aria-label={`Remove game ${game.name}`} size="small" variant="quiet" onPress={() => void applyPolicy({...activity, userGames: activity.userGames.filter((item) => item.id !== game.id)})}>
+                <LumenIconButton isDisabled={busy || choosing} aria-label={`Remove game ${game.name}`} size="small" variant="quiet" onPress={() => void applyPolicy({...activity, userGames: activity.userGames.filter((item) => item.id !== game.id)})}>
                   <LumenUiIcon name="close" size="small" />
                 </LumenIconButton>
               </span>
@@ -278,7 +318,7 @@ export function ActivityPage({
           </div>
         ) : <div className="flex flex-wrap gap-[8px] p-[16px]"><LumenText tone="tertiary" variant="meta">No custom game classifications.</LumenText></div>}
       </SettingSection>
-      <LumenButton aria-label="Reset classifications" size="small" variant="quiet" onPress={resetAll}>Reset classifications</LumenButton>
+      <LumenButton isDisabled={busy || choosing} aria-label="Reset classifications" size="small" variant="quiet" onPress={resetAll}>Reset classifications</LumenButton>
       <ImprovementActivityControls />
     </SettingsPage>
   );

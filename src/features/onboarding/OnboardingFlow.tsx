@@ -103,6 +103,7 @@ export function OnboardingFlow({
   const directionRef = useRef<'forward' | 'backward'>('forward');
   const [completionError, setCompletionError] = useState('');
   const [completing, setCompleting] = useState(false);
+  const completionPending = useRef(false);
   const step = onboardingSteps[currentIndex] ?? 'welcome';
 
   useEffect(() => {
@@ -118,6 +119,8 @@ export function OnboardingFlow({
   }, [currentIndex]);
 
   const finish = async () => {
+    if (completionPending.current) return;
+    completionPending.current = true;
     setCompleting(true);
     setCompletionError('');
     try {
@@ -125,12 +128,13 @@ export function OnboardingFlow({
       if (await onComplete?.() === false) {
         throw new Error('Lumen could not start the initial index. Check the selected folder and try again.');
       }
-      if (complete()) {
+      if (await complete()) {
         void requestWindowShow(windowService, 'collapsed');
       }
     } catch (error) {
       setCompletionError(error instanceof Error ? error.message : 'Lumen could not finish setup.');
     } finally {
+      completionPending.current = false;
       setCompleting(false);
     }
   };
@@ -149,6 +153,7 @@ export function OnboardingFlow({
   };
 
   const goBack = () => {
+    if (completionPending.current) return;
     directionRef.current = 'backward';
     back();
   };
