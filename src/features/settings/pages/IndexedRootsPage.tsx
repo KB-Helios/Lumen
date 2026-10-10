@@ -54,7 +54,11 @@ export function IndexedRootsPage({rootService = defaultRootService, statusServic
     let active = true;
     const observe = (status: SearchStatus) => {
       if (!active || mutationPending.current) return;
-      if (latestGeneration.current !== undefined && (status.generation === undefined || status.generation < latestGeneration.current)) return;
+      if (latestGeneration.current !== undefined && (
+        status.generation === undefined
+          ? status.phase !== 'degraded'
+          : status.generation < latestGeneration.current
+      )) return;
       latestGeneration.current = status.generation ?? latestGeneration.current;
       setIndexStatus(status);
       setNotice({text: status.message ?? 'Index status updated.', tone: status.phase === 'degraded' ? 'error' : 'info'});

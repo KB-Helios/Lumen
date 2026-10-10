@@ -46,6 +46,33 @@ it.each(['direct', 'subscription'] as const)('ignores pre-admission %s Ready aft
   expect(screen.getByText('Ready')).toBeVisible();
 });
 
+it('shows generationless polling failure after Ready and retains generation fences through recovery', async () => {
+  Reflect.defineProperty(window, '__TAURI_INTERNALS__', {configurable: true, value: {}});
+  const ready = {phase: 'ready' as const, generation: 2, pendingItems: 0, indexedItems: 1, queuedEnrichment: 0, skippedItems: 0, message: 'Current index ready.'};
+  vi.spyOn(nativeAiService, 'indexStatus').mockResolvedValue(ready);
+  let publish!: (status: SearchStatus) => void;
+  const statusService = {subscribeToStatus: (listener: typeof publish) => {publish = listener; return () => undefined;}};
+  useSettingsStore.setState({roots: [{id: 'projects', path: 'C:\\Projects', paused: false, exclusions: [], includeHidden: false, maxFileSizeMb: 256, status: 'ready'}]});
+  render(<AppProviders><IndexedRootsPage statusService={statusService} /></AppProviders>);
+  await screen.findByText(ready.message);
+  const unavailable = {phase: 'degraded' as const, message: 'Local index status is unavailable.', updatedAt: new Date().toISOString()};
+  act(() => publish(unavailable));
+  expect(screen.getByRole('alert')).toHaveTextContent(unavailable.message);
+  expect(screen.getByText('Needs attention')).toBeVisible();
+  expect(screen.queryByText('Ready')).not.toBeInTheDocument();
+  act(() => {
+    publish({...ready, generation: 1, message: 'Old Ready.', updatedAt: new Date().toISOString()});
+    publish({phase: 'ready', message: 'Unowned Ready.', updatedAt: new Date().toISOString()});
+  });
+  expect(screen.getByRole('alert')).toHaveTextContent(unavailable.message);
+  expect(screen.queryByText('Ready')).not.toBeInTheDocument();
+  act(() => publish({...ready, message: 'Index status recovered.', updatedAt: new Date().toISOString()}));
+  expect(screen.getByText('Ready')).toBeVisible();
+  expect(screen.getByText('Index status recovered.')).toBeVisible();
+  act(() => publish({...ready, generation: 1, message: 'Old Ready.', updatedAt: new Date().toISOString()}));
+  expect(screen.getByText('Index status recovered.')).toBeVisible();
+});
+
 function nativePage(domain: 'General' | 'Activity', pending: Promise<void>, stage: 'apply' | 'save' | 'rollback') {
   let calls = 0;
   const apply = vi.fn(async () => {
