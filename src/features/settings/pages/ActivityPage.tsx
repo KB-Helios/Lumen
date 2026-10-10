@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {useState} from 'react';
 import {ImprovementActivityControls} from '../../improvement/ImprovementControls';
 
 import {LumenUiIcon} from '../../../design-system/icons/LumenUiIcon';
@@ -21,6 +21,7 @@ import {LumenSelect, LumenSwitch, LumenTextField} from '../components/SettingsCo
 import {SettingsCallout, SettingsPage} from '../components/SettingsPage';
 import type {ActivitySettings, ApplicationOverride} from '../settings.schema';
 import {useSettingsStore} from '../settings.store';
+import {useNativeOperationsStore} from '../native-operations.store';
 
 const defaultActivityService = createActivityService();
 
@@ -70,15 +71,12 @@ export function ActivityPage({
   const [overrideName, setOverrideName] = useState('');
   const [gameName, setGameName] = useState('');
   const [nativeMessage, setNativeMessage] = useState('');
-  const pending = useRef(false);
-  const pickerPending = useRef(false);
-  const [busy, setBusy] = useState(false);
+  const busy = useNativeOperationsStore((state) => state.activity !== null);
   const [choosing, setChoosing] = useState(false);
 
-  const applyPolicy = async (next: ActivitySettings, appliedMessage?: string) => {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
+  const applyOwnedPolicy = async (owner: symbol, next: ActivitySettings, appliedMessage?: string) => {
+    const operations = useNativeOperationsStore.getState();
+    if (!operations.owns('activity', owner)) return;
     const previous = useSettingsStore.getState().activity;
     try {
       if (!native) {
@@ -86,67 +84,79 @@ export function ActivityPage({
         return;
       }
       const snapshot = await activityService.setPolicy(nativePolicy(next));
+      if (!operations.owns('activity', owner) || previous !== useSettingsStore.getState().activity) return;
       const saving = updateActivity(next);
       const applied = useSettingsStore.getState().activity;
       if (!await saving) {
-        if (applied === useSettingsStore.getState().activity) {
+        if (operations.owns('activity', owner) && applied === useSettingsStore.getState().activity) {
           await activityService.setPolicy(nativePolicy(previous));
-          await updateActivity(previous);
-          setNativeMessage('Activity policy was restored because the device setting could not be saved.');
-        } else {
-          setNativeMessage('The earlier activity setting could not be saved. Your newer choices were retained.');
+          if (operations.owns('activity', owner) && applied === useSettingsStore.getState().activity) {
+            await updateActivity(previous);
+            setNativeMessage('Activity policy was restored because the device setting could not be saved.');
+            return;
+          }
         }
+        setNativeMessage('The earlier activity setting could not be saved. Your newer choices were retained.');
         return;
       }
-      reflectSnapshot(snapshot, appliedMessage);
-      setNativeMessage('');
+      if (operations.owns('activity', owner) && applied === useSettingsStore.getState().activity) {
+        reflectSnapshot(snapshot, appliedMessage);
+        setNativeMessage('');
+      }
     } catch (error) {
       setNativeMessage(error instanceof Error ? error.message : 'Activity policy could not be applied.');
-    } finally {
-      pending.current = false;
-      setBusy(false);
     }
   };
 
+  const applyPolicy = async (next: ActivitySettings, appliedMessage?: string) => {
+    const operations = useNativeOperationsStore.getState();
+    const owner = operations.claim('activity');
+    if (!owner) return;
+    try {await applyOwnedPolicy(owner, next, appliedMessage);}
+    finally {operations.release('activity', owner);}
+  };
+
   const changePolicy = (patch: Partial<ActivitySettings>) => {
-    if (pickerPending.current) return;
     void applyPolicy({...activity, ...patch});
   };
 
   const pauseOrResume = async () => {
-    if (pending.current || pickerPending.current) return;
+    const operations = useNativeOperationsStore.getState();
+    if (operations.activity !== null) return;
     if (!native) {
       toggleUserPause();
       return;
     }
-    pending.current = true;
-    setBusy(true);
+    const owner = operations.claim('activity');
+    if (!owner) return;
     try {
       const paused = mode !== 'user';
-      reflectSnapshot(
-        await activityService.setUserPause(paused),
-        paused ? 'Background work paused.' : 'Background work resumed.',
-      );
-      setNativeMessage('');
+      const snapshot = await activityService.setUserPause(paused);
+      if (operations.owns('activity', owner)) {
+        reflectSnapshot(snapshot, paused ? 'Background work paused.' : 'Background work resumed.');
+        setNativeMessage('');
+      }
     } catch (error) {
       setNativeMessage(error instanceof Error ? error.message : 'Background work could not be changed.');
     } finally {
-      pending.current = false;
-      setBusy(false);
+      operations.release('activity', owner);
     }
   };
 
   const addOverride = async () => {
-    if (pending.current || pickerPending.current) return;
+    const operations = useNativeOperationsStore.getState();
+    if (operations.activity !== null) return;
     if (native) {
-      pickerPending.current = true;
+      const owner = operations.claim('activity');
+      if (!owner) return;
       setChoosing(true);
       try {
         const executable = await activityService.chooseExecutable();
-        if (!executable || activity.overrides.some((item) => item.identityHash === executable.identityHash)) return;
-        await applyPolicy({
-          ...activity,
-          overrides: [...activity.overrides, {
+        const latest = useSettingsStore.getState().activity;
+        if (!operations.owns('activity', owner) || !executable || latest.overrides.some((item) => item.identityHash === executable.identityHash)) return;
+        await applyOwnedPolicy(owner, {
+          ...latest,
+          overrides: [...latest.overrides, {
             id: `app-${executable.identityHash}`,
             application: executable.fileName,
             identityHash: executable.identityHash,
@@ -154,7 +164,7 @@ export function ActivityPage({
           }],
         }, `${executable.fileName} added.`);
       } catch (error) {setNativeMessage(error instanceof Error ? error.message : 'The executable picker could not be opened.');}
-      finally {pickerPending.current = false; setChoosing(false);}
+      finally {operations.release('activity', owner); setChoosing(false);}
       return;
     }
     const application = overrideName.trim();
@@ -171,23 +181,26 @@ export function ActivityPage({
   };
 
   const addGame = async () => {
-    if (pending.current || pickerPending.current) return;
+    const operations = useNativeOperationsStore.getState();
+    if (operations.activity !== null) return;
     if (native) {
-      pickerPending.current = true;
+      const owner = operations.claim('activity');
+      if (!owner) return;
       setChoosing(true);
       try {
         const executable = await activityService.chooseExecutable();
-        if (!executable || activity.userGames.some((item) => item.identityHash === executable.identityHash)) return;
-        await applyPolicy({
-          ...activity,
-          userGames: [...activity.userGames, {
+        const latest = useSettingsStore.getState().activity;
+        if (!operations.owns('activity', owner) || !executable || latest.userGames.some((item) => item.identityHash === executable.identityHash)) return;
+        await applyOwnedPolicy(owner, {
+          ...latest,
+          userGames: [...latest.userGames, {
             id: `game-${executable.identityHash}`,
             name: executable.fileName,
             identityHash: executable.identityHash,
           }],
         }, `${executable.fileName} added as a game.`);
       } catch (error) {setNativeMessage(error instanceof Error ? error.message : 'The executable picker could not be opened.');}
-      finally {pickerPending.current = false; setChoosing(false);}
+      finally {operations.release('activity', owner); setChoosing(false);}
       return;
     }
     const game = gameName.trim();
@@ -199,7 +212,6 @@ export function ActivityPage({
   };
 
   const updateOverride = (nextOverride: ApplicationOverride) => {
-    if (pickerPending.current) return;
     void applyPolicy({
       ...activity,
       overrides: activity.overrides.map((item) => item.id === nextOverride.id ? nextOverride : item),
@@ -207,7 +219,7 @@ export function ActivityPage({
   };
 
   const resetAll = () => {
-    if (pending.current || pickerPending.current) return;
+    if (useNativeOperationsStore.getState().activity !== null) return;
     void applyPolicy({...activity, overrides: [], userGames: []}, 'Automatic classifications reset.');
     if (!native) resetClassifications();
   };

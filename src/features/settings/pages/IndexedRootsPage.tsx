@@ -42,6 +42,8 @@ export function IndexedRootsPage({rootService = defaultRootService, statusServic
   const [choosing, setChoosing] = useState(false);
   const [indexBusy, setIndexBusy] = useState(false);
   const mutationPending = useRef(false);
+  const mutationRevision = useRef(0);
+  const latestGeneration = useRef<number | undefined>(undefined);
   const pickerPending = useRef(false);
   const mounted = useRef(true);
   const [indexStatus, setIndexStatus] = useState<SearchStatus>();
@@ -50,17 +52,21 @@ export function IndexedRootsPage({rootService = defaultRootService, statusServic
     mounted.current = true;
     if (!isNativeRuntime()) return () => {mounted.current = false;};
     let active = true;
-    const unsubscribe = statusService.subscribeToStatus((status) => {
+    const observe = (status: SearchStatus) => {
       if (!active || mutationPending.current) return;
+      if (latestGeneration.current !== undefined && (status.generation === undefined || status.generation < latestGeneration.current)) return;
+      latestGeneration.current = status.generation ?? latestGeneration.current;
       setIndexStatus(status);
       setNotice({text: status.message ?? 'Index status updated.', tone: status.phase === 'degraded' ? 'error' : 'info'});
-    });
+    };
+    const unsubscribe = statusService.subscribeToStatus(observe);
+    const requestedRevision = mutationRevision.current;
     void nativeAiService.indexStatus()
       .then((status) => {
-        if (active && !mutationPending.current) {setIndexStatus({...status, updatedAt: new Date().toISOString()}); setNotice({text: status.message, tone: 'info'});}
+        if (requestedRevision === mutationRevision.current) observe({...status, updatedAt: new Date().toISOString()});
       })
       .catch((error: unknown) => {
-        if (active) setNotice({text: `Index status is unavailable: ${errorMessage(error)}`, tone: 'error'});
+        if (active && requestedRevision === mutationRevision.current && !mutationPending.current) setNotice({text: `Index status is unavailable: ${errorMessage(error)}`, tone: 'error'});
       });
     return () => {
       active = false;
@@ -81,8 +87,11 @@ export function IndexedRootsPage({rootService = defaultRootService, statusServic
           includeHidden: root.includeHidden,
           maxFileSizeMb: root.maxFileSizeMb,
         })));
-      setNotice({text: status.message, tone: 'info'});
-      setIndexStatus({...status, updatedAt: new Date().toISOString()});
+      if (latestGeneration.current === undefined || status.generation >= latestGeneration.current) {
+        latestGeneration.current = status.generation;
+        setNotice({text: status.message, tone: 'info'});
+        setIndexStatus({...status, updatedAt: new Date().toISOString()});
+      }
       return true;
     } catch (error) {
       setNotice({text: `Index synchronization failed: ${errorMessage(error)}`, tone: 'error'});
@@ -97,6 +106,7 @@ export function IndexedRootsPage({rootService = defaultRootService, statusServic
   ) => {
     if (mutationPending.current) return false;
     mutationPending.current = true;
+    mutationRevision.current += 1;
     setIndexBusy(true);
     setIndexStatus(undefined);
     try {
@@ -146,6 +156,7 @@ export function IndexedRootsPage({rootService = defaultRootService, statusServic
   const rebuildIndex = async () => {
     if (mutationPending.current || pickerPending.current) return;
     mutationPending.current = true;
+    mutationRevision.current += 1;
     setIndexBusy(true);
     setIndexStatus(undefined);
     try {
@@ -203,6 +214,7 @@ export function IndexedRootsPage({rootService = defaultRootService, statusServic
             onRemove={async () => {
               if (mutationPending.current || pickerPending.current) return false;
               mutationPending.current = true;
+              mutationRevision.current += 1;
               setIndexBusy(true);
               setIndexStatus(undefined);
               try {

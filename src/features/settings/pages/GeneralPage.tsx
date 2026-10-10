@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {useState} from 'react';
 
 import {createWindowService} from '../../../platform/window/tauri-window-service';
 import type {WindowService} from '../../../platform/window/window-service';
@@ -12,6 +12,7 @@ import {LumenSelect, LumenSwitch} from '../components/SettingsControls';
 import {SettingsCallout, SettingsPage} from '../components/SettingsPage';
 import {ShortcutRecorder} from '../components/ShortcutRecorder';
 import {useSettingsStore} from '../settings.store';
+import {useNativeOperationsStore} from '../native-operations.store';
 
 const defaultWindowService = createWindowService();
 const defaultRuntimeService = createRuntimeSettingsService();
@@ -27,31 +28,33 @@ export function GeneralPage({
   const updateGeneral = useSettingsStore((state) => state.updateGeneral);
   const [shortcutError, setShortcutError] = useState('');
   const [runtimeError, setRuntimeError] = useState('');
-  const pending = useRef(false);
-  const [busy, setBusy] = useState(false);
+  const busy = useNativeOperationsStore((state) => state.general !== null);
 
   const updateShortcut = async (shortcut: string) => {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    const previousShortcut = general.shortcut;
+    const operations = useNativeOperationsStore.getState();
+    const owner = operations.claim('general');
+    if (!owner) return;
+    const initial = useSettingsStore.getState().general;
+    const previousShortcut = initial.shortcut;
     setShortcutError('');
     try {
       await windowService.setShortcut(shortcut);
+      if (!operations.owns('general', owner) || initial !== useSettingsStore.getState().general) return;
       const saving = updateGeneral({shortcut});
       const applied = useSettingsStore.getState().general;
       if (!await saving) {
-        if (applied === useSettingsStore.getState().general) {
+        if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
           await windowService.setShortcut(previousShortcut);
-          await updateGeneral({shortcut: previousShortcut});
+          if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
+            await updateGeneral({shortcut: previousShortcut});
+          }
         }
         throw new Error('The shortcut was registered but could not be saved.');
       }
-    } catch {
-      setShortcutError('Windows could not register that shortcut. Your previous shortcut remains active.');
+    } catch (error) {
+      setShortcutError(error instanceof Error ? error.message : 'Windows could not register that shortcut.');
     } finally {
-      pending.current = false;
-      setBusy(false);
+      operations.release('general', owner);
     }
   };
 
@@ -61,26 +64,29 @@ export function GeneralPage({
     rollback: () => Promise<void>,
     previous: Partial<typeof general>,
   ) => {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
+    const operations = useNativeOperationsStore.getState();
+    const owner = operations.claim('general');
+    if (!owner) return;
+    const initial = useSettingsStore.getState().general;
     setRuntimeError('');
     try {
       await apply();
+      if (!operations.owns('general', owner) || initial !== useSettingsStore.getState().general) return;
       const saving = updateGeneral(patch);
       const applied = useSettingsStore.getState().general;
       if (!await saving) {
-        if (applied === useSettingsStore.getState().general) {
+        if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
           await rollback();
-          await updateGeneral(previous);
+          if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
+            await updateGeneral(previous);
+          }
         }
         throw new Error('The setting was applied but could not be saved.');
       }
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Windows rejected the setting.');
     } finally {
-      pending.current = false;
-      setBusy(false);
+      operations.release('general', owner);
     }
   };
 
