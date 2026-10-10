@@ -374,6 +374,51 @@ mod tests {
     use super::*;
     use std::{cell::RefCell, collections::HashMap};
 
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "writes one owned synthetic Windows Credential Manager slot; run explicitly"]
+    fn windows_credentials_owned_slot_round_trip() {
+        struct OwnedSlot(String);
+        impl Drop for OwnedSlot {
+            fn drop(&mut self) {
+                if WindowsCredentials.delete(&self.0).is_err() {
+                    eprintln!("Owned credential cleanup failed for slot {}", self.0);
+                }
+            }
+        }
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let entry = keyring::Entry::new("com.bridgehammer.lumen.tool-profiles", &id)
+            .expect("create owned credential reference");
+        assert!(
+            matches!(entry.get_password(), Err(keyring::Error::NoEntry)),
+            "fresh owned slot must be absent before writing"
+        );
+        // Arm cleanup only after proving the slot is absent, before any write can fail.
+        let slot = OwnedSlot(id);
+        let credentials = WindowsCredentials;
+        for secret in [
+            "lumen-synthetic-fixture-first",
+            "lumen-synthetic-fixture-replacement",
+        ] {
+            credentials
+                .set(&slot.0, secret)
+                .expect("save owned fixture");
+            assert!(
+                credentials.get(&slot.0).expect("read owned fixture") == secret,
+                "owned fixture must round-trip without exposing its value"
+            );
+        }
+        credentials.delete(&slot.0).expect("delete owned fixture");
+        assert!(
+            matches!(entry.get_password(), Err(keyring::Error::NoEntry)),
+            "owned slot must be absent after deletion"
+        );
+        credentials
+            .delete(&slot.0)
+            .expect("missing slot deletion is idempotent");
+    }
+
     #[derive(Default)]
     struct FakeCredentials {
         entries: RefCell<HashMap<String, String>>,
