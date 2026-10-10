@@ -1,4 +1,4 @@
-import {useState, type ReactNode} from 'react';
+import {useEffect, useRef, useState, type ReactNode} from 'react';
 
 import {Dialog, DialogTrigger, Heading, Modal, ModalOverlay} from 'react-aria-components';
 
@@ -6,10 +6,11 @@ import {LumenButton} from '../../../design-system/primitives/LumenButton';
 import {LumenText} from '../../../design-system/primitives/LumenText';
 import {providersApi} from '../../../services/api/providers';
 import {toProviderErrorMessage} from '../../../services/providers/providers-service';
+import type {ProviderApp} from '../../../services/providers/providers.types';
 import {LumenTextField} from './SettingsControls';
 
 export interface EditableProvider {
-  app: string;
+  app: ProviderApp;
   id: string;
   name?: string;
   baseUrl: string;
@@ -17,7 +18,7 @@ export interface EditableProvider {
 }
 
 export interface EditProviderDialogProps {
-  api?: typeof providersApi;
+  api?: Pick<typeof providersApi, 'update'>;
   children?: ReactNode;
   provider: EditableProvider;
   triggerLabel?: string;
@@ -36,6 +37,9 @@ export function EditProviderDialog({
   const [model, setModel] = useState(provider.model);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const busy = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const reset = () => {
     setBaseUrl(provider.baseUrl);
@@ -48,7 +52,8 @@ export function EditProviderDialog({
   const canSubmit = !pending && baseUrl.trim().length > 0 && model.trim().length > 0;
 
   const submit = async (close: () => void) => {
-    if (!canSubmit) return;
+    if (!canSubmit || busy.current) return;
+    busy.current = true;
     setPending(true);
     setError('');
     try {
@@ -59,14 +64,13 @@ export function EditProviderDialog({
         model: model.trim(),
         apiKey: apiKey.length > 0 ? apiKey : undefined,
       });
-      onSaved?.();
-      close();
+      if (mounted.current) { onSaved?.(); close(); }
     } catch (caught) {
-      setError(toProviderErrorMessage(caught));
+      if (mounted.current) setError(toProviderErrorMessage(caught));
     } finally {
       // Never keep the secret in component state longer than the submit.
-      setApiKey('');
-      setPending(false);
+      if (mounted.current) { setApiKey(''); setPending(false); }
+      busy.current = false;
     }
   };
 
@@ -74,11 +78,12 @@ export function EditProviderDialog({
     <DialogTrigger
       onOpenChange={(isOpen) => {
         if (isOpen) reset();
+        else setApiKey('');
       }}
     >
       {children ?? <LumenButton size="small">{triggerLabel}</LumenButton>}
-      <ModalOverlay className="fixed inset-0 z-30 grid place-items-center bg-scrim p-8" isDismissable>
-        <Modal className="w-full max-w-[480px] outline-none">
+      <ModalOverlay className="lumen-preview-overlay fixed inset-0 z-30 grid min-h-0 place-items-center overflow-y-auto bg-scrim p-4" isDismissable={!pending} isKeyboardDismissDisabled={pending}>
+        <Modal className="lumen-preview-modal max-h-full w-full max-w-[480px] overflow-y-auto outline-none">
           <Dialog aria-label={`Edit ${provider.name ?? provider.id}`} className="grid gap-6 rounded-surface border border-border-strong bg-surface-raised p-6 text-text-primary shadow-surface outline-none">
             {({close}) => (
               <>
@@ -102,7 +107,7 @@ export function EditProviderDialog({
                   </label>
                   {error ? <LumenText tone="secondary" variant="meta" role="alert">{error}</LumenText> : null}
                   <div className="flex justify-end gap-3">
-                    <LumenButton size="small" variant="quiet" onPress={close}>
+                    <LumenButton size="small" variant="quiet" isDisabled={pending} onPress={close}>
                       Cancel
                     </LumenButton>
                     <LumenButton size="small" variant="primary" isDisabled={!canSubmit} onPress={() => void submit(close)}>

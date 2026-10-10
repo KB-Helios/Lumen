@@ -29,6 +29,7 @@ use sha2::{Digest, Sha256};
 use super::paths;
 
 const STATE_VERSION: u32 = 1;
+pub(super) static PROFILE_LOCK: Mutex<()> = Mutex::new(());
 
 /// Largest text config the engine will rewrite (mirrors the 64 KiB text
 /// preview cap). Anything bigger is refused, never truncated.
@@ -160,7 +161,8 @@ pub fn digest(bytes: Option<&[u8]>) -> Option<String> {
 
 /// Read a file; missing files are `None`. Anything over [`MAX_TEXT_BYTES`] or
 /// any other IO error is reported and nothing is written.
-fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>, String> {
+pub(super) fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>, String> {
+    reject_symlink(path)?;
     match std::fs::read(path) {
         Ok(bytes) => {
             if bytes.len() > MAX_TEXT_BYTES {
@@ -827,7 +829,7 @@ pub fn run_operation(
 
 /// A provider to switch a tool to: where requests go, what authorizes them,
 /// and which model name is selected.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct ProviderTarget {
     pub id: String,
     pub base_url: String,
@@ -835,21 +837,49 @@ pub struct ProviderTarget {
     pub model: String,
 }
 
+impl std::fmt::Debug for ProviderTarget {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProviderTarget")
+            .field("id", &self.id)
+            .field("base_url", &self.base_url)
+            .field("api_key", &"[redacted]")
+            .field("model", &self.model)
+            .finish()
+    }
+}
+
 impl ProviderTarget {
     /// Validate nonblank, single-line target fields and retain their original values.
     pub fn new(id: &str, base_url: &str, api_key: &str, model: &str) -> Result<Self, String> {
-        for (label, value) in [
-            ("id", id),
-            ("base URL", base_url),
-            ("API key", api_key),
-            ("model", model),
+        validate_provider_id(id)?;
+        for (label, value, max) in [
+            ("id", id, 128),
+            ("base URL", base_url, 2048),
+            ("API key", api_key, 4096),
+            ("model", model, 256),
         ] {
             if value.trim().is_empty() {
                 return Err(format!("provider {label} cannot be empty"));
             }
-            if value.contains('\n') || value.contains('\r') {
-                return Err(format!("provider {label} must be a single line"));
+            if value.len() > max || value.chars().any(char::is_control) {
+                return Err(format!(
+                    "provider {label} exceeds its limit or contains control characters"
+                ));
             }
+        }
+        let url = reqwest::Url::parse(base_url).map_err(|_| "Invalid provider base URL")?;
+        if !matches!(url.scheme(), "http" | "https")
+            || url.host_str().is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err(
+                "Provider base URL must be absolute HTTP(S) without credentials, query or fragment"
+                    .to_owned(),
+            );
         }
         Ok(Self {
             id: id.to_string(),
@@ -878,15 +908,20 @@ fn pretty(value: &Value) -> Result<Vec<u8>, String> {
 }
 
 /// Reject blank ids, path separators, traversal markers, and control characters.
-fn validate_provider_id(id: &str) -> Result<(), String> {
+pub(super) fn validate_provider_id(id: &str) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err("provider id cannot be empty".to_owned());
     }
-    if id.contains('/') || id.contains('\\') || id.contains("..") {
-        return Err(format!("invalid provider id: {id}"));
+    if id != id.trim()
+        || id.len() > 128
+        || id.contains('/')
+        || id.contains('\\')
+        || id.contains("..")
+    {
+        return Err("invalid provider id".to_owned());
     }
     if id.chars().any(|c| c.is_control()) {
-        return Err(format!("invalid provider id: {id}"));
+        return Err("invalid provider id".to_owned());
     }
     Ok(())
 }
@@ -1302,15 +1337,15 @@ pub fn switch_gemini(home: &Path, target: &ProviderTarget) -> Result<Vec<PathBuf
 // OpenCode (`provider.<id>`) + OpenClaw (`models.providers.<id>`)
 // ---------------------------------------------------------------------------
 
-/// Minimal OpenCode provider node for a switched target. Later tasks enrich
-/// this with the model catalog; the node shape (`options.baseURL/apiKey`) is
-/// what OpenCode reads.
+/// OpenCode custom OpenAI-compatible provider and its available model.
 fn opencode_node(target: &ProviderTarget) -> Value {
     serde_json::json!({
+        "npm": "@ai-sdk/openai-compatible",
         "options": {
             "baseURL": target.base_url,
             "apiKey": target.api_key,
-        }
+        },
+        "models": { &target.model: { "name": target.model } }
     })
 }
 
@@ -1540,6 +1575,168 @@ pub fn remove_provider(home: &Path, app: &str, id: &str) -> Result<bool, String>
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+fn recover_profile(home: &Path, app: &str) -> Result<(), String> {
+    match recover(&DeviceStore::for_home(home), app)? {
+        Some(RecoveryOutcome::Abandoned { .. } | RecoveryOutcome::RolledForwardExcept { .. }) => {
+            Err("Provider configuration changed outside Lumen; inspect it before retrying".into())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Apply only a validated stored target using the existing transactional writers.
+pub(super) fn activate_profile(
+    home: &Path,
+    app: &str,
+    target: &ProviderTarget,
+) -> Result<Vec<PathBuf>, String> {
+    recover_profile(home, app)?;
+    match app {
+        "claude" => switch_claude(home, target),
+        "codex" => switch_codex(home, target),
+        "gemini" => switch_gemini(home, target),
+        "opencode" | "openclaw" => {
+            let path = if app == "opencode" {
+                paths::opencode_config(home)
+            } else {
+                paths::openclaw_config(home)
+            };
+            let mut node = read_bytes(&path)?
+                .map(|bytes| parse_json_object(&path, &bytes))
+                .transpose()?
+                .and_then(|value| {
+                    let providers = if app == "opencode" {
+                        value.get("provider")
+                    } else {
+                        value
+                            .get("models")
+                            .and_then(|models| models.get("providers"))
+                    };
+                    providers
+                        .and_then(|providers| providers.get(&target.id))
+                        .cloned()
+                })
+                .unwrap_or_else(|| serde_json::json!({}));
+            merge_profile_fields(
+                &mut node,
+                if app == "opencode" {
+                    opencode_node(target)
+                } else {
+                    openclaw_node(target)
+                },
+            );
+            if app == "opencode" {
+                Ok(vec![upsert_opencode(home, &target.id, node)?])
+            } else {
+                Ok(vec![upsert_openclaw(home, &target.id, node)?])
+            }
+        }
+        _ => Err("unknown app; expected claude, codex, gemini, opencode, or openclaw".into()),
+    }
+}
+
+fn merge_profile_fields(existing: &mut Value, desired: Value) {
+    if let (Some(existing), Some(desired)) = (existing.as_array_mut(), desired.as_array()) {
+        for model in desired {
+            if let Some(found) = existing
+                .iter_mut()
+                .find(|found| found.get("id") == model.get("id"))
+            {
+                merge_profile_fields(found, model.clone());
+            } else {
+                existing.push(model.clone());
+            }
+        }
+    } else if let (Some(existing), Some(desired)) = (existing.as_object_mut(), desired.as_object())
+    {
+        for (key, value) in desired {
+            merge_profile_fields(existing.entry(key).or_insert(Value::Null), value.clone());
+        }
+    } else {
+        *existing = desired;
+    }
+}
+
+fn contains_profile_fields(existing: &Value, desired: &Value) -> bool {
+    if let (Some(existing), Some(desired)) = (existing.as_array(), desired.as_array()) {
+        return desired.iter().all(|model| {
+            existing
+                .iter()
+                .any(|found| contains_profile_fields(found, model))
+        });
+    }
+    match (existing.as_object(), desired.as_object()) {
+        (Some(existing), Some(desired)) => desired.iter().all(|(key, value)| {
+            existing
+                .get(key)
+                .is_some_and(|found| contains_profile_fields(found, value))
+        }),
+        _ => existing == desired,
+    }
+}
+
+/// Read actual live bytes; saved edits are distinct from the currently applied configuration.
+pub(super) fn profile_status(
+    home: &Path,
+    app: &str,
+    target: &ProviderTarget,
+) -> Result<(bool, bool), String> {
+    recover_profile(home, app)?;
+    let path = match app {
+        "claude" => paths::claude_settings(home),
+        "codex" => paths::codex_config(home),
+        "gemini" => paths::gemini_env(home),
+        "opencode" => paths::opencode_config(home),
+        "openclaw" => paths::openclaw_config(home),
+        _ => return Err("Unsupported provider target".into()),
+    };
+    let Some(bytes) = read_bytes(&path)? else {
+        return Ok((false, false));
+    };
+    if matches!(app, "opencode" | "openclaw") {
+        let value = parse_json_object(&path, &bytes)?;
+        let node = if app == "opencode" {
+            value.get("provider")
+        } else {
+            value
+                .get("models")
+                .and_then(|models| models.get("providers"))
+        }
+        .and_then(|providers| providers.get(&target.id));
+        let expected = if app == "opencode" {
+            opencode_node(target)
+        } else {
+            openclaw_node(target)
+        };
+        return Ok((
+            node.is_some_and(|node| contains_profile_fields(node, &expected)),
+            node.is_some(),
+        ));
+    }
+    let enabled = current(&DeviceStore::for_home(home), app)?.as_deref() == Some(&target.id);
+    if !enabled {
+        return Ok((false, false));
+    }
+    let expected = match app {
+        "claude" => apply_claude_bytes(Some(&bytes), &path, Some(target))?,
+        "codex" => apply_codex_toml(Some(&bytes), &path, Some(target))?,
+        "gemini" => apply_gemini_env(Some(&bytes), &path, Some(target))?,
+        _ => unreachable!(),
+    };
+    Ok((expected.as_deref() == Some(&bytes), true))
+}
+
+/// Removing an inactive exclusive profile must never clear another profile's live keys.
+pub(super) fn remove_managed_profile(home: &Path, app: &str, id: &str) -> Result<bool, String> {
+    recover_profile(home, app)?;
+    if matches!(app, "claude" | "codex" | "gemini")
+        && current(&DeviceStore::for_home(home), app)?.as_deref() != Some(id)
+    {
+        return Ok(false);
+    }
+    remove_provider(home, app, id)
+}
+
 /// Switch a tool's live config to a provider.
 ///
 /// `app` is one of `claude`, `codex`, `gemini`, `opencode`, `openclaw`.
@@ -1554,20 +1751,12 @@ pub fn switch_provider(
     api_key: String,
     model: String,
 ) -> Result<Vec<String>, String> {
+    let _guard = PROFILE_LOCK
+        .lock()
+        .map_err(|_| "Provider storage is busy")?;
     let home = paths::home_dir();
     let target = ProviderTarget::new(&id, &base_url, &api_key, &model)?;
-    let changed = match app.as_str() {
-        "claude" => switch_claude(&home, &target)?,
-        "codex" => switch_codex(&home, &target)?,
-        "gemini" => switch_gemini(&home, &target)?,
-        "opencode" => vec![upsert_opencode(&home, &id, opencode_node(&target))?],
-        "openclaw" => vec![upsert_openclaw(&home, &id, openclaw_node(&target))?],
-        _ => {
-            return Err(format!(
-                "unknown app '{app}'; expected claude, codex, gemini, opencode, or openclaw"
-            ));
-        }
-    };
+    let changed = activate_profile(&home, &app, &target)?;
     Ok(changed
         .iter()
         .map(|path| path.display().to_string())
@@ -1578,6 +1767,9 @@ pub fn switch_provider(
 /// changed. Secrets are never returned.
 #[tauri::command]
 pub fn remove_from_live(app: String, id: String) -> Result<bool, String> {
+    let _guard = PROFILE_LOCK
+        .lock()
+        .map_err(|_| "Provider storage is busy")?;
     remove_provider(&paths::home_dir(), &app, &id)
 }
 
@@ -1640,5 +1832,26 @@ mod tests {
         assert!(ProviderTarget::new("", "https://x", "k", "m").is_err());
         assert!(ProviderTarget::new("id", "https://x", "line1\nline2", "m").is_err());
         assert!(ProviderTarget::new("ok", "https://x", "k", "m").is_ok());
+    }
+
+    #[test]
+    fn target_rejects_unsafe_ids_urls_and_oversized_fields() {
+        for id in ["../escape", "a/b", "a\\b"] {
+            assert!(ProviderTarget::new(id, "https://x", "k", "m").is_err());
+        }
+        for url in [
+            "relative",
+            "file:///secret",
+            "https://user:secret@x",
+            "https://x/?key=secret",
+            "https://x/#secret",
+        ] {
+            assert!(ProviderTarget::new("ok", url, "k", "m").is_err());
+        }
+        assert!(ProviderTarget::new(&"i".repeat(129), "https://x", "k", "m").is_err());
+        assert!(ProviderTarget::new("ok", "https://x", &"k".repeat(4097), "m").is_err());
+        assert!(ProviderTarget::new("ok", "https://x", "k", &"m".repeat(257)).is_err());
+        let target = ProviderTarget::new("ok", "https://x", "fixture-secret", "m").unwrap();
+        assert!(!format!("{target:?}").contains("fixture-secret"));
     }
 }
