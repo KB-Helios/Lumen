@@ -1101,20 +1101,37 @@ async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Builds a synthetic Stop supervisor without registering a global hotkey or real executor.
+    fn supervisor_fixture() -> ComputerUseSupervisor {
+        let directory =
+            std::env::temp_dir().join(format!("lumen-stop-test-{}", uuid::Uuid::new_v4()));
+        // Direct Stop tests do not own the global shortcut or admit a real executor.
+        ComputerUseSupervisor {
+            inner: Arc::new(Inner {
+                improvement: Mutex::new(None),
+                state: Mutex::new(State::default()),
+                targets: TargetRegistry::default(),
+                pool: ExecutorPool::new(Executable::Missing, directory.join("computer-use-scopes")),
+                consent: PersistedConsent::new(directory.join("settings.json")),
+                directory,
+                native_stop: AtomicBool::new(false),
+                diagnostics: Mutex::new(VecDeque::new()),
+            }),
+            _stop: NativeStop::unregistered_fixture(),
+        }
+    }
+
     fn request() -> ComputerUseRequest {
         serde_json::from_value(serde_json::json!({"taskId":1,"task":"Fixture","provider":"gemini","model":"gemini-3.8-flash","executionMode":"fast","target":{"kind":"browser","initialUrl":"https://example.com"},"cloudConsent":true,"desktopControlConsent":false,"desktopCloudConsent":false})).unwrap()
     }
     #[test]
     fn acknowledged_stop_releases_the_run_before_executor_cleanup() {
-        let directory =
-            std::env::temp_dir().join(format!("lumen-stop-test-{}", uuid::Uuid::new_v4()));
-        let supervisor = ComputerUseSupervisor::detect(
-            directory.join("missing-packaged"),
-            directory.join("missing-staged"),
-            directory.join("missing-source"),
-            directory.join("settings.json"),
-            directory,
+        let supervisor = supervisor_fixture();
+        assert!(
+            !supervisor._stop.available(),
+            "Synthetic Stop fixtures must not register the global hotkey"
         );
+        assert!(!supervisor.inner.native_stop.load(Ordering::Acquire));
         let run = Run::new(request(), Channel::new(|_| Ok(())));
         supervisor.inner.state.lock().unwrap().active = Some(Arc::clone(&run));
 

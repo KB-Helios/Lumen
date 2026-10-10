@@ -4,6 +4,70 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 #[cfg(windows)]
+/// Returns the Windows short spelling of an existing fixture path, requiring a successful OS lookup.
+fn short_windows_path(path: &Path) -> PathBuf {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use windows::Win32::Storage::FileSystem::GetShortPathNameW;
+    use windows::core::PCWSTR;
+
+    let input: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut output = vec![0u16; 32_768];
+    let length = unsafe { GetShortPathNameW(PCWSTR(input.as_ptr()), Some(&mut output)) } as usize;
+    assert!(length > 0 && length < output.len());
+    PathBuf::from(std::ffi::OsString::from_wide(&output[..length]))
+}
+
+#[cfg(windows)]
+#[test]
+/// Checks missing Unicode descendants beneath a short alias while rejecting parent traversal.
+fn watcher_path_admission_expands_short_ancestors_for_deleted_paths() {
+    let root = std::fs::canonicalize(std::env::var_os("ProgramFiles").unwrap()).unwrap();
+    let short = short_windows_path(&root);
+    assert_ne!(
+        short, root,
+        "short-alias fixture unavailable: ProgramFiles has no distinct 8.3 alias"
+    );
+    assert_eq!(index_worker::event_path(&root, &short), Some(root.clone()));
+    let relative = Path::new("lumen-missing-event-fixture").join("İstanbul.txt");
+    assert_eq!(
+        index_worker::event_path(&root, &short.join(&relative)),
+        Some(root.join(&relative))
+    );
+    assert_eq!(
+        index_worker::event_path(&root, &short.join("..").join("outside.txt")),
+        None
+    );
+}
+
+#[cfg(windows)]
+#[test]
+/// Checks that joining a watcher suffix preserves nested Unicode components under a verbatim root.
+fn watcher_path_admission_preserves_nested_verbatim_components() {
+    let root = Path::new(r"\\?\C:\safe");
+    assert_eq!(
+        index_worker::event_path(root, Path::new(r"C:\safe\folder\İstanbul.txt")),
+        Some(root.join("folder").join("İstanbul.txt"))
+    );
+}
+
+#[cfg(windows)]
+#[test]
+/// Uses a symlink through an outside short path to verify spelling expansion cannot cross a reparse route.
+fn watcher_short_path_expansion_never_admits_a_reparse_route() {
+    let fixture = SearchFixture::new("short-path-reparse");
+    fixture.file("notes.txt", b"privatequasar");
+    let outside = fixture.outside_file("placeholder.txt", b"outside");
+    let linked = outside.parent().unwrap().join("redirect");
+    std::os::windows::fs::symlink_dir(fixture.root(), &linked).unwrap();
+    let short_outside = short_windows_path(outside.parent().unwrap());
+    let root = std::fs::canonicalize(fixture.root()).unwrap();
+    assert_eq!(
+        index_worker::event_path(&root, &short_outside.join("redirect").join("notes.txt")),
+        None
+    );
+}
+
+#[cfg(windows)]
 #[test]
 fn watcher_path_admission_handles_drive_roots_unc_and_unicode() {
     assert_eq!(

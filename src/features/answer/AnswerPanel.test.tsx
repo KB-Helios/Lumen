@@ -190,5 +190,28 @@ describe('AnswerPanel', () => {
     await user.click(screen.getByRole('button', {name: 'Open Meeting notes.md'}));
     expect(onOpenCitation).toHaveBeenCalledWith('meeting-notes');
   });
+
+  it('shows preparation while awaiting the first token', () => {
+    render(<AppProviders><AnswerPanel answer={{phase: 'waiting', text: '', citations: []}} mode="local"
+      onModeChange={vi.fn()} onOpenCitation={vi.fn()} onRetry={vi.fn()} onStop={vi.fn()} /></AppProviders>);
+    expect(screen.getByTestId('answer-region')).toHaveTextContent('Preparing an answer');
+    expect(screen.queryByText(/settling|query to settle/i)).not.toBeInTheDocument();
+  });
+
+  it('shows stopped in the answer region when cancelled before tokens', () => {
+    render(<AppProviders><AnswerPanel answer={{phase: 'cancelled', text: '', citations: []}} mode="local"
+      onModeChange={vi.fn()} onOpenCitation={vi.fn()} onRetry={vi.fn()} onStop={vi.fn()} /></AppProviders>);
+    expect(screen.getByTestId('answer-region')).toHaveTextContent('Stopped');
+  });
+
+  it('keeps the error visible alongside partial text and source controls', () => {
+    render(<AppProviders><AnswerPanel answer={{phase: 'error', text: 'Partial answer', error: 'The answer ended early.',
+      citations: [{fileId: 'f', label: 'File'}], provider: 'local'}} mode="local"
+      onModeChange={vi.fn()} onOpenCitation={vi.fn()} onRetry={vi.fn()} onStop={vi.fn()} /></AppProviders>);
+    expect(screen.getByTestId('answer-region')).toHaveTextContent('Partial answer');
+    expect(screen.getByRole('status')).toHaveTextContent('The answer ended early.');
+    expect(screen.getByRole('button', {name: 'Open File'})).toBeEnabled();
+    expect(screen.getByText('local')).toBeInTheDocument();
+  });
 });
 

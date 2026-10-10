@@ -1,0 +1,369 @@
+{
+  "recordedAt": "2026-10-10T05:40:02.808Z",
+  "browserVersion": "155.0.4283.45",
+  "evidence": "loopback-native-transport-installed-edge",
+  "binary": "lumen_lib-c8d8a2b3af982606.exe",
+  "nativeTest": "gateway::answer::transport_tests::native_bridge",
+  "packagedWebViewVerified": false,
+  "liveProviderVerified": false,
+  "obsoleteUsagePrecondition": "test-only metadata injection; production transport emits completed usage",
+  "scenarios": {
+    "fallback": {
+      "commits": 7,
+      "renderMs": 15.600000001490116,
+      "callbackMs": 4.699999999254942,
+      "nativeEvents": 7,
+      "submittedAt": 4973.800000000745,
+      "firstRenderedTokenMs": 35.19999999925494
+    },
+    "stop": {
+      "uiStopMs": 52.9341000000004
+    },
+    "replacement": {
+      "commits": 4,
+      "renderMs": 4.699999997392297,
+      "callbackMs": 0.599999999627471,
+      "nativeEvents": 4,
+      "submittedAt": 5427.699999999255,
+      "firstRenderedTokenMs": 20.700000001117587
+    },
+    "burst": {
+      "commits": 10,
+      "renderMs": 14.09999999590218,
+      "callbackMs": 6.800000002607703,
+      "nativeEvents": 1003,
+      "submittedAt": 5459,
+      "firstRenderedTokenMs": 23.90000000037253
+    },
+    "deliveryOrder": {
+      "commits": 4,
+      "renderMs": 4.799999998882413,
+      "callbackMs": 1.1000000014901161,
+      "nativeEvents": 4,
+      "submittedAt": 5531.800000000745,
+      "firstRenderedTokenMs": 56.79999999888241
+    }
+  },
+  "nativeMemory": {
+    "samplesBytes": [
+      15462400,
+      15491072,
+      15491072,
+      15491072,
+      15568896,
+      15572992
+    ],
+    "iterations": 35,
+    "firstToLastGrowthBytes": 110592
+  },
+  "nativeSamples": [
+    {
+      "requestId": 1791610807680001,
+      "query": "fallback",
+      "events": 7,
+      "attempts": 2,
+      "firstTokenMs": 17.0024999999996,
+      "doneMs": 66.97519999999986
+    },
+    {
+      "requestId": 1791610807680002,
+      "query": "retry",
+      "events": 4,
+      "attempts": 1,
+      "firstTokenMs": 7.538400000000365,
+      "doneMs": 94.9980000000005,
+      "cancelToNativeDoneMs": 6.727399999999761
+    },
+    {
+      "requestId": 1791610807680003,
+      "query": "retry",
+      "events": 4,
+      "attempts": 1,
+      "firstTokenMs": 9.144599999999627,
+      "doneMs": 10.777000000000044
+    },
+    {
+      "requestId": 1791610807680004,
+      "query": "replacement-a",
+      "events": 4,
+      "attempts": 1,
+      "firstTokenMs": 8.573900000000322,
+      "doneMs": 31.510700000000725,
+      "cancelToNativeDoneMs": 8.048899999999776
+    },
+    {
+      "requestId": 1791610807680005,
+      "query": "replacement-b",
+      "events": 4,
+      "attempts": 1,
+      "firstTokenMs": 5.35570000000007,
+      "doneMs": 7.7750999999998385
+    },
+    {
+      "requestId": 1791610807680006,
+      "query": "burst",
+      "events": 1003,
+      "attempts": 1,
+      "firstTokenMs": 12.174300000000585,
+      "doneMs": 47.16219999999976
+    },
+    {
+      "requestId": 1791610807680007,
+      "query": "delivery-order",
+      "events": 4,
+      "attempts": 1,
+      "firstTokenMs": 11.902000000000044,
+      "doneMs": 14.30410000000029
+    },
+    {
+      "requestId": 1791610807680008,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.943599999999606
+    },
+    {
+      "requestId": 1791610807680009,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 9.684400000000096
+    },
+    {
+      "requestId": 1791610807680010,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 7.636199999999917
+    },
+    {
+      "requestId": 1791610807680011,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.719000000000051
+    },
+    {
+      "requestId": 1791610807680012,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.966499999999542
+    },
+    {
+      "requestId": 1791610807680013,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.3079000000007
+    },
+    {
+      "requestId": 1791610807680014,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.028599999999642
+    },
+    {
+      "requestId": 1791610807680015,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.844600000000355
+    },
+    {
+      "requestId": 1791610807680016,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.638100000000122
+    },
+    {
+      "requestId": 1791610807680017,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 9.321600000000217
+    },
+    {
+      "requestId": 1791610807680018,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.10189999999966
+    },
+    {
+      "requestId": 1791610807680019,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 11.377700000000004
+    },
+    {
+      "requestId": 1791610807680020,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.208700000000135
+    },
+    {
+      "requestId": 1791610807680021,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 11.094200000000455
+    },
+    {
+      "requestId": 1791610807680022,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.877999999999702
+    },
+    {
+      "requestId": 1791610807680023,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 7.839899999999943
+    },
+    {
+      "requestId": 1791610807680024,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 9.713200000000143
+    },
+    {
+      "requestId": 1791610807680025,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.910200000000259
+    },
+    {
+      "requestId": 1791610807680026,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.094600000000355
+    },
+    {
+      "requestId": 1791610807680027,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 9.730400000000373
+    },
+    {
+      "requestId": 1791610807680028,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.89049999999952
+    },
+    {
+      "requestId": 1791610807680029,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 7.850599999999758
+    },
+    {
+      "requestId": 1791610807680030,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 9.665100000000166
+    },
+    {
+      "requestId": 1791610807680031,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 12.36830000000009
+    },
+    {
+      "requestId": 1791610807680032,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 11.18539999999848
+    },
+    {
+      "requestId": 1791610807680033,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 13.110800000000381
+    },
+    {
+      "requestId": 1791610807680034,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 11.802300000001196
+    },
+    {
+      "requestId": 1791610807680035,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.020700000000943
+    },
+    {
+      "requestId": 1791610807680036,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 10.596799999999348
+    },
+    {
+      "requestId": 1791610807680037,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.719900000000052
+    },
+    {
+      "requestId": 1791610807680038,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 11.82589999999982
+    },
+    {
+      "requestId": 1791610807680039,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 9.328199999999924
+    },
+    {
+      "requestId": 1791610807680040,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 7.102899999999863
+    },
+    {
+      "requestId": 1791610807680041,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 8.861100000000079
+    },
+    {
+      "requestId": 1791610807680042,
+      "query": "failure",
+      "events": 3,
+      "attempts": 1,
+      "doneMs": 7.950800000000527
+    }
+  ],
+  "nativeShutdown": {
+    "code": 0,
+    "signal": null,
+    "elapsedMs": 9.103700000001481
+  }
+}

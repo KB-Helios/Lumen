@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "test:answer-native": "node scripts/answer-native-integration.mjs",
+    "test:answer-bridge": "node --test scripts/answer-native-bridge.test.mjs scripts/answer-native-shutdown.test.mjs",
     "profile": "node scripts/performance-profile.mjs",
     "capture:gallery": "node scripts/capture-gallery.mjs",
     "record:interactions": "node scripts/record-interactions.mjs",

@@ -302,6 +302,7 @@ fn inventory_loop(
     drop(watcher);
 }
 
+/// Maps watcher spelling beneath the admitted root, trying safe Windows short-name expansion if needed.
 pub(super) fn event_path(root: &Path, path: &Path) -> Option<PathBuf> {
     fn plain(path: &Path) -> String {
         let value = path.to_string_lossy().replace('\\', "/");
@@ -312,22 +313,81 @@ pub(super) fn event_path(root: &Path, path: &Path) -> Option<PathBuf> {
         };
         value.trim_end_matches('/').to_owned()
     }
-    let original = plain(path);
-    let root_original = plain(root);
-    let root_plain = root_original.to_lowercase();
-    let path_plain = original.to_lowercase();
-    if path_plain == root_plain {
-        return Some(root.to_path_buf());
+    /// Matches path components case-insensitively while preserving suffix spelling and rejecting parent traversal.
+    fn admitted_path(root: &Path, path: &Path) -> Option<PathBuf> {
+        let original = plain(path);
+        let root_original = plain(root);
+        let root_plain = root_original.to_lowercase();
+        let path_plain = original.to_lowercase();
+        if path_plain == root_plain {
+            return Some(root.to_path_buf());
+        }
+        path_plain.strip_prefix(&(root_plain + "/"))?;
+        // Preserve Unicode and case without slicing by a case-folded byte count.
+        let suffix = original
+            .split('/')
+            .skip(root_original.split('/').count())
+            .collect::<Vec<_>>()
+            .join("/");
+        if suffix.split('/').any(|part| part == "..") {
+            return None;
+        }
+        Some(root.join(suffix))
     }
-    path_plain.strip_prefix(&(root_plain + "/"))?;
-    // Preserve Unicode and case without slicing by a case-folded byte count.
-    let suffix = original
-        .split('/')
-        .skip(root_original.split('/').count())
-        .collect::<Vec<_>>()
-        .join("/");
-    if suffix.split('/').any(|part| part == "..") {
+    if let Some(admitted) = admitted_path(root, path) {
+        return Some(admitted);
+    }
+    #[cfg(windows)]
+    if let Some(expanded) = expand_windows_event_spelling(path) {
+        return admitted_path(root, &expanded);
+    }
+    None
+}
+
+#[cfg(windows)]
+/// Expands an existing Windows ancestor to its long spelling and preserves any missing suffix.
+/// Rejects relative paths, parent traversal, reparse ancestors, and incomplete ancestor inspection.
+fn expand_windows_event_spelling(path: &Path) -> Option<PathBuf> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::os::windows::fs::MetadataExt;
+    use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_REPARSE_POINT, GetLongPathNameW};
+    use windows::core::PCWSTR;
+
+    if !path.is_absolute()
+        || path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .split('/')
+            .any(|part| part == "..")
+    {
         return None;
     }
-    Some(root.join(suffix))
+    let mut existing = None;
+    let mut reached_root = false;
+    // Expand only spelling; never canonicalize an event through a reparse route.
+    for ancestor in path.ancestors().take(256) {
+        match std::fs::symlink_metadata(ancestor) {
+            Ok(metadata) => {
+                if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0 {
+                    return None;
+                }
+                existing.get_or_insert(ancestor);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return None,
+        }
+        reached_root |= ancestor.parent().is_none();
+    }
+    if !reached_root {
+        return None;
+    }
+    let existing = existing?;
+    let input: Vec<u16> = existing.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut output = vec![0u16; 32_768];
+    let length = unsafe { GetLongPathNameW(PCWSTR(input.as_ptr()), Some(&mut output)) } as usize;
+    if length == 0 || length >= output.len() {
+        return None;
+    }
+    let expanded = PathBuf::from(std::ffi::OsString::from_wide(&output[..length]));
+    Some(expanded.join(path.strip_prefix(existing).ok()?))
 }

@@ -188,6 +188,7 @@ export interface AppProps {
   windowService?: WindowService;
 }
 
+/** Composes the launcher and preview modes, hydrates settings, and synchronizes native runtime preferences. */
 export function App({
   activityService = defaultActivityService,
   windowService = appWindowService,
@@ -292,9 +293,14 @@ export function App({
   }, [settingsHydrated]);
 
   useEffect(() => {
-    if (isNativeRuntime()) {
-      void nativeAiService.setLocalRuntimeMode(runtimeMode, keepLocalWarm);
-    }
+    if (!isNativeRuntime()) return;
+    let current = true;
+    const revision = useSettingsStore.getState().beginLocalRuntimeApplication(runtimeMode, keepLocalWarm);
+    void nativeAiService.setLocalRuntimeMode(runtimeMode, keepLocalWarm).then(
+      () => { if (current) useSettingsStore.getState().finishLocalRuntimeApplication(revision, null); },
+      () => { if (current) useSettingsStore.getState().finishLocalRuntimeApplication(revision, 'apply-failed'); },
+    );
+    return () => { current = false; };
   }, [keepLocalWarm, runtimeMode]);
 
   useEffect(() => {

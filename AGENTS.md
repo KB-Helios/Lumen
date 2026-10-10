@@ -6,7 +6,7 @@ Keyboard-first Windows 11 search and Computer Use launcher. Tauri 2 + React 19 +
 
 - Windows 11 only: requires WebView2 Runtime, Bun 1.3+, Rust stable (MSVC), and VS 2022 / Build Tools with C++ + Windows SDK. Staging Computer Use also needs a healthy Python 3.11 runtime (the script prefers `uv`; `LUMEN_PYTHON` can select another interpreter).
 - Use `bun` for everything (bun.lock is the lockfile); do not use npm/yarn.
-- No CI exists in this repo — verification is local, using the commands below.
+- GitHub CI runs the verification and packaging gates on Windows; run the commands below locally before handing off changes.
 
 ## Commands
 

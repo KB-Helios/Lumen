@@ -9,6 +9,16 @@ pub struct NativeStop {
     thread_id: u32,
 }
 impl NativeStop {
+    #[cfg(test)]
+    /// Creates an unavailable Stop handle for tests without acquiring the global shortcut.
+    pub(super) fn unregistered_fixture() -> Self {
+        Self {
+            available: Arc::new(AtomicBool::new(false)),
+            #[cfg(windows)]
+            thread_id: 0,
+        }
+    }
+
     pub fn register(callback: impl Fn() + Send + 'static) -> Self {
         let available = Arc::new(AtomicBool::new(false));
         #[cfg(windows)]

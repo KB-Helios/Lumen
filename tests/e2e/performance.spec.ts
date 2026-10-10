@@ -206,7 +206,7 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
   expect(rapidSelectionMetrics.browserLongTasks).toHaveLength(0);
 });
 
-test('hover, idle work, animation count, and browser heap remain bounded', async ({page, context}) => {
+test('hover, idle work, animation count, and browser heap remain bounded', async ({page, context}, testInfo) => {
   await page.setViewportSize({width: 800, height: 540});
   await page.goto('/?gallery=1&scenario=expanded-results&capture=1&theme=reduced-motion');
   const row = page.getByRole('row').first();
@@ -223,6 +223,19 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
   const hoverSynchronousDispatch = hoverSamples.map((sample) => sample.synchronousDispatchMs);
   const hoverMetrics = await readMetrics(page);
   const hoverFrameBudget = Math.max(percentile(hoverNominalFrameIntervals, 0.95), 1000 / 240);
+  const hoverEvidence = {
+    browserVersion: page.context().browser()?.version(),
+    responseP95Ms: percentile(hoverToPaintSamples, 0.95),
+    frameBudgetMs: hoverFrameBudget,
+    readySamples: hoverSamples.filter((sample) => sample.ready).length,
+    callbackOffsetGrowthP95Ms: percentile(hoverSamples.map((sample) =>
+      sample.endCallbackOffsetMs - sample.startCallbackOffsetMs), 0.95),
+    samples: hoverSamples,
+  };
+  await testInfo.attach('hover-timing-samples', {
+    body: JSON.stringify(hoverEvidence, null, 2), contentType: 'application/json',
+  });
+  console.info('hover-performance', JSON.stringify({...hoverEvidence, samples: undefined}));
   // Use the same independent nominal cadence budget as the evidence profiler.
   // Readiness additionally checks state and the intended color.
   expect(hoverSamples.filter((sample) => !sample.ready)).toEqual([]);
