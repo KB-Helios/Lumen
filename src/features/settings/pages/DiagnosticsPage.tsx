@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {WindowsAiDiagnostics} from '../../windows-ai/WindowsAiControls';
 import {ImprovementDiagnostics} from '../../improvement/ImprovementControls';
 
@@ -33,10 +33,13 @@ export function DiagnosticsPage({
   const lastExport = useDiagnosticsStore((state) => state.lastExport);
   const refresh = useDiagnosticsStore((state) => state.refresh);
   const sampleRefreshRate = useDiagnosticsStore((state) => state.sampleRefreshRate);
+  const cancelRefreshRate = useDiagnosticsStore((state) => state.cancelRefreshRate);
   const prepareExport = useDiagnosticsStore((state) => state.prepareExport);
   const [native, setNative] = useState<NativeDiagnostics>();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => cancelRefreshRate, [cancelRefreshRate]);
 
   const refreshAll = async () => {
     refresh();
@@ -80,11 +83,11 @@ export function DiagnosticsPage({
         <DiagnosticItem label="Tauri">{snapshot.tauriVersion}</DiagnosticItem>
         <DiagnosticItem label="Monitor">{snapshot.monitor}</DiagnosticItem>
         <DiagnosticItem label="DPI scale">{Math.round(snapshot.dpiScale * 100)}%</DiagnosticItem>
-        <DiagnosticItem label="Refresh estimate">{snapshot.refreshRateHz} Hz</DiagnosticItem>
+        <DiagnosticItem label="Refresh estimate">{snapshot.refreshRateHz === null ? 'Not measured' : `${snapshot.refreshRateHz} Hz`}</DiagnosticItem>
       </SettingSection>
       <SettingSection title="Rendering and activity">
         <DiagnosticItem label="Active animations">{snapshot.activeAnimations}</DiagnosticItem>
-        <DiagnosticItem label="React commit">{snapshot.reactCommitMs.toFixed(2)} ms</DiagnosticItem>
+        <DiagnosticItem label="React commit">{snapshot.reactCommitMs === null ? 'Not measured' : `${snapshot.reactCommitMs.toFixed(2)} ms`}</DiagnosticItem>
         <DiagnosticItem label="Activity">{snapshot.activity}</DiagnosticItem>
         <DiagnosticItem label="AgentGateway">{snapshot.gateway}</DiagnosticItem>
         <DiagnosticItem label="Provider routes">{snapshot.providerRoutes.join('; ') || 'No routes'}</DiagnosticItem>

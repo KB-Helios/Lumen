@@ -6,6 +6,9 @@ import {activityPresentations} from '../activity/activity.types';
 import {useGatewayStore} from '../gateway/gateway.store';
 import {createDiagnosticsExport, type DiagnosticsExport, type DiagnosticsSnapshot} from './diagnostics.types';
 import {readDiagnosticMetrics, resetDiagnosticMetrics} from './diagnostics.metrics';
+import {sampleFrameCadence} from './diagnostics.refresh.mjs';
+
+let refreshController: AbortController | undefined;
 
 function webViewVersion() {
   const edge = typeof navigator === 'undefined' ? null : navigator.userAgent.match(/Edg\/([\d.]+)/);
@@ -23,7 +26,7 @@ function activeAnimationCount() {
     : 0;
 }
 
-function buildSnapshot(refreshRateHz = 60): DiagnosticsSnapshot {
+function buildSnapshot(refreshRateHz: number | null = null): DiagnosticsSnapshot {
   const activity = useActivityStore.getState();
   const gateway = useGatewayStore.getState();
   return {
@@ -46,7 +49,8 @@ interface DiagnosticsState {
   snapshot: DiagnosticsSnapshot;
   lastExport: DiagnosticsExport | null;
   refresh(): void;
-  sampleRefreshRate(): Promise<number>;
+  sampleRefreshRate(): Promise<number | null>;
+  cancelRefreshRate(): void;
   prepareExport(native?: unknown): DiagnosticsExport;
   setOverlay(open: boolean): void;
   toggleOverlay(): void;
@@ -62,23 +66,19 @@ export const useDiagnosticsStore = create<DiagnosticsState>()(
     lastExport: null,
     refresh: () => set({snapshot: buildSnapshot(get().snapshot.refreshRateHz)}),
     sampleRefreshRate: async () => {
-      if (typeof requestAnimationFrame !== 'function') return get().snapshot.refreshRateHz;
-      const samples: number[] = [];
-      let previous = performance.now();
-      await new Promise<void>((resolve) => {
-        const sample = (now: number) => {
-          samples.push(now - previous);
-          previous = now;
-          if (samples.length >= 24) resolve();
-          else requestAnimationFrame(sample);
-        };
-        requestAnimationFrame(sample);
-      });
-      const useful = samples.filter((sample) => sample > 0).sort((a, b) => a - b);
-      const median = useful[Math.floor(useful.length / 2)] ?? 16.67;
-      const refreshRateHz = Math.max(30, Math.min(360, Math.round(1000 / median)));
+      refreshController?.abort();
+      const controller = new AbortController();
+      refreshController = controller;
+      const {medianMs} = await sampleFrameCadence({signal: controller.signal});
+      if (refreshController === controller) refreshController = undefined;
+      if (controller.signal.aborted || medianMs === null) return null;
+      const refreshRateHz = Math.round(1000 / medianMs);
       set({snapshot: buildSnapshot(refreshRateHz)});
       return refreshRateHz;
+    },
+    cancelRefreshRate: () => {
+      refreshController?.abort();
+      refreshController = undefined;
     },
     prepareExport: (native) => {
       const payload = createDiagnosticsExport(native === undefined
@@ -93,6 +93,7 @@ export const useDiagnosticsStore = create<DiagnosticsState>()(
     },
     toggleOverlay: () => get().setOverlay(!get().overlayOpen),
     reset: () => {
+      get().cancelRefreshRate();
       resetDiagnosticMetrics();
       set({overlayOpen: false, snapshot: buildSnapshot(), lastExport: null});
     },

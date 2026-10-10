@@ -36,6 +36,22 @@ afterEach(() => {
 });
 
 describe('diagnostics privacy', () => {
+  it('cancels an in-progress refresh measurement when the Diagnostics page unmounts', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const view = renderPage(<DiagnosticsPage />);
+    const measurement = useDiagnosticsStore.getState().sampleRefreshRate();
+    view.unmount();
+    expect(await measurement).toBeNull();
+    for (const callback of frames.splice(0)) callback(100);
+    expect(frames).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
   it('redacts paths and provider secrets from diagnostic exports', () => {
     const result = sanitizeDiagnostics({
       root: 'C:\\Users\\Kevin\\Secret',

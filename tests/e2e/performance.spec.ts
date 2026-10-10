@@ -1,6 +1,7 @@
 import {expect, test, type Page} from '@playwright/test';
 
 import {sampleHover} from '../../scripts/lib/hover-sample.mjs';
+import {sampleFrameCadence} from '../../src/features/diagnostics/diagnostics.refresh.mjs';
 
 const frameSchedulingToleranceMs = 2;
 
@@ -35,7 +36,7 @@ interface DiagnosticsMetrics {
 
 function percentile(values: readonly number[], quantile: number) {
   const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * quantile))] ?? 0;
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * quantile))] ?? Number.NaN;
 }
 
 async function resetMetrics(page: Page) {
@@ -100,24 +101,10 @@ async function hideAndReshowLauncher(page: Page, search: ReturnType<Page['getByR
 }
 
 async function measureFrameCadence(page: Page, sampleCount = 60) {
-  return page.evaluate(async (count) => {
-    const intervals: number[] = [];
-    let previous = performance.now();
-    await new Promise<void>((resolve) => {
-      const sample = (now: number) => {
-        intervals.push(now - previous);
-        previous = now;
-        if (intervals.length >= count) resolve();
-        else requestAnimationFrame(sample);
-      };
-      requestAnimationFrame(sample);
-    });
-    intervals.sort((left, right) => left - right);
-    return {
-      medianMs: intervals[Math.floor(intervals.length / 2)] ?? 16.67,
-      p95Ms: intervals[Math.floor(intervals.length * 0.95)] ?? 16.67,
-    };
-  }, sampleCount);
+  const cadence = await page.evaluate(sampleFrameCadence, {sampleCount});
+  expect(cadence.intervals).toHaveLength(sampleCount);
+  expect(cadence.p95Ms).not.toBeNull();
+  return cadence;
 }
 
 test('warm launcher and ordinary interactions stay inside browser budgets', async ({page}) => {
@@ -148,19 +135,37 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
   for (let index = 1; index <= 30; index += 1) {
     await search.fill(`report-${index}`);
     await waitForSamples(page, 'input-response', index);
+    await waitForSamples(page, 'input-next-frame', index);
     await page.waitForTimeout(40);
   }
+  const inputMetrics = await readMetrics(page);
   await search.fill('report');
   await expect(page.getByRole('grid', {name: 'Search results'})).toBeVisible();
   const frameCadence = await measureFrameCadence(page);
-  const inputMetrics = await readMetrics(page);
-  const observedFrameBudget = Math.max(frameCadence.p95Ms, 1000 / 240) +
+  const observedFrameBudget = Math.max(frameCadence.p95Ms!, 1000 / 240) +
     frameSchedulingToleranceMs;
   const inputP95 = percentile(
     inputMetrics.timings.filter((sample) => sample.name === 'input-response').map((sample) => sample.durationMs),
     0.95,
   );
   expect(inputP95).toBeLessThan(observedFrameBudget);
+  const inputFrameSamples = inputMetrics.timings.filter((sample) => sample.name === 'input-next-frame');
+  expect(inputFrameSamples).toHaveLength(30);
+  expect(percentile(inputFrameSamples.map((sample) => sample.durationMs), 0.95)).toBeLessThan(observedFrameBudget);
+  await resetMetrics(page);
+  const ordinaryQueries = ['report', 'design', 'project', ''];
+  const ordinaryMetrics: DiagnosticsMetrics = {timings: [], reactCommits: [], browserLongTasks: []};
+  for (let index = 0; index < 24; index += 1) {
+    await resetMetrics(page);
+    await search.fill(ordinaryQueries[index % ordinaryQueries.length]);
+    await page.waitForTimeout(250);
+    const queryMetrics = await readMetrics(page);
+    ordinaryMetrics.reactCommits.push(...queryMetrics.reactCommits);
+    ordinaryMetrics.browserLongTasks.push(...queryMetrics.browserLongTasks);
+  }
+  const ordinaryReactCommits = ordinaryMetrics.reactCommits;
+  expect(ordinaryReactCommits.length).toBeGreaterThan(0);
+  expect(ordinaryMetrics.browserLongTasks).toHaveLength(0);
 
   await resetMetrics(page);
   const rapidBurst = await dispatchRapidInputBurst(search);
@@ -191,7 +196,7 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
     selectionMetrics.timings.filter((sample) => sample.name === 'selection-paint').map((sample) => sample.durationMs),
     0.95,
   );
-  const ordinaryCommitP95 = percentile(selectionMetrics.reactCommits, 0.95);
+  const ordinaryCommitP95 = percentile(ordinaryReactCommits, 0.95);
   expect(selectionP95).toBeLessThan(observedFrameBudget);
   expect(ordinaryCommitP95).toBeLessThan(3);
   expect(selectionMetrics.browserLongTasks).toHaveLength(0);
@@ -220,6 +225,7 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
   await page.waitForTimeout(100);
   const hoverToPaintSamples = hoverSamples.map((sample) => sample.responseMs);
   const hoverNominalFrameIntervals = hoverSamples.map((sample) => sample.nominalFrameIntervalMs);
+  const hoverFrameIntervals = hoverSamples.map((sample) => sample.callbackIntervalMs);
   const hoverSynchronousDispatch = hoverSamples.map((sample) => sample.synchronousDispatchMs);
   const hoverMetrics = await readMetrics(page);
   const hoverFrameBudget = Math.max(percentile(hoverNominalFrameIntervals, 0.95), 1000 / 240);
@@ -230,6 +236,7 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
     readySamples: hoverSamples.filter((sample) => sample.ready).length,
     callbackOffsetGrowthP95Ms: percentile(hoverSamples.map((sample) =>
       sample.endCallbackOffsetMs - sample.startCallbackOffsetMs), 0.95),
+    callbackIntervalP95Ms: percentile(hoverFrameIntervals, 0.95),
     samples: hoverSamples,
   };
   await testInfo.attach('hover-timing-samples', {

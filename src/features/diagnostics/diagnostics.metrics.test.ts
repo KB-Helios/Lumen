@@ -1,6 +1,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {
+  captureReactCommit,
   measureAfterPaint,
   readDiagnosticMetrics,
   resetDiagnosticMetrics,
@@ -10,6 +11,13 @@ import {
 afterEach(() => {
   resetDiagnosticMetrics();
   vi.unstubAllGlobals();
+});
+
+it('distinguishes unavailable React measurements from a measured zero-duration commit', () => {
+  expect(readDiagnosticMetrics().reactCommitMs).toBeNull();
+  captureReactCommit(0);
+  expect(readDiagnosticMetrics().reactCommitMs).toBe(0);
+  expect(readDiagnosticMetrics().reactCommits).toEqual([0]);
 });
 
 describe('measureAfterPaint', () => {
