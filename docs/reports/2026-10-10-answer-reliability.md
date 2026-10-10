@@ -1,6 +1,6 @@
 # AI answer reliability verification
 
-Date: 2026-10-10. Base: `28925d37e127f20edabd7b1a854c3b8a7ad4fb18`, latest `main` after merged PR #22. The latest base refresh still resolved to this commit. Scope is the existing typed answer pipeline, its local preparation/settings ownership, and the six verified native CI regressions. No new framework, provider abstraction, dependency version, cloud grant, or product capability was added. Regenerated artifacts identify their parent HEAD, `f02682c`; their timestamps record verification of the follow-up working tree before its commit.
+Date: 2026-10-10. Base: `28925d37e127f20edabd7b1a854c3b8a7ad4fb18`, latest `main` after merged PR #22. The latest base refresh still resolved to this commit. Scope is the existing typed answer pipeline, its local preparation/settings ownership, and the six verified native CI regressions. No new framework, provider abstraction, dependency version, cloud grant, or product capability was added. UI/profile artifacts identify their parent HEAD, `f02682c`; their timestamps record verification of the follow-up working tree before its commit. Native evidence was regenerated after a filename-only export correction; production application sources remain those verified at `b6e21cd`.
 
 ## Confirmed problems and corrections
 
@@ -34,16 +34,16 @@ The native tests use the production loopback HTTP request, parser, deadlines, at
 
 `bun run test:answer-native` runs a compiled test-only native process and installed Microsoft Edge. Its private authenticated temporary bridge substitutes command transport and forwards the native events through the real JavaScript Tauri Channel into the production `TauriAnswerService`, controller and panel. Literal rendered assertions prove the successful local attempt is the entire final answer, obsolete cloud usage/output is absent, citations survive, and Stop/Retry and rapid replacement behave correctly. A 1,000-token burst, delayed 16 KiB channel delivery with an early command acknowledgement, and 35 sequential HTTP failures run in that same process. `bun run test:answer-bridge` independently checks completion matching, abandoned-socket cancellation and clean/bounded native shutdown. Both gates are part of Windows CI. Success evidence is published only after native EOF, final assertions and a validated zero exit.
 
-The final native binary run passed in Microsoft Edge 155.0.4283.45 at `2026-10-10T04:31:06.519Z`. [answer-native-integration.json](../../artifacts/performance/answer-native-integration.json) records the timestamp, per-request token/cancellation timings, React commits, render time, channel callback time and six post-warmup working-set samples. First-token timing includes the first attempt in the fallback case; it is not live model inference latency.
+The final native binary run passed in Microsoft Edge 155.0.4283.45 at `2026-10-10T05:40:02.808Z`. [answer-native-integration.json](../../artifacts/performance/answer-native-integration.json) records the timestamp, per-request token/cancellation timings, React commits, render time, channel callback time and six post-warmup working-set samples. It records only the binary filename, avoiding disclosure of a host/account directory. First-token timing includes the first attempt in the fallback case; it is not live model inference latency.
 
 | Final native/rendered fixture | Native first token | First rendered token | React commits | Total React render / channel callback time |
 | --- | ---: | ---: | ---: | ---: |
-| Partial cloud failure → local completion | 24.21 ms | 43.20 ms | 7 | 17.70 / 4.40 ms |
-| Successful rapid replacement | 6.62 ms | 18.50 ms | 5 | 5.00 / 0.40 ms |
-| 1,000-token burst (1,003 native events) | 13.00 ms | 26.80 ms | 11 | 11.70 / 7.20 ms |
-| Delayed large channel message | 10.44 ms | 54.80 ms | 4 | 4.10 / 0.70 ms |
+| Partial cloud failure → local completion | 17.00 ms | 35.20 ms | 7 | 15.60 / 4.70 ms |
+| Successful rapid replacement | 5.36 ms | 20.70 ms | 4 | 4.70 / 0.60 ms |
+| 1,000-token burst (1,003 native events) | 12.17 ms | 23.90 ms | 10 | 14.10 / 6.80 ms |
+| Delayed large channel message | 11.90 ms | 56.80 ms | 4 | 4.80 / 1.10 ms |
 
-Native Stop cancellation measured **2.40 ms** and replacement cancellation **4.50 ms**. Rendered Stop, including the browser click and phase observation, measured **43.03 ms**; all unchanged 250 ms bounds passed. Across 35 failures, every request drained before the next submission. Native working set ranged from 15,286,272 to 15,495,168 bytes across six post-warmup samples, a **208,896-byte** first-to-last increase. Native shutdown completed with exit code zero and no signal in **8.82 ms**.
+Native Stop cancellation measured **6.73 ms** and replacement cancellation **8.05 ms**. Rendered Stop, including the browser click and phase observation, measured **52.93 ms**; all unchanged 250 ms bounds passed. Across 35 failures, every request drained before the next submission. Native working set ranged from 15,462,400 to 15,572,992 bytes across six post-warmup samples, a **110,592-byte** first-to-last increase. Native shutdown completed with exit code zero and no signal in **9.10 ms**. These are the regenerated run's observations; a filename-only metadata change does not establish a pipeline performance change.
 
 | Same-turn jsdom burst probe | Before | After |
 | --- | ---: | ---: |

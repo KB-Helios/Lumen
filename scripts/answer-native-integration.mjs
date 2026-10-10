@@ -53,10 +53,12 @@ async function run(url) {
     const page = await browser.newPage({viewport: {width: 900, height: 600}});
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    report = {recordedAt: new Date().toISOString(), browserVersion: browser.version(), evidence: 'loopback-native-transport-installed-edge', binary, nativeTest,
+    report = {recordedAt: new Date().toISOString(), browserVersion: browser.version(), evidence: 'loopback-native-transport-installed-edge', binary: path.basename(binary), nativeTest,
       packagedWebViewVerified: false, liveProviderVerified: false,
       obsoleteUsagePrecondition: 'test-only metadata injection; production transport emits completed usage',
       scenarios: {}, nativeMemory: {samplesBytes: []}};
+    assert.equal(path.isAbsolute(report.binary), false, 'Published answer evidence must not expose absolute host paths.');
+    assert.doesNotMatch(report.binary, /[/\\]/, 'Published answer evidence must contain only the binary filename.');
     const state = () => page.evaluate(() => window.__LUMEN_ANSWER_HARNESS__.state);
     const metrics = () => page.evaluate(() => ({...window.__LUMEN_ANSWER_HARNESS__.metrics, snapshots: undefined}));
     const submit = async (query, mode = 'auto') => {
