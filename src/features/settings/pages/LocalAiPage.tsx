@@ -58,6 +58,7 @@ function formatDiskSize(bytes: number) {
   return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
 }
 
+/** Displays local runtime health and provisioning, with fenced preference application and Retry guidance. */
 export function LocalAiPage({
   model,
   provisioningService = defaultProvisioningService,
@@ -114,6 +115,7 @@ export function LocalAiPage({
     void refreshNative();
     return () => { healthRevision.current += 1; };
   }, [refreshNative]);
+  /** Applies current runtime preferences and publishes a result only while this mounted caller still owns it. */
   const applyRuntimeMode = async (keepWarm: boolean) => {
     const revision = ++runtimeRevision.current;
     const application = useSettingsStore.getState().beginLocalRuntimeApplication(runtimeMode, keepWarm);

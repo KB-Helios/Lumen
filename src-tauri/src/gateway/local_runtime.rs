@@ -152,6 +152,7 @@ fn lemonade_ready() -> bool {
     .is_ok()
 }
 
+/// Returns cancellation before timeout when both interrupt local preparation.
 fn preparation_interrupted(
     cancellation: &CancellationToken,
     deadline: tokio::time::Instant,
@@ -165,6 +166,7 @@ fn preparation_interrupted(
     }
 }
 
+/// Attempts a 150-ms TCP readiness probe within the shared deadline and cancellation token.
 async fn answer_ready(
     address: SocketAddr,
     cancellation: &CancellationToken,
@@ -178,6 +180,7 @@ async fn answer_ready(
     }
 }
 
+/// Reads one version-output pipe, rejecting more than 16 KiB or any read failure.
 async fn bounded_version_output(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, &'static str> {
     let mut bytes = Vec::new();
     reader
@@ -196,6 +199,7 @@ struct ProbeJob(isize);
 
 #[cfg(windows)]
 impl Drop for ProbeJob {
+    /// Closes the job handle, terminating any processes still contained by this probe.
     fn drop(&mut self) {
         unsafe {
             let _ = windows::Win32::Foundation::CloseHandle(windows::Win32::Foundation::HANDLE(
@@ -206,6 +210,7 @@ impl Drop for ProbeJob {
 }
 
 #[cfg(windows)]
+/// Contains the probe in a Windows Job Object that kills its processes when closed.
 fn answer_probe_job(child: &tokio::process::Child) -> Result<ProbeJob, &'static str> {
     use windows::Win32::{
         Foundation::{CloseHandle, HANDLE},
@@ -236,6 +241,8 @@ fn answer_probe_job(child: &tokio::process::Child) -> Result<ProbeJob, &'static 
     }
 }
 
+/// Runs an owned version probe with bounded pipes and a five-second maximum wait.
+/// Cancellation or failure kills and reaps the child before returning a safe error code.
 async fn answer_version(
     mut command: tokio::process::Command,
     cancellation: &CancellationToken,
@@ -306,6 +313,7 @@ fn profile_for(flm: bool, accelerator: &str) -> &'static str {
 }
 
 impl LocalRuntimeSupervisor {
+    /// Checks the registered child for exit, returning an error if state or process inspection fails.
     fn answer_process_alive(&self) -> Result<bool, &'static str> {
         Ok(self
             .process
@@ -318,6 +326,8 @@ impl LocalRuntimeSupervisor {
             .is_some_and(|status| status.is_none()))
     }
 
+    /// Serializes local answer startup and verifies readiness within the request deadline.
+    /// New children remain owned by this future until adoption; interruption preserves existing children.
     pub(super) async fn prepare_answer(
         &self,
         cancellation: &CancellationToken,
@@ -470,6 +480,7 @@ impl LocalRuntimeSupervisor {
         }
     }
 
+    /// Discovers provisioned and system runtime paths without starting a local process.
     pub fn detect(app_data: Option<PathBuf>) -> Self {
         let system_root = env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
@@ -608,6 +619,7 @@ impl LocalRuntimeSupervisor {
         }
     }
 
+    /// Starts or reuses a healthy runtime, rejecting management startup during answer preparation.
     pub fn start(&self) -> Result<(), String> {
         // Synchronous management callers must never block a Tokio worker on answer startup.
         let _startup = self.answer_startup.try_lock().map_err(|_| {
@@ -668,6 +680,7 @@ impl LocalRuntimeSupervisor {
         Ok(())
     }
 
+    /// Applies local, auto, or cloud warm-state policy under shared startup admission.
     pub fn apply_mode(&self, mode: &str, keep_warm: bool) -> Result<(), String> {
         match mode {
             "local" => self.start(),

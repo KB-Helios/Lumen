@@ -20,6 +20,7 @@ struct Provider {
 }
 
 impl Provider {
+    /// Starts a cancellable loopback fixture that validates one request before running the handler.
     fn serve(handler: impl FnOnce(std::net::TcpStream) + Send + 'static) -> Self {
         let directory = std::env::temp_dir().join(format!("lumen-answer-{}", uuid::Uuid::new_v4()));
         let supervisor = GatewaySupervisor::new("unused".into(), &directory, &[]).unwrap();
@@ -116,6 +117,7 @@ impl Provider {
 }
 
 impl Drop for Provider {
+    /// Stops request admission, joins the fixture worker, and removes its temporary configuration.
     fn drop(&mut self) {
         self.stopped.cancel();
         let joined = self.thread.take().map(|thread| thread.join());
@@ -126,6 +128,7 @@ impl Drop for Provider {
     }
 }
 
+/// Captures serialized Tauri answer events in a shared vector for fixture assertions.
 fn channel() -> (Channel<AnswerEvent>, Arc<Mutex<Vec<serde_json::Value>>>) {
     let events = Arc::new(Mutex::new(Vec::new()));
     let output = Arc::clone(&events);
@@ -142,6 +145,7 @@ fn channel() -> (Channel<AnswerEvent>, Arc<Mutex<Vec<serde_json::Value>>>) {
     (channel, events)
 }
 
+/// Returns synthetic local attribution for tests that bypass registry dispatch validation.
 fn local_route() -> RouteAttempt {
     RouteAttempt {
         alias: "lumen.answer.local".into(),
@@ -151,6 +155,7 @@ fn local_route() -> RouteAttempt {
     }
 }
 
+/// Serves a fixed SSE body and returns the attempt result plus captured channel events.
 fn stream(body: &'static str) -> (Result<Option<Usage>, RouteFailure>, Vec<serde_json::Value>) {
     let provider = Provider::serve(move |mut socket| {
         write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
@@ -167,6 +172,7 @@ fn stream(body: &'static str) -> (Result<Option<Usage>, RouteFailure>, Vec<serde
 }
 
 #[test]
+/// Checks that CRLF and multiline data preserve Unicode text and emit one completion.
 fn accepts_crlf_multiline_data_and_optional_field_space() {
     let (result, events) = stream(
         "data:{\"type\":\"response.output_text.delta\",\r\ndata: \"delta\":\"Hello 🌍\"}\r\n\r\ndata:{\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\r\n\r\n",
@@ -186,6 +192,7 @@ fn accepts_crlf_multiline_data_and_optional_field_space() {
 }
 
 #[test]
+/// Keeps headers stalled to prove Stop returns within 250 ms independently of server EOF.
 fn cancellation_before_headers_drops_the_owned_request_promptly() {
     let (arrived_tx, arrived_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
@@ -222,6 +229,7 @@ fn cancellation_before_headers_drops_the_owned_request_promptly() {
 }
 
 #[test]
+/// Keeps the chunked socket open after completion to verify immediate successful return.
 fn valid_completion_does_not_wait_for_the_provider_to_close() {
     let provider = Provider::serve(move |mut socket| {
         socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").unwrap();
@@ -249,6 +257,7 @@ fn valid_completion_does_not_wait_for_the_provider_to_close() {
 }
 
 #[test]
+/// Places malformed JSON before a completion to require failure of the entire attempt.
 fn malformed_json_cannot_be_hidden_by_a_later_completion() {
     let (result, _) = stream("data: {not-json}\n\ndata: {\"type\":\"response.completed\"}\n\n");
     assert!(
@@ -258,6 +267,7 @@ fn malformed_json_cannot_be_hidden_by_a_later_completion() {
 }
 
 #[test]
+/// Checks that an invalid explicit type cannot fall back to the SSE event name.
 fn malformed_type_cannot_be_reinterpreted_as_a_valid_named_completion() {
     let (result, events) = stream(
         "event: response.completed\ndata: {\"type\":17,\"response\":{\"status\":\"completed\"}}\n\n",
@@ -270,6 +280,7 @@ fn malformed_type_cannot_be_reinterpreted_as_a_valid_named_completion() {
 }
 
 #[test]
+/// Rejects an incomplete response status even when the event is named response.completed.
 fn incomplete_provider_status_is_not_success() {
     let (result, events) = stream(
         "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"incomplete\"}}\n\n",
@@ -279,6 +290,7 @@ fn incomplete_provider_status_is_not_success() {
 }
 
 #[test]
+/// Checks that synthetic credentials and private source text cannot enter the returned error.
 fn provider_error_details_never_escape_the_native_boundary() {
     let (result, _) = stream(
         "data: {\"type\":\"error\",\"error\":{\"message\":\"credential sk-fixture-secret; private source text\"}}\n\n",
@@ -292,6 +304,7 @@ fn provider_error_details_never_escape_the_native_boundary() {
 }
 
 #[test]
+/// Sends an emoji one byte per HTTP chunk and checks exact reconstructed answer text.
 fn utf8_codepoint_fragmented_across_http_chunks_is_preserved() {
     let provider = Provider::serve(move |mut socket| {
         socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").unwrap();
@@ -328,6 +341,7 @@ fn utf8_codepoint_fragmented_across_http_chunks_is_preserved() {
 }
 
 #[test]
+/// Holds a 429 body open to verify header-only classification within 250 ms.
 fn rate_limit_headers_do_not_require_reading_a_stalled_error_body() {
     let provider = Provider::serve(move |mut socket| {
         socket
@@ -354,6 +368,7 @@ fn rate_limit_headers_do_not_require_reading_a_stalled_error_body() {
 }
 
 #[test]
+/// Checks that EOF after partial text fails without publishing a completed event.
 fn rejects_a_stream_that_ends_without_a_completion() {
     let (result, events) =
         stream("data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n");
@@ -362,6 +377,7 @@ fn rejects_a_stream_that_ends_without_a_completion() {
 }
 
 #[test]
+/// Exercises BOM, comments, bare CR separators, and data fields without a leading space.
 fn accepts_bom_comments_cr_lines_and_empty_optional_space() {
     let (result, events) = stream(
         "\u{feff}: keepalive\rdata:{\"type\":\"response.output_text.delta\",\"delta\":\"Hello 🌍\"}\r\rdata:{\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\r\r",
@@ -377,6 +393,7 @@ fn accepts_bom_comments_cr_lines_and_empty_optional_space() {
 }
 
 #[test]
+/// Sends a 70,000-byte delta to verify oversized frames cannot reach completion.
 fn unbounded_event_data_is_rejected_before_completion() {
     let body = format!(
         "data: {{\"type\":\"response.output_text.delta\",\"delta\":\"{}\"}}\n\ndata: {{\"type\":\"response.completed\",\"response\":{{\"status\":\"completed\"}}}}\n\n",
@@ -408,6 +425,7 @@ fn unbounded_event_data_is_rejected_before_completion() {
 }
 
 #[test]
+/// Injects an invalid byte into a delta and requires failure instead of lossy decoding.
 fn invalid_utf8_is_rejected_instead_of_replacing_provider_content() {
     let provider = Provider::serve(move |mut socket| {
         socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").unwrap();
@@ -433,6 +451,7 @@ fn invalid_utf8_is_rejected_instead_of_replacing_provider_content() {
 }
 
 #[test]
+/// Reuses a request ID and checks that old cleanup cannot remove or cancel the replacement.
 fn replacement_cleanup_does_not_cancel_the_new_owner() {
     let runtime = AnswerRuntime::default();
     let old = runtime.begin(7);
@@ -452,6 +471,7 @@ fn replacement_cleanup_does_not_cancel_the_new_owner() {
 }
 
 #[test]
+/// Issues Stop before registration and checks the later owner starts cancelled.
 fn cancellation_before_native_admission_is_preserved() {
     let runtime = AnswerRuntime::default();
     runtime.cancel(91);
@@ -468,6 +488,7 @@ fn cancellation_before_native_admission_is_preserved() {
 }
 
 #[test]
+/// Checks that fixture teardown interrupts accept without requiring a client connection.
 fn provider_fixture_drop_without_a_client_is_prompt() {
     let provider = Provider::serve(|_| {});
     let (base, bearer) = provider.supervisor.endpoint(false);
@@ -493,6 +514,7 @@ fn provider_fixture_drop_without_a_client_is_prompt() {
 }
 
 #[test]
+/// Connects without a full request to verify teardown can interrupt request admission.
 fn provider_fixture_drop_interrupts_an_accepted_incomplete_request() {
     let provider = Provider::serve(|_| {});
     let directory = provider.directory.clone();
@@ -530,6 +552,7 @@ fn provider_fixture_drop_interrupts_an_accepted_incomplete_request() {
 }
 
 #[test]
+/// Floods duplicate early Stops and checks eviction plus consumption of the latest pending ID.
 fn remembered_pre_admission_cancellations_are_bounded_and_deduplicated() {
     let runtime = AnswerRuntime::default();
     for id in 0..600 {
@@ -562,6 +585,7 @@ fn remembered_pre_admission_cancellations_are_bounded_and_deduplicated() {
 }
 
 #[test]
+/// Checks that shutdown cancels both current owners and owners registered afterward.
 fn shutdown_cancels_owned_work_and_rejects_new_admission() {
     let runtime = AnswerRuntime::default();
     let active = runtime.begin(1);
@@ -575,6 +599,7 @@ fn shutdown_cancels_owned_work_and_rejects_new_admission() {
 }
 
 #[test]
+/// Revokes consent and changes route configuration to verify dispatch rejects stale authority.
 fn dispatch_rechecks_current_consent_and_attribution_after_preparation() {
     let configured = ProviderRegistry::in_memory().routes();
     let attempts = routes(RuntimeMode::Auto, true, true, &configured).unwrap();
@@ -604,6 +629,7 @@ fn dispatch_rechecks_current_consent_and_attribution_after_preparation() {
 }
 
 #[test]
+/// Cancels as cloud fails and checks that the local attempt is never started.
 fn cancellation_at_failure_boundary_does_not_enter_local_fallback() {
     let routes = [
         RouteAttempt {
@@ -642,6 +668,7 @@ fn cancellation_at_failure_boundary_does_not_enter_local_fallback() {
 }
 
 #[test]
+/// Uses a permanently pending attempt to verify outer cancellation releases preparation.
 fn attempt_preparation_is_cancelled_even_when_the_attempt_is_not_cooperative() {
     let (channel, _) = channel();
     let token = CancellationToken::new();
@@ -672,6 +699,7 @@ fn attempt_preparation_is_cancelled_even_when_the_attempt_is_not_cooperative() {
 }
 
 #[test]
+/// Stalls before and after headers to distinguish header and idle timeout codes.
 fn bounded_header_and_idle_waits_fail_without_socket_eof() {
     for (headers, expected) in [(false, "header_timeout"), (true, "stream_timeout")] {
         let provider = Provider::serve(move |mut socket| {
@@ -706,6 +734,7 @@ fn bounded_header_and_idle_waits_fail_without_socket_eof() {
 }
 
 #[test]
+/// Checks one usage event with safe counters and omission of a private reset-header value.
 fn usage_is_parsed_once_from_valid_completion_and_headers_are_sanitized() {
     let provider = Provider::serve(move |mut socket| {
         let body = "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":12,\"output_tokens\":3}}}\n\n";
@@ -742,6 +771,7 @@ fn usage_is_parsed_once_from_valid_completion_and_headers_are_sanitized() {
 }
 
 #[test]
+/// Exceeds each cumulative stream limit using small frames and requires failure before completion.
 fn cumulative_output_event_and_wire_limits_bound_small_frames() {
     let output = format!(
         "data: {}\n\n",
@@ -778,6 +808,7 @@ fn cumulative_output_event_and_wire_limits_bound_small_frames() {
 }
 
 #[test]
+/// Uses a shorter request deadline than the header bound to verify total-timeout precedence.
 fn the_total_deadline_bounds_a_live_socket_across_transport_waits() {
     let provider = Provider::serve(move |_socket| std::thread::sleep(Duration::from_millis(400)));
     let (channel, _) = channel();
@@ -796,6 +827,7 @@ fn the_total_deadline_bounds_a_live_socket_across_transport_waits() {
 }
 
 #[test]
+/// Cancels on the first delta and rejects later events already present in the same body.
 fn cancellation_during_a_chunk_does_not_emit_more_tokens_or_complete() {
     let body = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"first\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"obsolete\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n";
     let provider = Provider::serve(move |mut socket| {
@@ -835,6 +867,7 @@ fn cancellation_during_a_chunk_does_not_emit_more_tokens_or_complete() {
     );
 }
 
+/// Flushes one JSON record to shared stdout, separating it from any libtest prefix.
 fn bridge_write(output: &Arc<Mutex<std::io::Stdout>>, value: &serde_json::Value) {
     let mut output = output.lock().unwrap();
     // libtest may have printed its test-name prefix without a newline.
@@ -842,6 +875,7 @@ fn bridge_write(output: &Arc<Mutex<std::io::Stdout>>, value: &serde_json::Value)
     output.flush().unwrap();
 }
 
+/// Serves deterministic deltas with optional burst, failure, or cancellation-bounded stall behavior.
 fn fixture_provider(
     text: String,
     failed: bool,
@@ -895,6 +929,8 @@ enum BridgeCommand {
 
 #[test]
 #[ignore = "interactive owned loopback transport fixture; driven by test:answer-native"]
+/// Runs the opt-in stdin/stdout fixture through real answer transport and serialized channels.
+/// EOF cancels all owners and joins their tasks before the test can exit successfully.
 fn native_bridge() {
     assert_eq!(std::env::var("LUMEN_ANSWER_BRIDGE").as_deref(), Ok("1"));
     let runtime = Arc::new(AnswerRuntime::default());

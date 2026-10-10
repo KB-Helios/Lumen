@@ -150,6 +150,7 @@ export const useSettingsStore = create<SettingsState>()(
         const settings = await settingsPersistence.read();
         set({...settings, hydrated: true, persistenceStatus: 'ready'});
       },
+      /** Restores default settings and invalidates outstanding persistence, consent, and runtime applications. */
       reset: () => {
         writeRevision += 1;
         runtimeRevision += 1;
@@ -187,13 +188,14 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({ai: {...state.ai, ...patch}}));
         return persist();
       },
-      // App and Settings can apply the same preferences; only the latest owner publishes a result.
+      /** Claims result ownership for App or Settings, clears stale errors, and returns the new revision. */
       beginLocalRuntimeApplication: (mode, keepWarm) => {
         const revision = ++runtimeRevision;
         runtimeApplication = {revision, mode, keepWarm};
         set({localRuntimeError: null});
         return revision;
       },
+      /** Publishes a result only for the latest application whose preferences still match current settings. */
       finishLocalRuntimeApplication: (revision, error) => {
         const ai = get().ai;
         if (runtimeApplication?.revision === revision

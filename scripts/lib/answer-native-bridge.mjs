@@ -4,11 +4,12 @@ import {createInterface} from 'node:readline';
 
 const scenarios = new Set(['fallback', 'stall', 'retry', 'replacement-a', 'replacement-b', 'burst', 'failure', 'delivery-order']);
 
-// This listener exists only in the explicitly launched test process, never in Lumen.
+/** Starts a token-protected loopback bridge to the native test process; callers must close the returned bridge. */
 export async function createAnswerNativeBridge({stdin, stdout}) {
   const token = randomBytes(24).toString('hex');
   const active = new Map();
   const samples = [];
+  /** Writes one newline-delimited command to the owned native test process. */
   const send = (value) => stdin.write(`${JSON.stringify(value)}\n`);
   const lines = createInterface({input: stdout, crlfDelay: Infinity});
   lines.on('line', (line) => {
@@ -66,6 +67,7 @@ export async function createAnswerNativeBridge({stdin, stdout}) {
     active.set(payload.requestId, response);
     response.writeHead(200, {'content-type': 'application/x-ndjson', 'cache-control': 'no-store'});
     response.flushHeaders();
+    /** Cancels a disconnected request once by removing its active response before sending Stop. */
     const abandoned = () => {
       if (active.delete(payload.requestId)) send({command: 'cancel', requestId: payload.requestId});
     };
@@ -77,7 +79,9 @@ export async function createAnswerNativeBridge({stdin, stdout}) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   return {
     url: `http://127.0.0.1:${server.address().port}`, token, samples,
+    /** Reports requests still awaiting a matching native done record or disconnection. */
     get activeRequests() { return active.size; },
+    /** Cancels active requests and closes the reader, client connections, and HTTP listener. */
     async close() {
       for (const [requestId, response] of active) { send({command: 'cancel', requestId}); response.destroy(); }
       active.clear();

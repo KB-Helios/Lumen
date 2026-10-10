@@ -5,6 +5,7 @@ import {answerEventSchema, isTerminalAnswerEvent, maxAnswerEvents, maxAnswerQueu
 
 export class WindowsAiAnswerService implements AnswerService {
   constructor(private readonly runtime: AnswerService, private readonly windows: WindowsAiService, private readonly snapshot: () => WindowsAiSnapshot | null) {}
+  /** Selects the configured local engine or runtime route, bounds event delivery, and cancels unfinished local work on disposal. */
   async *stream(request: AnswerRequest, signal: AbortSignal): AsyncIterable<AnswerEvent> {
     if (signal.aborted) return;
     const snapshot = this.snapshot();
@@ -30,6 +31,7 @@ export class WindowsAiAnswerService implements AnswerService {
     let eventCount = 0;
     const encoder = new TextEncoder();
     const notify = () => { wake?.(); wake = undefined; };
+    /** Cancels this Windows AI session at most once and wakes the consumer. */
     const cancel = () => {
       if (!cancelled) {
         cancelled = true;
@@ -37,6 +39,7 @@ export class WindowsAiAnswerService implements AnswerService {
       }
       notify();
     };
+    /** Replaces pending output with a fixed terminal failure and cancels the local session. */
     const fail = () => {
       if (disposed || terminal || signal.aborted) return;
       terminal = true;
@@ -45,6 +48,7 @@ export class WindowsAiAnswerService implements AnswerService {
       queue.push({type: 'failed', code: 'windows-ai-failed', message: 'The local model could not answer. Check its availability in Local AI settings.'});
       cancel();
     };
+    /** Validates and bounds one queued event, ignoring callbacks after termination or disposal. */
     const push = (event: AnswerEvent) => {
       if (disposed || terminal || signal.aborted) return;
       const parsed = answerEventSchema.safeParse(event);

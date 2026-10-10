@@ -24,6 +24,7 @@ describe('answer engine routing', () => {
   });
 });
 
+/** Creates a ready Windows engine with manually driven events, completion, and cancellation spies. */
 function localHarness() {
   const snapshot = unsupportedWindowsAiSnapshot({...defaultWindowsAiPreferences, localEngine: 'windows'});
   snapshot.features[0] = {...snapshot.features[0]!, enabled: true, availability: 'ready'};

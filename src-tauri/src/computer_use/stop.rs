@@ -10,6 +10,7 @@ pub struct NativeStop {
 }
 impl NativeStop {
     #[cfg(test)]
+    /// Creates an unavailable Stop handle for tests without acquiring the global shortcut.
     pub(super) fn unregistered_fixture() -> Self {
         Self {
             available: Arc::new(AtomicBool::new(false)),

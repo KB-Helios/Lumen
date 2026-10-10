@@ -107,6 +107,7 @@ pub struct AnswerDelivery {
     event_count: u32,
 }
 
+/// Forwards serialized events and counts only successful destination sends.
 fn acknowledged_channel(
     destination: Channel<InvokeResponseBody>,
 ) -> (Channel<AnswerEvent>, Arc<AtomicU32>) {
@@ -141,6 +142,7 @@ struct ActiveAnswer<'a> {
 }
 
 impl Drop for ActiveAnswer<'_> {
+    /// Cancels this owner and removes its registration only if it has not been replaced.
     fn drop(&mut self) {
         let mut requests = self
             .runtime
@@ -159,11 +161,13 @@ impl Drop for ActiveAnswer<'_> {
 }
 
 impl AnswerRuntime {
+    /// Reports whether a registered answer still owns work, including cancellation cleanup.
     pub(crate) fn is_active(&self) -> bool {
         self.requests
             .lock()
             .is_ok_and(|requests| !requests.active.is_empty())
     }
+    /// Registers a new owner, cancelling any replaced owner and honoring an earlier Stop.
     fn begin(&self, request_id: u64) -> ActiveAnswer<'_> {
         let token = Arc::new(self.shutdown.child_token());
         let mut requests = self
@@ -191,6 +195,7 @@ impl AnswerRuntime {
         }
     }
 
+    /// Signals an active owner or remembers a bounded, deduplicated Stop before admission.
     fn cancel(&self, request_id: u64) {
         let mut requests = self
             .requests
@@ -206,6 +211,7 @@ impl AnswerRuntime {
         }
     }
 
+    /// Cancels all current answers and permanently closes future admission via the parent token.
     pub(crate) fn cancel_all(&self) {
         self.shutdown.cancel();
         for token in self
@@ -235,6 +241,7 @@ struct RouteFailure {
 }
 
 impl RouteFailure {
+    /// Maps an internal failure code to fixed user guidance without exposing provider details.
     fn new(code: &'static str) -> Self {
         let message = match code {
             "cancelled" | "receiver_closed" => "The answer was stopped.",
@@ -268,6 +275,7 @@ impl RouteFailure {
     }
 }
 
+/// Selects configured routes in fallback order, requiring consent and credentials for cloud.
 fn routes(
     mode: RuntimeMode,
     cloud_consent: bool,
@@ -321,12 +329,14 @@ fn routes(
     Ok(selected)
 }
 
+/// Sends one typed event, translating channel rejection into a receiver-closed failure.
 fn send(channel: &Channel<AnswerEvent>, event: AnswerEvent) -> Result<(), RouteFailure> {
     channel
         .send(event)
         .map_err(|_| RouteFailure::new("receiver_closed"))
 }
 
+/// Rechecks cloud consent and exact applied-route identity after asynchronous preparation.
 fn validate_dispatch(
     route: &RouteAttempt,
     cloud_consent: bool,
@@ -344,6 +354,7 @@ fn validate_dispatch(
     Ok(())
 }
 
+/// Best-effort emission of a cancellation or sanitized failure as the terminal event.
 fn finish_failure(channel: &Channel<AnswerEvent>, failure: RouteFailure) {
     let event = if failure.code == "cancelled" {
         AnswerEvent::Cancelled
@@ -356,6 +367,8 @@ fn finish_failure(channel: &Channel<AnswerEvent>, failure: RouteFailure) {
     let _ = send(channel, event);
 }
 
+/// Runs routes under one deadline, resetting attribution per attempt.
+/// Only success publishes usage; cancellation, receiver loss, or total timeout stops fallback.
 async fn run_attempts<'a, F, Fut>(
     attempts: &'a [RouteAttempt],
     channel: &Channel<AnswerEvent>,
@@ -454,6 +467,7 @@ fn context_prompt(query: &str, hits: &[crate::search::IndexedHit]) -> String {
 }
 
 #[cfg(test)]
+/// Runs one fixture route through the production attempt lifecycle with a 120-second deadline.
 async fn stream_attempt(
     supervisor: &GatewaySupervisor,
     route: &RouteAttempt,
@@ -487,6 +501,8 @@ async fn stream_attempt(
     clippy::too_many_arguments,
     reason = "Tauri injects independent managed states"
 )]
+/// Builds confined local context and streams authorized route attempts to the caller.
+/// Returns the successful channel-send count; answer failures are reported as terminal events.
 pub async fn start_answer(
     request: AnswerRequest,
     on_event: Channel<InvokeResponseBody>,
@@ -607,6 +623,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Checks that large deltas and terminal events retain their JSON shape and count once each.
     fn delivery_acknowledgement_counts_forwarded_events_without_reserializing() {
         let received = Arc::new(Mutex::new(Vec::new()));
         let output = received.clone();
@@ -643,6 +660,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that a closed receiver leaves the delivery acknowledgement unchanged.
     fn delivery_acknowledgement_excludes_rejected_channel_sends() {
         let destination = Channel::<InvokeResponseBody>::new(|_| {
             Err(std::io::Error::other("closed fixture receiver").into())
@@ -698,6 +716,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that Auto retains its local route when the optional cloud alias is absent.
     fn unavailable_cloud_route_does_not_block_auto_local_answers() {
         let configured: Vec<_> = ProviderRegistry::in_memory()
             .routes()

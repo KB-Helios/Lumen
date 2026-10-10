@@ -75,6 +75,7 @@ mockIPC(async (command, args) => {
         if (message.requestId !== request.requestId) throw new Error('Integration request identity mismatch.');
         if (message.event) {
           const sequence = index++;
+          /** Delivers one indexed Tauri callback while recording callback time and native event count. */
           const deliver = () => {
             const started = performance.now();
             testWindow.__TAURI_INTERNALS__.runCallback(channel.id, {index: sequence, message: message.event});
@@ -105,11 +106,13 @@ mockIPC(async (command, args) => {
   }
 });
 
+/** Connects the real controller and panel to the native fixture and exposes state and render measurements. */
 function HarnessPanel() {
   const [submission, setSubmission] = useState({query: '', mode: 'auto' as RuntimeMode, revision: 0});
   const answer = useAnswerController(service, {...submission, cloudConsent: true, delayMs: 0, restartKey: submission.revision});
   useEffect(() => {
     testWindow.__LUMEN_ANSWER_HARNESS__ = {
+      /** Resets measurements and advances the submission revision so identical queries can run again. */
       submit(query, mode = 'auto') {
         metrics.submittedAt = performance.now();
         metrics.firstRenderedTokenMs = undefined;

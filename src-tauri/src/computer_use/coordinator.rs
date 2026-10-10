@@ -1101,6 +1101,7 @@ async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Builds a synthetic Stop supervisor without registering a global hotkey or real executor.
     fn supervisor_fixture() -> ComputerUseSupervisor {
         let directory =
             std::env::temp_dir().join(format!("lumen-stop-test-{}", uuid::Uuid::new_v4()));

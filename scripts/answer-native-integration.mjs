@@ -14,6 +14,7 @@ const nativeTest = 'gateway::answer::transport_tests::native_bridge';
 const binaryDirectory = path.join(process.env.CARGO_TARGET_DIR ?? path.resolve('src-tauri/target'), 'debug', 'deps');
 const execFileAsync = promisify(execFile);
 
+/** Resolves an explicit native test executable or the sole matching Windows test binary. */
 async function nativeBinary() {
   if (process.env.LUMEN_ANSWER_NATIVE_BINARY) {
     const binary = path.resolve(process.env.LUMEN_ANSWER_NATIVE_BINARY);
@@ -26,6 +27,7 @@ async function nativeBinary() {
   return path.join(binaryDirectory, files[0]);
 }
 
+/** Reads the Windows process working set in bytes, rejecting invalid PIDs or nonnumeric output. */
 async function residentBytes(pid) {
   assert.equal(Number.isSafeInteger(pid), true);
   const {stdout} = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', `(Get-Process -Id ${pid} -ErrorAction Stop).WorkingSet64`], {windowsHide: true});
@@ -34,6 +36,7 @@ async function residentBytes(pid) {
   return bytes;
 }
 
+/** Runs native-to-Edge answer scenarios and publishes evidence only after assertions and clean process shutdown succeed. */
 async function run(url) {
   const binary = await nativeBinary();
   const native = spawn(binary, ['--exact', nativeTest, '--ignored', '--nocapture', '--test-threads=1'], {
@@ -59,8 +62,11 @@ async function run(url) {
       scenarios: {}, nativeMemory: {samplesBytes: []}};
     assert.equal(path.isAbsolute(report.binary), false, 'Published answer evidence must not expose absolute host paths.');
     assert.doesNotMatch(report.binary, /[/\\]/, 'Published answer evidence must contain only the binary filename.');
+    /** Reads the latest answer state exposed by the browser fixture. */
     const state = () => page.evaluate(() => window.__LUMEN_ANSWER_HARNESS__.state);
+    /** Copies fixture measurements without retaining the potentially large snapshot history. */
     const metrics = () => page.evaluate(() => ({...window.__LUMEN_ANSWER_HARNESS__.metrics, snapshots: undefined}));
+    /** Submits a fixture scenario and requires a new request to reach the native bridge within a bounded wait. */
     const submit = async (query, mode = 'auto') => {
       if (processFailure) throw processFailure;
       assert.equal(native.exitCode, null, 'Native bridge exited before submission.');
@@ -69,7 +75,9 @@ async function run(url) {
       for (let attempt = 0; attempt < 200 && bridge.samples.at(-1)?.requestId === previousId; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
       assert.notEqual(bridge.samples.at(-1)?.requestId, previousId, 'Submission did not reach native transport.');
     };
+    /** Waits up to 15 seconds for the browser fixture to reach the expected lifecycle phase. */
     const phase = async (expected) => page.waitForFunction((expected) => window.__LUMEN_ANSWER_HARNESS__?.state.phase === expected, expected, {timeout: 15_000});
+    /** Requires all native bridge requests to finish within a bounded polling window. */
     const drained = async () => {
       for (let attempt = 0; attempt < 100 && bridge.activeRequests; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
       assert.equal(bridge.activeRequests, 0, 'Native bridge retained a completed request.');

@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 #[cfg(windows)]
+/// Returns the Windows short spelling of an existing fixture path, requiring a successful OS lookup.
 fn short_windows_path(path: &Path) -> PathBuf {
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use windows::Win32::Storage::FileSystem::GetShortPathNameW;
@@ -18,6 +19,7 @@ fn short_windows_path(path: &Path) -> PathBuf {
 
 #[cfg(windows)]
 #[test]
+/// Checks missing Unicode descendants beneath a short alias while rejecting parent traversal.
 fn watcher_path_admission_expands_short_ancestors_for_deleted_paths() {
     let root = std::fs::canonicalize(std::env::var_os("ProgramFiles").unwrap()).unwrap();
     let short = short_windows_path(&root);
@@ -39,6 +41,7 @@ fn watcher_path_admission_expands_short_ancestors_for_deleted_paths() {
 
 #[cfg(windows)]
 #[test]
+/// Checks that joining a watcher suffix preserves nested Unicode components under a verbatim root.
 fn watcher_path_admission_preserves_nested_verbatim_components() {
     let root = Path::new(r"\\?\C:\safe");
     assert_eq!(
@@ -49,6 +52,7 @@ fn watcher_path_admission_preserves_nested_verbatim_components() {
 
 #[cfg(windows)]
 #[test]
+/// Uses a symlink through an outside short path to verify spelling expansion cannot cross a reparse route.
 fn watcher_short_path_expansion_never_admits_a_reparse_route() {
     let fixture = SearchFixture::new("short-path-reparse");
     fixture.file("notes.txt", b"privatequasar");

@@ -188,6 +188,7 @@ export interface AppProps {
   windowService?: WindowService;
 }
 
+/** Composes the launcher and preview modes, hydrates settings, and synchronizes native runtime preferences. */
 export function App({
   activityService = defaultActivityService,
   windowService = appWindowService,

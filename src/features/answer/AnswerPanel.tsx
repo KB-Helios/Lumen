@@ -5,6 +5,7 @@ import type {RuntimeMode} from '../../services/answer/answer.types';
 import type {AnswerState} from './useAnswerController';
 import {RuntimeModeSwitch} from './RuntimeModeSwitch';
 
+/** Maps answer lifecycle state to the compact status shown beside the answer. */
 function statusLabel(answer: AnswerState) {
   if (answer.phase === 'idle') return 'Ready when submitted';
   if (answer.phase === 'waiting') return 'Preparing';
@@ -35,6 +36,7 @@ export interface AnswerPanelProps {
   onStop(): void;
 }
 
+/** Renders answer state, attribution, citations, and lifecycle-appropriate Stop or Retry controls. */
 export function AnswerPanel({
   answer,
   mode,

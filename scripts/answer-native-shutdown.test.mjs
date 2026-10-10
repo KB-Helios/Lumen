@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import {finishNativeAnswerProcess} from './lib/answer-native-shutdown.mjs';
 
+/** Starts an acknowledged fixture child that exits with the requested code after stdin closes. */
 async function childAfterEof(code, delayMs = 30) {
   const child = spawn(process.execPath, ['-e', `process.stdin.resume(); process.stdout.write('ready'); process.stdin.on('end', () => setTimeout(() => process.exit(${code}), ${delayMs}));`],
     {windowsHide: true, stdio: ['pipe', 'pipe', 'ignore']});
@@ -12,6 +13,7 @@ async function childAfterEof(code, delayMs = 30) {
   return child;
 }
 
+/** Kills and awaits an owned fixture child if it has not already exited. */
 async function dispose(child) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = once(child, 'exit');

@@ -10,6 +10,7 @@ pub(super) struct Fixture {
     pub address: SocketAddr,
 }
 
+/// Creates an isolated supervisor whose version probe invokes this test binary in the given mode.
 fn fixture(mode: &str) -> (LocalRuntimeSupervisor, PathBuf) {
     let marker = format!("lumen-answer-probe-{mode}-{}", uuid::Uuid::new_v4());
     let directory = env::temp_dir().join(&marker);
@@ -46,6 +47,7 @@ fn fixture(mode: &str) -> (LocalRuntimeSupervisor, PathBuf) {
     )
 }
 
+/// Builds an exact ignored-test invocation with a unique marker passed through libtest arguments.
 fn child_arguments(name: &str, marker: String) -> Vec<String> {
     vec![
         "--exact".into(),
@@ -58,6 +60,7 @@ fn child_arguments(name: &str, marker: String) -> Vec<String> {
     ]
 }
 
+/// Creates separate version-probe and server markers for local startup ownership tests.
 fn readiness_fixture() -> (LocalRuntimeSupervisor, PathBuf, PathBuf) {
     let (mut supervisor, probe_directory) = fixture("ready");
     let marker = format!("lumen-answer-server-{}", uuid::Uuid::new_v4());
@@ -68,6 +71,7 @@ fn readiness_fixture() -> (LocalRuntimeSupervisor, PathBuf, PathBuf) {
     (supervisor, probe_directory, server_directory)
 }
 
+/// Registers the configured server fixture as an already-owned process and returns its PID.
 fn adopt_existing(supervisor: &LocalRuntimeSupervisor) -> u32 {
     adopt_process(
         supervisor,
@@ -75,6 +79,7 @@ fn adopt_existing(supervisor: &LocalRuntimeSupervisor) -> u32 {
     )
 }
 
+/// Spawns and registers a fixture child, containing it in a kill-on-close job on Windows.
 fn adopt_process(supervisor: &LocalRuntimeSupervisor, arguments: &[String]) -> u32 {
     let mut command = Command::new(env::current_exe().unwrap());
     command
@@ -99,6 +104,7 @@ fn adopt_process(supervisor: &LocalRuntimeSupervisor, arguments: &[String]) -> u
     pid
 }
 
+/// Polls the child marker asynchronously until it contains a PID or the deadline expires.
 async fn acknowledged_pid(directory: &Path, deadline: tokio::time::Instant) -> u32 {
     loop {
         if let Ok(pid) = fs::read_to_string(directory.join("pid"))
@@ -114,6 +120,7 @@ async fn acknowledged_pid(directory: &Path, deadline: tokio::time::Instant) -> u
     }
 }
 
+/// Waits up to five seconds for a fixture child to publish its PID.
 fn wait_for_pid(directory: &Path) -> u32 {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -130,6 +137,7 @@ fn wait_for_pid(directory: &Path) -> u32 {
     }
 }
 
+/// Publishes the current PID by rename so cancellation cannot expose a partial marker.
 fn acknowledge_pid(directory: &Path) {
     // Deadline termination must not expose a partially written PID acknowledgement.
     let pending = directory.join("pid.pending");
@@ -138,6 +146,7 @@ fn acknowledge_pid(directory: &Path) {
 }
 
 #[cfg(windows)]
+/// Checks whether a Windows process handle remains unsignalled without waiting for exit.
 fn is_alive(pid: u32) -> bool {
     use windows::Win32::{
         Foundation::{CloseHandle, WAIT_TIMEOUT},
@@ -161,6 +170,7 @@ fn is_alive(pid: u32) -> bool {
 }
 
 #[test]
+/// Cancels after the probe acknowledges startup and checks prompt return and Windows process exit.
 fn cancellation_kills_and_reaps_an_acknowledged_owned_version_probe() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -199,6 +209,7 @@ fn cancellation_kills_and_reaps_an_acknowledged_owned_version_probe() {
 }
 
 #[test]
+/// Checks cancellation precedence and timeout admission without creating a child PID marker.
 fn already_cancelled_and_expired_preparation_do_not_spawn_a_probe() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -225,6 +236,7 @@ fn already_cancelled_and_expired_preparation_do_not_spawn_a_probe() {
 }
 
 #[test]
+/// Expires preparation during the version probe and checks that no acknowledged Windows child survives.
 fn version_deadline_kills_the_owned_probe() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -243,6 +255,7 @@ fn version_deadline_kills_the_owned_probe() {
 }
 
 #[test]
+/// Overflows probe stderr and checks safe failure plus termination of the owned Windows child.
 fn oversized_version_output_is_bounded_and_kills_the_probe() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -260,6 +273,7 @@ fn oversized_version_output_is_bounded_and_kills_the_probe() {
 }
 
 #[test]
+/// Provides a listening port with a wrong version to ensure TCP readiness cannot bypass version admission.
 fn external_listening_runtime_still_requires_the_pinned_version() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -278,6 +292,7 @@ fn external_listening_runtime_still_requires_the_pinned_version() {
 }
 
 #[test]
+/// Cancels after server startup and checks prompt cleanup without adopting the interrupted child.
 fn cancellation_during_readiness_kills_only_the_newly_owned_server() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -315,6 +330,7 @@ fn cancellation_during_readiness_kills_only_the_newly_owned_server() {
 }
 
 #[test]
+/// Checks that a live registered process with a ready port is reused without a version subprocess.
 fn healthy_cached_owned_runtime_is_retained_without_another_probe() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -352,6 +368,7 @@ fn healthy_cached_owned_runtime_is_retained_without_another_probe() {
 }
 
 #[test]
+/// Checks that readiness transfers ownership to the supervisor and teardown reaps it on Windows.
 fn successful_preparation_adopts_the_verified_ready_owned_runtime() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -391,6 +408,7 @@ fn successful_preparation_adopts_the_verified_ready_owned_runtime() {
 }
 
 #[test]
+/// Drops the preparation future after child acknowledgement and checks it leaves no registered server.
 fn dropping_preparation_reaps_the_owned_readiness_process() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -420,6 +438,7 @@ fn dropping_preparation_reaps_the_owned_readiness_process() {
 }
 
 #[test]
+/// Cancels preparation around an existing child and checks that its registration survives.
 fn cancellation_while_waiting_for_an_existing_process_preserves_its_pid() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -464,6 +483,7 @@ fn cancellation_while_waiting_for_an_existing_process_preserves_its_pid() {
 }
 
 #[test]
+/// Cancels a serialized waiter and checks that it cannot spawn a competing version probe.
 fn a_cancelled_waiter_does_not_start_a_second_probe() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -496,6 +516,7 @@ fn a_cancelled_waiter_does_not_start_a_second_probe() {
 }
 
 #[test]
+/// Registers a competing child before readiness and requires failure while preserving that registration.
 fn preparation_does_not_report_success_when_only_its_redundant_child_is_ready() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -554,6 +575,7 @@ fn preparation_does_not_report_success_when_only_its_redundant_child_is_ready() 
 }
 
 #[test]
+/// Checks that cold-cloud Stop fails during startup and succeeds on retry after adoption.
 fn cloud_stop_cannot_acknowledge_an_unadopted_answer_startup() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -608,6 +630,7 @@ fn cloud_stop_cannot_acknowledge_an_unadopted_answer_startup() {
 }
 
 #[test]
+/// Checks that management startup respects the answer preparation lock before probing or spawning.
 fn management_start_cannot_replace_a_runtime_during_answer_preparation() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -635,6 +658,7 @@ fn management_start_cannot_replace_a_runtime_during_answer_preparation() {
 }
 
 #[test]
+/// Kills the registered child while version admission is paused and checks replacement within the request.
 fn preparation_restarts_a_process_that_exits_during_version_admission() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -691,6 +715,7 @@ fn preparation_restarts_a_process_that_exits_during_version_admission() {
 }
 
 #[test]
+/// Makes a competing registration ready and checks that failure reaps only the preparation-owned child.
 fn preparation_rejects_an_unexpected_ready_management_registration_without_reaping_it() {
     let _serial = FIXTURE_LOCK
         .lock()
@@ -752,6 +777,7 @@ fn preparation_rejects_an_unexpected_ready_management_registration_without_reapi
 
 #[test]
 #[ignore = "owned subprocess fixture, invoked only by answer preparation tests"]
+/// Implements the opt-in version subprocess modes, publishing its PID before delay or output.
 fn probe_child() {
     let marker = env::args()
         .find(|argument| argument.starts_with("lumen-answer-probe-"))
@@ -786,6 +812,7 @@ fn probe_child() {
 
 #[test]
 #[ignore = "owned subprocess fixture, invoked only by answer preparation tests"]
+/// Implements an opt-in server subprocess with PID acknowledgement and optional gated TCP listening.
 fn server_child() {
     let marker = env::args()
         .find(|argument| argument.starts_with("lumen-answer-server-"))

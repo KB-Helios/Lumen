@@ -21,6 +21,7 @@ pub(super) struct StreamPolicy {
 }
 
 impl Default for StreamPolicy {
+    /// Uses 30-second bounds for both response headers and idle stream reads.
     fn default() -> Self {
         Self {
             headers: Duration::from_secs(30),
@@ -45,6 +46,7 @@ struct Frame {
 }
 
 impl SseDecoder {
+    /// Creates an empty decoder that permits a BOM only on the first line.
     fn new() -> Self {
         Self {
             first_line: true,
@@ -52,8 +54,8 @@ impl SseDecoder {
         }
     }
 
-    // Decode complete lines, so network fragmentation never splits a UTF-8 decode.
-    // CR is dispatched immediately; a following LF is consumed even across chunks.
+    /// Consumes one byte and returns a frame at a blank line, rejecting oversized frames.
+    /// UTF-8 is decoded only for complete lines; CRLF pairs may span network chunks.
     fn push(&mut self, byte: u8) -> Result<Option<Frame>, RouteFailure> {
         if self.skip_lf {
             self.skip_lf = false;
@@ -73,6 +75,7 @@ impl SseDecoder {
         Ok(None)
     }
 
+    /// Validates a complete UTF-8 line and applies SSE field and blank-line dispatch rules.
     fn finish_line(&mut self) -> Result<Option<Frame>, RouteFailure> {
         let mut line =
             std::str::from_utf8(&self.line).map_err(|_| RouteFailure::new("invalid_response"))?;
@@ -113,6 +116,7 @@ impl SseDecoder {
     }
 }
 
+/// Classifies known provider error codes without forwarding upstream messages.
 fn provider_failure(value: &Value) -> RouteFailure {
     let code = value["code"]
         .as_str()
@@ -127,10 +131,12 @@ fn provider_failure(value: &Value) -> RouteFailure {
     })
 }
 
+/// Accepts only nonnegative JSON integers exactly representable by JavaScript.
 fn safe_integer(value: &Value) -> Option<u64> {
     value.as_u64().filter(|number| *number <= MAX_SAFE_INTEGER)
 }
 
+/// Requires a completed response and validates optional usage with safe token counters.
 fn completion_usage(
     value: &Value,
     remaining_tokens: Option<u64>,
@@ -158,6 +164,8 @@ fn completion_usage(
     }))
 }
 
+/// Streams one loopback Responses request with bounded framing, output, events, and waits.
+/// Returns usage only after explicit valid completion; cancellation and EOF cannot imply success.
 pub(super) async fn stream(
     supervisor: &GatewaySupervisor,
     route: &RouteAttempt,

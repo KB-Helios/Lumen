@@ -21,12 +21,14 @@ const failureMessages: Record<string, string> = {
   invalid_request: 'The answer request is invalid or too large.',
 };
 
+/** Replaces untrusted native error text with fixed guidance for known failure codes. */
 function safeFailure(event: Extract<AnswerEvent, {type: 'failed'}>): AnswerEvent {
   const code = event.code && Object.prototype.hasOwnProperty.call(failureMessages, event.code) ? event.code : 'answer-failed';
   return {type: 'failed', code, message: failureMessages[code] ?? 'The answer could not be generated. Retry the request.'};
 }
 
 export class TauriAnswerService implements AnswerService {
+  /** Yields bounded, validated native events until a terminal event; drains acknowledged delivery and cancels unfinished work on disposal. */
   async *stream(request: AnswerRequest, signal: AbortSignal): AsyncIterable<AnswerEvent> {
     if (signal.aborted) return;
     const queued: AnswerEvent[] = [];
@@ -42,7 +44,9 @@ export class TauriAnswerService implements AnswerService {
     let streamBytes = 0;
     let eventCount = 0;
     let failure: Error | undefined;
+    /** Wakes the waiting consumer once and clears its resolver. */
     const notify = () => { wake?.(); wake = undefined; };
+    /** Sends at most one native Stop for this request and wakes the consumer. */
     const cancel = () => {
       if (!cancelled) {
         cancelled = true;
@@ -50,6 +54,7 @@ export class TauriAnswerService implements AnswerService {
       }
       notify();
     };
+    /** Discards buffered events, records a safe error, and cancels the owned request. */
     const reject = (message: string) => {
       failure = new Error(message);
       queued.length = 0;

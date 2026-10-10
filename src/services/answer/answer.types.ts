@@ -59,6 +59,7 @@ export const answerEventSchema = z.discriminatedUnion('type', [
   z.strictObject({type: z.literal('failed'), message: z.string().min(1).max(1024), code: z.string().max(80).optional()}),
 ]);
 
+/** Identifies events that permanently close an answer stream. */
 export function isTerminalAnswerEvent(event: AnswerEvent): boolean {
   return event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled';
 }

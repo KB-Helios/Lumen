@@ -7,21 +7,25 @@ const native = vi.hoisted(() => ({invoke: vi.fn(), send: undefined as ((event: u
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: native.invoke,
   Channel: class {
+    /** Registers the fixture receiver or simulates channel-construction failure. */
     constructor(handler?: (event: unknown) => void) {
       if (native.channelFailure) throw native.channelFailure;
       native.send = handler;
     }
+    /** Replaces the fixture receiver to model Tauri channel disposal. */
     set onmessage(handler: (event: unknown) => void) { native.send = handler; }
   },
 }));
 
 const request: AnswerRequest = {requestId: 123, query: 'hello', mode: 'auto', cloudConsent: false};
 const completed = {type: 'completed', provider: 'local', model: 'fixture', route: 'local'} as const;
+/** Consumes an answer iterable into an ordered event list, propagating stream failures. */
 const collect = async (events: AsyncIterable<AnswerEvent>) => {
   const result: AnswerEvent[] = [];
   for await (const event of events) result.push(event);
   return result;
 };
+/** Advances ten microtask turns so acknowledgement callbacks can settle in delivery-order tests. */
 const flush = async () => { for (let index = 0; index < 10; index += 1) await Promise.resolve(); };
 
 beforeEach(() => { native.invoke.mockReset(); native.send = undefined; native.channelFailure = undefined; });

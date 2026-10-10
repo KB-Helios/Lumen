@@ -1,5 +1,6 @@
 import {clearTimeout} from 'node:timers';
 
+/** Closes stdin and requires a clean exit within the deadline; kills a stalled child and rejects timeout or unsuccessful exit. */
 export async function finishNativeAnswerProcess(child, timeoutMs = 5000) {
   const began = performance.now();
   let onExit;

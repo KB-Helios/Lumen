@@ -42,10 +42,12 @@ const idleState: AnswerState = {
 
 let nextRequestId = Date.now() * 1000;
 
+/** Identifies phases that cannot accept further stream events. */
 function isTerminal(phase: AnswerPhase): boolean {
   return phase === 'completed' || phase === 'cancelled' || phase === 'error';
 }
 
+/** Applies an admitted event; new attempts reset output and usage while retaining citations. */
 function applyEvent(state: AnswerState, event: AnswerEvent): AnswerState {
   if (isTerminal(state.phase)) return state;
   switch (event.type) {
@@ -76,6 +78,7 @@ function applyEvent(state: AnswerState, event: AnswerEvent): AnswerState {
   }
 }
 
+/** Owns debounced answer requests, fences stale updates, and exposes Stop and Retry controls. */
 export function useAnswerController(
   service: AnswerService,
   {query, mode, cloudConsent = false, delayMs = 350, restartKey = 0}: AnswerControllerOptions,

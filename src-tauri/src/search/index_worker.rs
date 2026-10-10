@@ -302,6 +302,7 @@ fn inventory_loop(
     drop(watcher);
 }
 
+/// Maps watcher spelling beneath the admitted root, trying safe Windows short-name expansion if needed.
 pub(super) fn event_path(root: &Path, path: &Path) -> Option<PathBuf> {
     fn plain(path: &Path) -> String {
         let value = path.to_string_lossy().replace('\\', "/");
@@ -312,6 +313,7 @@ pub(super) fn event_path(root: &Path, path: &Path) -> Option<PathBuf> {
         };
         value.trim_end_matches('/').to_owned()
     }
+    /// Matches path components case-insensitively while preserving suffix spelling and rejecting parent traversal.
     fn admitted_path(root: &Path, path: &Path) -> Option<PathBuf> {
         let original = plain(path);
         let root_original = plain(root);
@@ -343,6 +345,8 @@ pub(super) fn event_path(root: &Path, path: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
+/// Expands an existing Windows ancestor to its long spelling and preserves any missing suffix.
+/// Rejects relative paths, parent traversal, reparse ancestors, and incomplete ancestor inspection.
 fn expand_windows_event_spelling(path: &Path) -> Option<PathBuf> {
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::os::windows::fs::MetadataExt;
