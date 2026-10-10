@@ -7,7 +7,7 @@ import {RuntimeModeSwitch} from './RuntimeModeSwitch';
 
 function statusLabel(answer: AnswerState) {
   if (answer.phase === 'idle') return 'Ready when submitted';
-  if (answer.phase === 'waiting') return 'Settling query';
+  if (answer.phase === 'waiting') return 'Preparing';
   if (answer.phase === 'streaming') return 'Answering';
   if (answer.phase === 'error') return 'Answer unavailable';
   if (answer.phase === 'cancelled') return 'Stopped';
@@ -85,11 +85,14 @@ export function AnswerPanel({
         {answer.phase === 'idle' ? null : hasAnswer
           ? answer.text
           : answer.phase === 'waiting'
-            ? 'Waiting for the query to settle…'
+            ? 'Preparing an answer…'
             : answer.phase === 'error'
               ? answer.error ?? 'The answer could not be completed. You can retry without interrupting local search.'
-              : 'Preparing an answer…'}
+              : answer.phase === 'cancelled' ? 'Stopped' : 'Preparing an answer…'}
       </div>
+      {answer.phase === 'error' && hasAnswer ? <p role="status" className="font-sans text-xs text-text-secondary">
+        {answer.error ?? 'The answer could not be completed. You can retry without interrupting local search.'}
+      </p> : null}
       {answer.citations.length > 0 || runtimeDetail ? <footer className="flex min-w-0 flex-wrap items-center justify-between gap-[8px]">
         <div aria-label="Answer sources" className="flex min-w-0 flex-wrap gap-[6px]">
           {answer.citations.map((citation) => {

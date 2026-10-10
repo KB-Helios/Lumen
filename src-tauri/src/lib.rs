@@ -442,6 +442,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<gateway::answer::AnswerRuntime>().cancel_all();
                 app.state::<search::IndexRuntime>().stop_index_worker();
             }
         });

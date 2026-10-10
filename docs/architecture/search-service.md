@@ -2,6 +2,8 @@
 
 Lumen's React tree depends on one `SearchService` interface. It never imports a Tauri command directly. This keeps the phase-one local adapter replaceable without coupling launcher, preview, keyboard, or settings components to a future index.
 
+AI answers consume that admitted index context through a separate typed service. Its attempt, framing, deadline, and ownership rules are documented in [AI answer streaming](answer-service.md).
+
 ```ts
 interface SearchService {
   search(request: SearchRequest, signal?: AbortSignal): Promise<SearchResponse>;

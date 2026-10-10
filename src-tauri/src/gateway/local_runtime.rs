@@ -9,6 +9,8 @@ use std::{
 
 use serde::Serialize;
 use tauri::State;
+use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio_util::sync::CancellationToken;
 
 const LEMONADE_PORT: u16 = 13_305;
 const REQUIRED_LEMONADE: &str = super::provisioning::RUNTIME_VERSION;
@@ -65,6 +67,9 @@ pub struct LocalRuntimeSupervisor {
     flm: Option<PathBuf>,
     mistral_rs: Option<PathBuf>,
     process: Mutex<Option<RuntimeProcess>>,
+    answer_startup: tokio::sync::Mutex<()>,
+    #[cfg(test)]
+    answer_fixture: Option<answer_preparation_tests::Fixture>,
 }
 
 #[derive(Clone)]
@@ -147,6 +152,149 @@ fn lemonade_ready() -> bool {
     .is_ok()
 }
 
+fn preparation_interrupted(
+    cancellation: &CancellationToken,
+    deadline: tokio::time::Instant,
+) -> Option<&'static str> {
+    if cancellation.is_cancelled() {
+        Some("cancelled")
+    } else if tokio::time::Instant::now() >= deadline {
+        Some("request_timeout")
+    } else {
+        None
+    }
+}
+
+async fn answer_ready(
+    address: SocketAddr,
+    cancellation: &CancellationToken,
+    deadline: tokio::time::Instant,
+) -> Result<bool, &'static str> {
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err("cancelled"),
+        _ = tokio::time::sleep_until(deadline) => Err("request_timeout"),
+        connected = tokio::time::timeout(Duration::from_millis(150), tokio::net::TcpStream::connect(address)) => Ok(matches!(connected, Ok(Ok(_)))),
+    }
+}
+
+async fn bounded_version_output(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, &'static str> {
+    let mut bytes = Vec::new();
+    reader
+        .take(16_385)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| "local_runtime_unavailable")?;
+    if bytes.len() > 16_384 {
+        return Err("local_runtime_unavailable");
+    }
+    Ok(bytes)
+}
+
+#[cfg(windows)]
+struct ProbeJob(isize);
+
+#[cfg(windows)]
+impl Drop for ProbeJob {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = windows::Win32::Foundation::CloseHandle(windows::Win32::Foundation::HANDLE(
+                self.0 as *mut _,
+            ));
+        }
+    }
+}
+
+#[cfg(windows)]
+fn answer_probe_job(child: &tokio::process::Child) -> Result<ProbeJob, &'static str> {
+    use windows::Win32::{
+        Foundation::{CloseHandle, HANDLE},
+        System::JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject,
+        },
+    };
+    unsafe {
+        let job = CreateJobObjectW(None, None).map_err(|_| "local_runtime_unavailable")?;
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let configured = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        let assigned = child.raw_handle().is_some_and(|handle| {
+            configured.is_ok() && AssignProcessToJobObject(job, HANDLE(handle)).is_ok()
+        });
+        if !assigned {
+            let _ = CloseHandle(job);
+            return Err("local_runtime_unavailable");
+        }
+        Ok(ProbeJob(job.0 as isize))
+    }
+}
+
+async fn answer_version(
+    mut command: tokio::process::Command,
+    cancellation: &CancellationToken,
+    deadline: tokio::time::Instant,
+) -> Result<String, &'static str> {
+    if let Some(error) = preparation_interrupted(cancellation, deadline) {
+        return Err(error);
+    }
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let mut child = command.spawn().map_err(|_| "local_runtime_unavailable")?;
+    #[cfg(windows)]
+    let _job = match answer_probe_job(&child) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            return Err(error);
+        }
+    };
+    let stdout = child.stdout.take().ok_or("local_runtime_unavailable")?;
+    let stderr = child.stderr.take().ok_or("local_runtime_unavailable")?;
+    let probe_deadline = deadline.min(tokio::time::Instant::now() + Duration::from_secs(5));
+    let result = {
+        let output = async {
+            let (stdout, stderr, status) = tokio::try_join!(
+                bounded_version_output(stdout),
+                bounded_version_output(stderr),
+                async { child.wait().await.map_err(|_| "local_runtime_unavailable") },
+            )?;
+            if !status.success() {
+                return Err("local_runtime_unavailable");
+            }
+            let stdout = std::str::from_utf8(&stdout).map_err(|_| "local_runtime_unavailable")?;
+            let stderr = std::str::from_utf8(&stderr).map_err(|_| "local_runtime_unavailable")?;
+            parse_version(&format!("{stdout} {stderr}")).ok_or("local_runtime_unavailable")
+        };
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => Err("cancelled"),
+            _ = tokio::time::sleep_until(probe_deadline) => Err(preparation_interrupted(cancellation, deadline).unwrap_or("local_runtime_unavailable")),
+            result = output => result,
+        }
+    };
+    if result.is_err() {
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+    }
+    if let Some(error) = preparation_interrupted(cancellation, deadline) {
+        return Err(error);
+    }
+    result
+}
+
 fn profile_for(flm: bool, accelerator: &str) -> &'static str {
     if flm {
         "laptop-amd-npu"
@@ -158,6 +306,163 @@ fn profile_for(flm: bool, accelerator: &str) -> &'static str {
 }
 
 impl LocalRuntimeSupervisor {
+    pub(super) async fn prepare_answer(
+        &self,
+        cancellation: &CancellationToken,
+        deadline: tokio::time::Instant,
+    ) -> Result<(), &'static str> {
+        if let Some(error) = preparation_interrupted(cancellation, deadline) {
+            return Err(error);
+        }
+        let _startup = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => return Err("cancelled"),
+            _ = tokio::time::sleep_until(deadline) => return Err("request_timeout"),
+            lock = self.answer_startup.lock() => lock,
+        };
+        let address = SocketAddr::from(([127, 0, 0, 1], LEMONADE_PORT));
+        #[cfg(test)]
+        let address = self
+            .answer_fixture
+            .as_ref()
+            .map_or(address, |fixture| fixture.address);
+        let existing = self
+            .process
+            .lock()
+            .map_err(|_| "local_runtime_unavailable")?
+            .as_mut()
+            .map(|process| process.child.try_wait())
+            .transpose()
+            .map_err(|_| "local_runtime_unavailable")?
+            .is_some_and(|status| status.is_none());
+        if existing && answer_ready(address, cancellation, deadline).await? {
+            if let Some(error) = preparation_interrupted(cancellation, deadline) {
+                return Err(error);
+            }
+            return Ok(());
+        }
+
+        let binaries = self.binaries();
+        let cli = binaries.cli.as_deref().ok_or("local_runtime_unavailable")?;
+        let server = binaries
+            .server
+            .as_deref()
+            .ok_or("local_runtime_unavailable")?;
+        let mut version = tokio::process::Command::new(cli);
+        version.arg("--version");
+        #[cfg(test)]
+        if let Some(fixture) = &self.answer_fixture {
+            version = tokio::process::Command::new(cli);
+            version.args(&fixture.arguments);
+        }
+        if answer_version(version, cancellation, deadline).await? != REQUIRED_LEMONADE {
+            return Err("local_runtime_unavailable");
+        }
+        if let Some(flm) = &self.flm {
+            let mut version = tokio::process::Command::new(flm);
+            version.args(["version", "--json"]);
+            if answer_version(version, cancellation, deadline).await? != REQUIRED_FLM {
+                return Err("local_runtime_unavailable");
+            }
+        }
+        if answer_ready(address, cancellation, deadline).await? {
+            if let Some(error) = preparation_interrupted(cancellation, deadline) {
+                return Err(error);
+            }
+            return Ok(());
+        }
+        if let Some(error) = preparation_interrupted(cancellation, deadline) {
+            return Err(error);
+        }
+
+        let mut owned = if existing {
+            None
+        } else {
+            let mut command = Command::new(server);
+            if let Some(root) = binaries.root.as_deref() {
+                command
+                    .arg(".")
+                    .arg("--port")
+                    .arg(LEMONADE_PORT.to_string())
+                    .current_dir(root)
+                    .env("LEMONADE_API_KEY", "lumen-local");
+            }
+            #[cfg(test)]
+            if let Some(fixture) = &self.answer_fixture {
+                command.args(&fixture.server_arguments);
+            }
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                command.creation_flags(0x0800_0000);
+            }
+            let mut child = command.spawn().map_err(|_| "local_runtime_unavailable")?;
+            #[cfg(windows)]
+            let job = match super::supervisor::assign_kill_on_close_job(&child) {
+                Ok(job) => job,
+                Err(_) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err("local_runtime_unavailable");
+                }
+            };
+            Some(RuntimeProcess {
+                child,
+                #[cfg(windows)]
+                job: job.0 as isize,
+            })
+        };
+        let readiness_deadline = deadline.min(tokio::time::Instant::now() + Duration::from_secs(8));
+        loop {
+            if let Some(error) = preparation_interrupted(cancellation, deadline) {
+                return Err(error);
+            }
+            if tokio::time::Instant::now() >= readiness_deadline {
+                return Err("local_runtime_unavailable");
+            }
+            if let Some(process) = &mut owned
+                && process
+                    .child
+                    .try_wait()
+                    .map_err(|_| "local_runtime_unavailable")?
+                    .is_some()
+            {
+                return Err("local_runtime_unavailable");
+            }
+            if answer_ready(address, cancellation, deadline).await? {
+                if let Some(error) = preparation_interrupted(cancellation, deadline) {
+                    return Err(error);
+                }
+                if let Some(process) = owned.take() {
+                    let mut current = self
+                        .process
+                        .lock()
+                        .map_err(|_| "local_runtime_unavailable")?;
+                    if current.as_mut().is_some_and(|process| {
+                        process
+                            .child
+                            .try_wait()
+                            .is_ok_and(|status| status.is_none())
+                    }) {
+                        return Err("local_runtime_unavailable");
+                    }
+                    *current = Some(process);
+                }
+                return Ok(());
+            }
+            tokio::select! {
+                biased;
+                _ = cancellation.cancelled() => return Err("cancelled"),
+                _ = tokio::time::sleep_until(deadline) => return Err("request_timeout"),
+                _ = tokio::time::sleep_until(readiness_deadline.min(tokio::time::Instant::now() + Duration::from_millis(100))) => {},
+            }
+        }
+    }
+
     pub fn detect(app_data: Option<PathBuf>) -> Self {
         let system_root = env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
@@ -186,6 +491,9 @@ impl LocalRuntimeSupervisor {
             flm,
             mistral_rs,
             process: Mutex::new(None),
+            answer_startup: tokio::sync::Mutex::new(()),
+            #[cfg(test)]
+            answer_fixture: None,
         }
     }
 
@@ -366,6 +674,10 @@ impl LocalRuntimeSupervisor {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "local_runtime_answer_tests.rs"]
+mod answer_preparation_tests;
 
 #[tauri::command]
 pub fn local_runtime_health(state: State<'_, LocalRuntimeSupervisor>) -> LocalRuntimeHealth {

@@ -1,11 +1,12 @@
 import type {WindowsAiService} from '../windows-ai/windows-ai-service';
-import {canUseWindowsAiFeature, type WindowsAiSnapshot} from '../windows-ai/windows-ai.types';
+import {canUseWindowsAiFeature, windowsAiTextResultSchema, type WindowsAiSnapshot} from '../windows-ai/windows-ai.types';
 import type {AnswerService} from './answer-service';
-import type {AnswerEvent, AnswerRequest} from './answer.types';
+import {answerEventSchema, isTerminalAnswerEvent, maxAnswerEvents, maxAnswerQueuedEvents, maxAnswerTextBytes, type AnswerEvent, type AnswerRequest} from './answer.types';
 
 export class WindowsAiAnswerService implements AnswerService {
   constructor(private readonly runtime: AnswerService, private readonly windows: WindowsAiService, private readonly snapshot: () => WindowsAiSnapshot | null) {}
   async *stream(request: AnswerRequest, signal: AbortSignal): AsyncIterable<AnswerEvent> {
+    if (signal.aborted) return;
     const snapshot = this.snapshot();
     const selected = snapshot?.preferences.localEngine ?? 'auto';
     const featureId = selected === 'aion' ? 'aion' : selected === 'edge' ? 'edgePrompt' : 'languageModel';
@@ -19,30 +20,84 @@ export class WindowsAiAnswerService implements AnswerService {
     const requestId = `answer-${request.requestId}-${crypto.randomUUID()}`;
     const queue: AnswerEvent[] = [];
     let done = false;
+    let disposed = false;
+    let terminal = false;
+    let cancelled = false;
     let wake: (() => void) | undefined;
     let streamed = '';
+    let queuedBytes = 0;
+    let outputBytes = 0;
+    let eventCount = 0;
+    const encoder = new TextEncoder();
     const notify = () => { wake?.(); wake = undefined; };
+    const cancel = () => {
+      if (!cancelled) {
+        cancelled = true;
+        void this.windows.cancel(requestId).catch(() => undefined);
+      }
+      notify();
+    };
+    const fail = () => {
+      if (disposed || terminal || signal.aborted) return;
+      terminal = true;
+      queue.length = 0;
+      queuedBytes = 0;
+      queue.push({type: 'failed', code: 'windows-ai-failed', message: 'The local model could not answer. Check its availability in Local AI settings.'});
+      cancel();
+    };
+    const push = (event: AnswerEvent) => {
+      if (disposed || terminal || signal.aborted) return;
+      const parsed = answerEventSchema.safeParse(event);
+      if (!parsed.success) { fail(); return; }
+      const size = encoder.encode(JSON.stringify(parsed.data)).byteLength;
+      if (event.type === 'delta') outputBytes += encoder.encode(event.text).byteLength;
+      eventCount += 1;
+      if (queue.length >= maxAnswerQueuedEvents || queuedBytes + size > maxAnswerTextBytes
+        || outputBytes > maxAnswerTextBytes || eventCount > maxAnswerEvents) { fail(); return; }
+      queuedBytes += size;
+      queue.push(parsed.data);
+      terminal = isTerminalAnswerEvent(parsed.data);
+      notify();
+    };
     yield {type: 'started', provider: engine, model: feature?.model ?? undefined, route: 'local'};
+    if (signal.aborted) return;
     const operation = this.windows.text({requestId, engine, task: 'answer', text: request.query}, (event) => {
-      if (event.type === 'delta' && !signal.aborted) { streamed += event.text; queue.push({type: 'delta', text: event.text}); notify(); }
+      if (disposed || terminal || signal.aborted || event.requestId !== requestId) return;
+      if (event.type === 'delta') {
+        push({type: 'delta', text: event.text});
+        if (!terminal) streamed += event.text;
+      } else if (event.type === 'failed') fail();
+      else if (event.type === 'cancelled') push({type: 'cancelled'});
     }, signal).then((result) => {
-      if (signal.aborted) return;
-      if (!result.text.startsWith(streamed)) throw new Error('The local model returned an inconsistent response.');
-      const remaining = result.text.slice(streamed.length);
-      if (remaining) queue.push({type: 'delta', text: remaining});
-      result.citations.forEach((citation) => queue.push({type: 'citation', citation}));
-      queue.push({type: 'completed', provider: result.engine, model: result.model ?? 'Local model', route: 'local'});
+      if (disposed || terminal || signal.aborted) return;
+      const parsed = windowsAiTextResultSchema.safeParse(result);
+      if (!parsed.success || !parsed.data.text.startsWith(streamed)) { fail(); return; }
+      const final = parsed.data;
+      const remaining = final.text.slice(streamed.length);
+      for (let offset = 0; offset < remaining.length; offset += 65536) push({type: 'delta', text: remaining.slice(offset, offset + 65536)});
+      final.citations.forEach((citation) => push({type: 'citation', citation}));
+      push({type: 'completed', provider: final.engine, model: final.model || 'Local model', route: 'local'});
     }).catch(() => {
-      if (!signal.aborted) queue.push({type: 'failed', code: 'windows-ai-failed', message: 'The local model could not answer. Check its availability in Local AI settings.'});
+      fail();
     }).finally(() => { done = true; notify(); });
-    signal.addEventListener('abort', notify, {once: true});
+    signal.addEventListener('abort', cancel, {once: true});
     try {
       while (!done || queue.length) {
         if (signal.aborted) return;
-        if (queue.length) yield queue.shift()!;
+        if (queue.length) {
+          const event = queue.shift()!;
+          queuedBytes -= encoder.encode(JSON.stringify(event)).byteLength;
+          yield event;
+          if (isTerminalAnswerEvent(event)) return;
+        }
         else await new Promise<void>((resolve) => { wake = resolve; });
       }
       await operation;
-    } finally { signal.removeEventListener('abort', notify); if (!done) void this.windows.cancel(requestId).catch(() => undefined); }
+    } finally {
+      disposed = true;
+      queue.length = 0;
+      signal.removeEventListener('abort', cancel);
+      if (!done) cancel();
+    }
   }
 }

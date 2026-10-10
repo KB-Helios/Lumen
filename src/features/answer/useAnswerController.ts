@@ -40,10 +40,17 @@ const idleState: AnswerState = {
   citations: [],
 };
 
+let nextRequestId = Date.now() * 1000;
+
+function isTerminal(phase: AnswerPhase): boolean {
+  return phase === 'completed' || phase === 'cancelled' || phase === 'error';
+}
+
 function applyEvent(state: AnswerState, event: AnswerEvent): AnswerState {
+  if (isTerminal(state.phase)) return state;
   switch (event.type) {
     case 'started':
-      return {...state, phase: 'streaming', provider: event.provider, model: event.model, route: event.route};
+      return {phase: 'waiting', text: '', citations: state.citations, provider: event.provider, model: event.model, route: event.route};
     case 'citation':
       return state.citations.some((citation) =>
         citation.fileId === event.citation.fileId
@@ -51,7 +58,7 @@ function applyEvent(state: AnswerState, event: AnswerEvent): AnswerState {
         && citation.timestampSeconds === event.citation.timestampSeconds
       ) ? state : {...state, citations: [...state.citations, event.citation]};
     case 'delta':
-      return {...state, text: state.text + event.text};
+      return event.text ? {...state, phase: 'streaming', text: state.text + event.text} : state;
     case 'usage':
       return {...state, usage: event.usage};
     case 'completed':
@@ -82,12 +89,14 @@ export function useAnswerController(
     sequence.current += 1;
     activeAbort.current?.abort();
     setState((current) => {
-      if (current.phase === 'idle' || current.phase === 'cancelled') return current;
+      if (current.phase === 'idle' || isTerminal(current.phase)) return current;
       return {...current, phase: 'cancelled'};
     });
   }, []);
 
   const retry = useCallback(() => {
+    sequence.current += 1;
+    activeAbort.current?.abort();
     setRetryRevision((current) => current + 1);
   }, []);
 
@@ -109,11 +118,10 @@ export function useAnswerController(
         return;
       }
 
-      setState({phase: 'streaming', text: '', citations: []});
       void (async () => {
         try {
           const events = service.stream({
-            requestId: currentSequence,
+            requestId: ++nextRequestId,
             query: normalizedQuery,
             mode,
             cloudConsent,
@@ -122,15 +130,21 @@ export function useAnswerController(
             if (abortController.signal.aborted || sequence.current !== currentSequence) {
               return;
             }
-            setState((current) => applyEvent(current, event));
+            setState((current) => sequence.current === currentSequence && !abortController.signal.aborted
+              ? applyEvent(current, event) : current);
+            if (event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled') return;
           }
-        } catch (error) {
           if (!abortController.signal.aborted && sequence.current === currentSequence) {
-            setState((current) => ({
+            setState((current) => sequence.current === currentSequence && !abortController.signal.aborted && !isTerminal(current.phase)
+              ? {...current, phase: 'error', error: 'The answer ended before it was complete. Retry the request.'} : current);
+          }
+        } catch {
+          if (!abortController.signal.aborted && sequence.current === currentSequence) {
+            setState((current) => sequence.current === currentSequence && !abortController.signal.aborted && !isTerminal(current.phase) ? ({
               ...current,
               phase: 'error',
-              error: error instanceof Error ? error.message : 'Answer generation failed',
-            }));
+              error: 'Answer generation failed. Retry the request.',
+            }) : current);
           }
         }
       })();
