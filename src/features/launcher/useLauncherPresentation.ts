@@ -1,6 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
 
-import {motionTokens} from '../../design-system/motion';
 import type {
   WindowMode,
   WindowService,
@@ -100,13 +99,11 @@ export function useNativeLauncherLifecycle(
 
 export interface LauncherPresentationOptions {
   hasContent: boolean;
-  reducedMotion: boolean;
   windowService: WindowService;
 }
 
 export function useLauncherPresentation({
   hasContent,
-  reducedMotion,
   windowService,
 }: LauncherPresentationOptions) {
   const [expanded, setExpanded] = useState(false);
@@ -114,7 +111,7 @@ export function useLauncherPresentation({
   const attached = useRef(false);
   const expandedRef = useRef(false);
   const hasContentRef = useRef(hasContent);
-  const collapseTimer = useRef(0);
+  const [onWorkspaceExitComplete, setExitComplete] = useState<() => void>(() => () => undefined);
   const requestGeneration = useRef(0);
 
   hasContentRef.current = hasContent;
@@ -130,12 +127,10 @@ export function useLauncherPresentation({
     return () => {
       attached.current = false;
       requestGeneration.current += 1;
-      window.clearTimeout(collapseTimer.current);
     };
   }, []);
 
   useEffect(() => {
-    window.clearTimeout(collapseTimer.current);
     const generation = ++requestGeneration.current;
 
     const showExpanded = async (failureToReport?: unknown, force = false) => {
@@ -175,7 +170,7 @@ export function useLauncherPresentation({
       return;
     }
     const requestCollapse = async () => {
-      if (!attached.current || generation !== requestGeneration.current) return;
+      if (!attached.current || generation !== requestGeneration.current || !useLauncherStore.getState().visible) return;
       useLauncherStore.getState().setMode('collapsed');
       try {
         const applied = await windowService.show('collapsed');
@@ -203,14 +198,11 @@ export function useLauncherPresentation({
     };
 
     if (hadVisibleWorkspace) {
-      const closeDelay = reducedMotion ? 0 : motionTokens.duration.launcherClose * 1000;
-      collapseTimer.current = window.setTimeout(() => void requestCollapse(), closeDelay);
+      setExitComplete(() => () => { void requestCollapse(); });
     } else {
       void requestCollapse();
     }
+  }, [hasContent, windowService]);
 
-    return () => window.clearTimeout(collapseTimer.current);
-  }, [hasContent, reducedMotion, windowService]);
-
-  return {expanded, presentationError};
+  return {expanded, presentationError, onWorkspaceExitComplete};
 }

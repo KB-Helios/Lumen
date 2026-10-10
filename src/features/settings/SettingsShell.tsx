@@ -4,6 +4,7 @@ import {motion} from 'motion/react';
 import {TabPanel, Tabs} from 'react-aria-components';
 
 import {useLumenMotion} from '../../design-system/MotionProvider';
+import {motionTokens} from '../../design-system/motion';
 import {LumenUiIcon} from '../../design-system/icons/LumenUiIcon';
 import {LumenIconButton} from '../../design-system/primitives/LumenIconButton';
 import {LumenSurface} from '../../design-system/primitives/LumenSurface';
@@ -113,9 +114,9 @@ export function SettingsShell({onClose, pages}: SettingsShellProps) {
             <motion.div
               key={page.id}
               className="mx-auto grid min-w-0 w-full max-w-[760px] content-start gap-[24px] px-[20px] py-[24px] [overflow-wrap:anywhere]"
-              initial={{opacity: 0, y: reducedMotion ? 0 : 6}}
-              animate={{opacity: 1, y: 0}}
-              transition={{duration: pageDuration}}
+              initial={{opacity: 0, transform: `translateY(${reducedMotion ? 0 : 6}px)`}}
+              animate={{opacity: 1, transform: 'translateY(0px)'}}
+              transition={{duration: pageDuration, ease: motionTokens.easing.standard}}
             >
               <div className="grid min-w-0 gap-[8px]">
                 <LumenText as="h1" variant="title">{page.label}</LumenText>

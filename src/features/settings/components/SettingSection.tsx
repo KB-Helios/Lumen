@@ -11,7 +11,7 @@ export function SettingSection({children, description, title}: SettingSectionPro
   const sectionId = `setting-section-${title.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <section aria-labelledby={sectionId} className="grid min-w-0 gap-[12px]" data-setting-section="true">
-      <div className="grid min-w-0 gap-[4px]">
+      <div className="grid min-w-0 gap-[4px] px-0.5">
         <LumenText
           as="h2"
           id={sectionId}

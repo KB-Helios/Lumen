@@ -1,7 +1,9 @@
 import type {ReactNode} from 'react';
 import {Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
+import {AnimatePresence, motion} from 'motion/react';
 
 import {useLumenMotion} from '../../design-system/MotionProvider';
+import {motionTokens} from '../../design-system/motion';
 import type {SearchService} from '../../services/search/search-service';
 import {useAppearanceStore} from '../../state/appearance.store';
 import type {
@@ -59,15 +61,14 @@ function SelectionBoundResults({
   const selectedId = results.some((item) => item.id === requestedSelectedId)
     ? requestedSelectedId
     : results.find((item) => (item.availability ?? 'available') === 'available')?.id ?? null;
-  const generation = useRef(0);
+  const generation = useRef(results.length > 0 ? 1 : 0);
   const previousResults = useRef(results);
   if (previousResults.current !== results) {
     previousResults.current = results;
-    generation.current += 1;
+    if (results.length > 0) generation.current += 1;
   }
   return (
     <ResultGrid
-      key={`${results[0]?.id ?? 'empty'}-${results.length}`}
       animateRows={generation.current > 1}
       emptyLabel={emptyState}
       maxHeight={338}
@@ -263,7 +264,17 @@ export function ExpandedWorkspace({
     >
       <FilterChips filters={activeFilters} onClear={onClearFilters} onRemove={onRemoveFilter} />
       <div className="lumen-workspace-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-        {answerPanel}
+        <AnimatePresence>
+          {answerPanel ? <motion.div
+            key="answer"
+            className="shrink-0"
+            data-answer-motion
+            initial={{opacity: 0, transform: `translateY(${reducedMotion ? 0 : 6}px)`}}
+            animate={{opacity: 1, transform: 'translateY(0px)'}}
+            exit={{opacity: 0, transition: {duration: reducedMotion ? motionTokens.reduced.opacityDuration : motionTokens.duration.launcherClose}}}
+            transition={{duration: reducedMotion ? motionTokens.reduced.opacityDuration : motionTokens.duration.launcherOpen, ease: motionTokens.easing.standard}}
+          >{answerPanel}</motion.div> : null}
+        </AnimatePresence>
         <div ref={contentRef} data-workspace-content className={showInlinePreview
           ? 'grid min-h-[94px] min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(280px,38%)] overflow-hidden'
           : 'grid min-h-[94px] min-w-0 flex-1 grid-cols-1 overflow-hidden'}>

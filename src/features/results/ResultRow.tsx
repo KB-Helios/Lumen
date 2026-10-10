@@ -1,8 +1,7 @@
-import {useEffect, useRef, type CSSProperties} from 'react';
+import type {CSSProperties} from 'react';
 import {GridListItem} from 'react-aria-components';
 
 import {FileGlyph} from '../../design-system/file-glyphs/FileGlyph';
-import {motionTokens} from '../../design-system/motion';
 import type {SearchResult} from '../../services/search/search.types';
 
 const sourceLabels: Record<SearchResult['match']['source'], string> = {
@@ -28,10 +27,7 @@ function accessibilityLabel(result: SearchResult) {
 }
 
 export interface ResultRowProps {
-  animateEntrance?: boolean;
-  entranceIndex?: number;
   isOpening?: boolean;
-  reducedMotion?: boolean;
   result: SearchResult;
   selected?: boolean;
   positionStyle?: CSSProperties;
@@ -40,10 +36,7 @@ export interface ResultRowProps {
 }
 
 export function ResultRow({
-  animateEntrance = false,
-  entranceIndex = 0,
   isOpening = false,
-  reducedMotion = false,
   result,
   selected = false,
   positionStyle,
@@ -52,24 +45,9 @@ export function ResultRow({
 }: ResultRowProps) {
   const isDisabled = (result.availability ?? 'available') !== 'available';
   const stateLabel = availabilityLabels[result.availability ?? 'available'];
-  const rowRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const element = rowRef.current;
-    if (!animateEntrance || !element || typeof element.animate !== 'function') return;
-    const {duration, stagger, maxStaggered, reducedDuration} = motionTokens.rowEntrance;
-    const animation = element.animate([{opacity: 0}, {opacity: 1}], {
-      delay: reducedMotion ? 0 : Math.min(entranceIndex, maxStaggered) * stagger * 1000,
-      duration: (reducedMotion ? reducedDuration : duration) * 1000,
-      easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
-      fill: 'backwards',
-    });
-    return () => animation.cancel();
-  }, []);
 
   return (
     <GridListItem
-      ref={rowRef}
       id={result.id}
       aria-label={accessibilityLabel(result)}
       aria-posinset={positionIndex === undefined ? undefined : positionIndex + 1}

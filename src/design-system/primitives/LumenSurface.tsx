@@ -36,9 +36,9 @@ export const LumenSurface = forwardRef<HTMLDivElement, LumenSurfaceProps>(
         )}
         data-material={material}
       >
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-30 rounded-[inherit] shadow-[inset_0_1px_0_var(--lumen-border-specular)]" />
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_14%_-18%,rgba(255,255,255,0.025),transparent_54%)]" />
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[image:var(--lumen-surface-noise)] bg-repeat opacity-[0.018] mix-blend-soft-light [background-size:180px_180px]" style={noiseStyle} />
+        <span aria-hidden="true" data-material-layer="specular" className="pointer-events-none absolute inset-0 -z-30 rounded-[inherit] shadow-[inset_0_1px_0_var(--lumen-border-specular)]" />
+        <span aria-hidden="true" data-material-layer="luminosity" className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_14%_-18%,rgba(255,255,255,0.025),transparent_54%)]" />
+        <span aria-hidden="true" data-material-layer="noise" className="pointer-events-none absolute inset-0 -z-10 bg-[image:var(--lumen-surface-noise)] bg-repeat mix-blend-soft-light [background-size:180px_180px]" style={noiseStyle} />
         {children}
       </div>
     );

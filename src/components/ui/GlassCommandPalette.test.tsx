@@ -59,7 +59,8 @@ describe('GlassCommandPalette', () => {
     }
   });
 
-  it('adds owned chrome around slots and omits workspace regions while collapsed', () => {
+  it('retains workspace and footer through exit before reporting collapse', async () => {
+    const onWorkspaceExitComplete = vi.fn();
     const {container, rerender} = render(
       <GlassCommandPalette
         body={<div data-slot="body">Live results</div>}
@@ -82,11 +83,16 @@ describe('GlassCommandPalette', () => {
         body={<div>Live results</div>}
         composer={<div>Ask or search</div>}
         expanded={false}
+        onWorkspaceExitComplete={onWorkspaceExitComplete}
         footer={<div>Private</div>}
         scopes={<div>Files</div>}
       />,
     );
 
+    expect(screen.getByText('Live results')).toBeInTheDocument();
+    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(onWorkspaceExitComplete).not.toHaveBeenCalled();
+    await waitFor(() => expect(onWorkspaceExitComplete).toHaveBeenCalledOnce());
     expect(screen.queryByText('Live results')).not.toBeInTheDocument();
     expect(screen.queryByText('Private')).not.toBeInTheDocument();
     expect(screen.queryByText('Files')).not.toBeInTheDocument();
@@ -138,9 +144,7 @@ describe('GlassCommandPalette', () => {
 
     const surface = container.querySelector('[data-einui-layer="surface"]');
     expect(surface).toHaveAttribute('data-launcher-motion', 'surface');
-    expect(surface).toHaveStyle({
-      transition: 'border-radius 120ms cubic-bezier(0.4, 0, 1, 1)',
-    });
+    expect((surface as HTMLElement).style.transition).toBe('');
 
     rerender(
       <GlassCommandPalette
@@ -151,9 +155,7 @@ describe('GlassCommandPalette', () => {
     );
 
     const workspace = container.querySelector('[data-launcher-motion="workspace"]');
-    expect(surface).toHaveStyle({
-      transition: 'border-radius 160ms cubic-bezier(0.2, 0.8, 0.2, 1)',
-    });
+    expect((surface as HTMLElement).style.transition).toBe('');
     expect(workspace).toHaveAttribute('data-motion-duration', '190ms');
     expect(workspace).toHaveAttribute('data-motion-offset', '-6px');
     expect(workspace).toHaveClass('overflow-hidden');

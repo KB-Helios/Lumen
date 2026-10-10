@@ -77,7 +77,6 @@ export const settingsSchema = z.object({
   }),
   presentation: z.object({
     glassIntensity: z.number().int().min(0).max(100),
-    synchronizeReducedMotion: z.boolean(),
   }),
   roots: z.array(indexedRootSchema),
   search: z.object({
@@ -155,7 +154,6 @@ export const defaultSettings: LumenSettings = settingsSchema.parse({
   },
   presentation: {
     glassIntensity: 72,
-    synchronizeReducedMotion: true,
   },
   roots: [],
   search: {

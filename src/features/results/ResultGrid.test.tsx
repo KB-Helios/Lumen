@@ -24,6 +24,23 @@ function file(id: string, overrides: Partial<SearchResult> = {}): SearchResult {
 }
 
 describe('ResultGrid', () => {
+  it('cascades each replacement once even when row IDs are retained', async () => {
+    const cancel = vi.fn();
+    const animate = vi.fn(() => ({cancel} as unknown as Animation));
+    const previousAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = animate;
+    try {
+      const first = [file('a'), file('b')];
+      const {rerender, unmount} = render(<ResultGrid animateRows reducedMotion results={first} selectedId="a" />);
+      await waitFor(() => expect(animate).toHaveBeenCalledTimes(2));
+      rerender(<ResultGrid animateRows reducedMotion results={first} selectedId="b" />);
+      expect(animate).toHaveBeenCalledTimes(2);
+      rerender(<ResultGrid animateRows reducedMotion results={[file('a'), file('b')]} selectedId="b" />);
+      await waitFor(() => expect(animate).toHaveBeenCalledTimes(4));
+      unmount();
+      expect(cancel).toHaveBeenCalledTimes(4);
+    } finally { HTMLElement.prototype.animate = previousAnimate; }
+  });
   afterEach(() => appearanceStore.setState({density: 'comfortable'}));
 
   it('renders compact rows with the compact virtual canvas height', async () => {

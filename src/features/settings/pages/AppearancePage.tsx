@@ -1,5 +1,6 @@
 import {LumenMark} from '../../../design-system/icons/LumenMark';
 import {LumenText} from '../../../design-system/primitives/LumenText';
+import {LumenSurface} from '../../../design-system/primitives/LumenSurface';
 import {useAppearanceStore} from '../../../state/appearance.store';
 import {SettingRow} from '../components/SettingRow';
 import {SettingSection} from '../components/SettingSection';
@@ -26,11 +27,11 @@ export function AppearancePage() {
   return (
     <SettingsPage>
       <div aria-label="Appearance preview" className="grid min-h-[118px] min-w-0 place-items-center overflow-hidden rounded-surface border border-border-subtle bg-canvas">
-        <div className="flex min-h-[52px] min-w-0 w-[78%] items-center gap-[12px] rounded-surface border border-border-strong bg-surface-glass px-[16px] shadow-surface backdrop-blur-xl" style={{opacity: Math.max(0.55, presentation.glassIntensity / 100)}}>
+        <LumenSurface className="flex min-h-[52px] min-w-0 w-[78%] items-center gap-[12px] rounded-surface px-[16px]">
           <LumenMark size="medium" />
           <span aria-hidden="true" className="h-1.5 flex-1 rounded-pill bg-border-strong" />
           <LumenText tone="tertiary" variant="caption">Preview</LumenText>
-        </div>
+        </LumenSurface>
       </div>
       <SettingSection title="Theme and material">
         <SettingRow label="Appearance" description="Follow Windows or choose a fixed light or dark surface.">
@@ -87,13 +88,6 @@ export function AppearancePage() {
             options={[{id: 'system', label: 'System'}, {id: 'full', label: 'Full'}, {id: 'reduced', label: 'Reduced'}]}
             value={motion}
             onChange={(value) => void setMotion(value)}
-          />
-        </SettingRow>
-        <SettingRow label="Synchronize reduced motion" description="Keep Lumen aligned with the Windows accessibility setting.">
-          <LumenSwitch
-            aria-label="Synchronize reduced motion"
-            isSelected={presentation.synchronizeReducedMotion}
-            onChange={(synchronizeReducedMotion) => void updatePresentation({synchronizeReducedMotion})}
           />
         </SettingRow>
       </SettingSection>

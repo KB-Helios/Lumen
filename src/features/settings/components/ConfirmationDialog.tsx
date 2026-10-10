@@ -43,8 +43,8 @@ export function ConfirmationDialog({cancelLabel = 'Cancel', children, confirmLab
             {({close}) => (
               <>
                 <Heading slot="title"><LumenText as="span" variant="bodyLarge" weight="semibold">{title}</LumenText></Heading>
-                <LumenText tone="secondary">{description}</LumenText>
-                {error ? <LumenText role="alert" tone="secondary">{error}</LumenText> : null}
+                <LumenText className="leading-relaxed" tone="secondary">{description}</LumenText>
+                {error ? <LumenText className="rounded-control border border-danger/25 bg-danger/10 p-3 text-danger" role="alert" variant="meta">{error}</LumenText> : null}
                 <div className="flex min-w-0 flex-wrap justify-end gap-[8px]">
                   <LumenButton isDisabled={busy} size="small" variant="quiet" onPress={close}>{cancelLabel}</LumenButton>
                   <LumenButton

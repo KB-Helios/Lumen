@@ -1,4 +1,4 @@
-import {useLayoutEffect, useMemo, useRef} from 'react';
+import {useEffect, useLayoutEffect, useMemo, useRef} from 'react';
 import {GridList, type Key, type Selection} from 'react-aria-components';
 import {motion} from 'motion/react';
 
@@ -6,6 +6,7 @@ import {motionTokens} from '../../design-system/motion';
 import type {SearchResult} from '../../services/search/search.types';
 import {useAppearanceStore} from '../../state/appearance.store';
 import {useSelectionStore} from '../launcher/selection.store';
+import {useLauncherStore} from '../launcher/launcher.store';
 import {ResultRow} from './ResultRow';
 import {SelectionCapsule} from './SelectionCapsule';
 import {
@@ -49,6 +50,33 @@ export function ResultGrid({
   const rowHeight = density === 'compact' ? compactResultHeight : comfortableResultHeight;
   const viewportRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!animateRows) return;
+    const animations: Animation[] = [];
+    const frame = requestAnimationFrame(() => {
+      if (document.visibilityState === 'hidden' || !useLauncherStore.getState().visible) return;
+      const {duration, stagger, maxStaggered, reducedDuration} = motionTokens.rowEntrance;
+      const rows = [...(gridRef.current?.querySelectorAll<HTMLElement>('[data-result-id]') ?? [])];
+      for (const [index, row] of rows.slice(0, maxStaggered).entries()) {
+        if (typeof row.animate !== 'function') continue;
+        animations.push(row.animate([{opacity: 0}, {opacity: 1}], {
+          delay: reducedMotion ? 0 : index * stagger * 1000,
+          duration: (reducedMotion ? reducedDuration : duration) * 1000,
+          easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards',
+        }));
+      }
+    });
+    const stop = () => { for (const animation of animations) animation.cancel(); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden' || !useLauncherStore.getState().visible) stop(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const unsubscribeVisibility = useLauncherStore.subscribe((state) => state.visible, onVisibility);
+    return () => {
+      cancelAnimationFrame(frame);
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+      unsubscribeVisibility();
+    };
+  }, [animateRows, reducedMotion, results]);
   const selectedResult = results.find((result) => result.id === selectedId);
   const effectiveSelectedId = selectedResult && (selectedResult.availability ?? 'available') === 'available'
     ? selectedId
@@ -190,10 +218,7 @@ export function ResultGrid({
         >
           {(entry) => (
             <ResultRow
-              animateEntrance={animateRows}
-              entranceIndex={entry.index}
               isOpening={entry.result.id === openingId}
-              reducedMotion={reducedMotion}
               result={entry.result}
               selected={entry.id === effectiveSelectedId}
               totalCount={results.length}

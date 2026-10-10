@@ -2,6 +2,7 @@ import {ActivityIndicator} from '../../design-system/animations/ActivityIndicato
 import {useLumenMotion} from '../../design-system/MotionProvider';
 import {activityPresentations} from '../activity/activity.types';
 import {useActivityStore} from '../activity/activity.store';
+import {useLauncherStore} from './launcher.store';
 
 export interface LauncherStatusProps {
   label?: string;
@@ -10,6 +11,7 @@ export interface LauncherStatusProps {
 
 export function LauncherStatus({label = 'Ready', searching = false}: LauncherStatusProps) {
   const {reducedMotion} = useLumenMotion();
+  const visible = useLauncherStore((state) => state.visible);
   const activityActive = useActivityStore((state) => state.active);
   const activityMode = useActivityStore((state) => state.mode);
   const activityLabel = activityPresentations[activityMode].compactLabel;
@@ -23,6 +25,7 @@ export function LauncherStatus({label = 'Ready', searching = false}: LauncherSta
     >
       <ActivityIndicator
         active={active}
+        visible={visible}
         reducedMotion={reducedMotion}
         tone={activityActive ? 'warning' : 'success'}
       />

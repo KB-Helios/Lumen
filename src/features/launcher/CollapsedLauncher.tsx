@@ -144,9 +144,10 @@ export function CollapsedLauncher({
   }
   previousVisible.current = visible;
   const inputRef = providedInputRef ?? fallbackInputRef;
-  const {expanded, presentationError} = useLauncherPresentation({
+  const retainedWorkspace = useRef(expandedContent);
+  if (hasCommittedQuery) retainedWorkspace.current = expandedContent;
+  const {expanded, presentationError, onWorkspaceExitComplete} = useLauncherPresentation({
     hasContent: hasCommittedQuery,
-    reducedMotion,
     windowService,
   });
 
@@ -171,8 +172,6 @@ export function CollapsedLauncher({
     setIntent(intent === 'computer' ? 'search' : 'computer');
   };
 
-  const visibleWorkspace = expanded ? expandedContent : null;
-
   return (
     <GlassCommandPalette
       aria-label="Lumen launcher"
@@ -188,8 +187,9 @@ export function CollapsedLauncher({
         />
       )}
       expanded={expanded}
+      onWorkspaceExitComplete={onWorkspaceExitComplete}
       scopes={intent === 'search' ? <ScopeRail /> : null}
-      body={visibleWorkspace}
+      body={hasCommittedQuery ? expandedContent : retainedWorkspace.current}
       footer={(
         <LauncherFooter
           searching={searching}

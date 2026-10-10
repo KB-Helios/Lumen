@@ -1,4 +1,4 @@
-import {act, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {AppProviders} from '../../app/AppProviders';
@@ -79,6 +79,24 @@ afterEach(() => {
 });
 
 describe('ExpandedWorkspace preview policy', () => {
+  it('keeps one answer motion container across streamed deltas and accepts Stop during entry', async () => {
+    const stop = vi.fn();
+    const props = {activeFilters: [], announcement: '', error: null, lifecycle: 'ready' as const,
+      openingId: null, results: [], service: new MemorySearchService(), onClearFilters: vi.fn(),
+      onDetails: vi.fn(), onOpen: vi.fn(), onOpenContainingFolder: vi.fn(), onPin: vi.fn(),
+      onRemoveFilter: vi.fn(), onSelectionChange: vi.fn()};
+    const answer = (text: string) => <section><span>{text}</span><button onClick={stop}>Stop answer</button></section>;
+    const {container, rerender} = render(<ExpandedWorkspace {...props} answerPanel={answer('First')} />);
+    const region = container.querySelector('[data-answer-motion]');
+    expect(region).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Stop answer'}));
+    expect(stop).toHaveBeenCalledOnce();
+    rerender(<ExpandedWorkspace {...props} answerPanel={answer('First second')} />);
+    expect(container.querySelector('[data-answer-motion]')).toBe(region);
+    rerender(<ExpandedWorkspace {...props} />);
+    expect(region).toBeInTheDocument();
+    await waitFor(() => expect(region).not.toBeInTheDocument());
+  });
   it('updates action pin and kind availability with selection without rendering the workspace owner', () => {
     let renders = 0;
     const pinned = {...result, pinned: true, provenance: {fileHash: 'fixture', indexRevision: 1, extractionKind: 'text'}};

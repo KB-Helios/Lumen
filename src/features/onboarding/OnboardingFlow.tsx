@@ -3,6 +3,7 @@ import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
 
 import {useLumenMotion} from '../../design-system/MotionProvider';
+import {motionTokens} from '../../design-system/motion';
 import {LumenUiIcon} from '../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../design-system/primitives/LumenButton';
 import {LumenSurface} from '../../design-system/primitives/LumenSurface';
@@ -202,18 +203,18 @@ export function OnboardingFlow({
             custom={directionRef.current}
             exit="exit"
             initial="enter"
-            transition={{duration: pageDuration}}
+            transition={{duration: pageDuration, ease: motionTokens.easing.standard}}
             variants={{
               enter: (direction: 'forward' | 'backward') => (
                 reducedMotion
-                  ? {opacity: 0}
-                  : {opacity: 0, x: direction === 'forward' ? 18 : -18}
+                  ? {opacity: 0, transform: 'translateX(0px)'}
+                  : {opacity: 0, transform: `translateX(${direction === 'forward' ? 18 : -18}px)`}
               ),
-              center: {opacity: 1, x: 0},
+              center: {opacity: 1, transform: 'translateX(0px)'},
               exit: (direction: 'forward' | 'backward') => (
                 reducedMotion
-                  ? {opacity: 0}
-                  : {opacity: 0, x: direction === 'forward' ? -14 : 14}
+                  ? {opacity: 0, transform: 'translateX(0px)'}
+                  : {opacity: 0, transform: `translateX(${direction === 'forward' ? -14 : 14}px)`}
               ),
             }}
           >
