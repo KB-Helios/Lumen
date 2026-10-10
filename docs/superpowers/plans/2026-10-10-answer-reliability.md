@@ -53,9 +53,11 @@ Files: native/Edge integration harness, `artifacts/performance`, `docs/architect
 - [x] Record first-token latency, cancellation latency, output/parser bounds, repeated failures, JS update overhead and React commits. Mark fixture vs live evidence explicitly.
 - [x] Run typecheck, lint, complete Vitest, complete installed-Edge e2e, Rust fmt, Clippy, all-features Rust tests, and full Tauri release build.
 - [x] Regenerate required UI/performance artifacts, document verified boundaries, independently review the complete diff and resolve material findings.
-- [ ] Fetch latest main again, commit, push, create/attach focused PR, and verify GitHub Actions on the final commit. Do not merge or declare complete with mandatory failures outstanding.
+- [x] Fetch latest main again, commit, push, create and attach the focused PR. Keep it unmerged.
+
+Final hosted gate: verify GitHub Actions on the final PR head before handoff, and do not declare complete with mandatory failures outstanding. The [PR's live checks](https://github.com/KB-Helios/Lumen/pull/23/checks) and final PR description record this external status; the source checklist records the completed implementation and local verification.
 
 ## Progress
 
 - Investigation complete: PR #22 merged; latest main and failing CI checked. Native parser/cancellation and fallback state defects identified for red/green reproduction.
-- Native, frontend and integration corrections are implemented and independently reviewed. All required local gates, final evidence regeneration, release packaging and the existing isolated installer smoke passed. The complete Rust gate passed 263 unit and 25 integration tests, with 15 explicit fixture/external acceptance cases ignored. PR creation and final hosted CI verification remain pending; see [the verification report](../../reports/2026-10-10-answer-reliability.md) for gate boundaries.
+- Native, frontend and integration corrections are implemented and independently reviewed. All required local gates, final evidence regeneration, release packaging and the existing isolated installer smoke passed. The complete Rust gate passed 263 unit and 25 integration tests, with 15 explicit fixture/external acceptance cases ignored. [PR #23](https://github.com/KB-Helios/Lumen/pull/23) is published and attached; final hosted status is recorded on its current head checks. See [the verification report](../../reports/2026-10-10-answer-reliability.md) for gate boundaries.

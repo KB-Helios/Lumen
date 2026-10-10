@@ -74,6 +74,8 @@ The first complete Rust rerun passed 260 tests and exposed two fixture failures.
 
 Credentials remain in Rust and never enter React or the test executor. Production HTTP targets, local binaries/arguments, process containment and consent boundaries are retained. No shell capability, configurable test URL or test-only command is added to release Lumen. Provider bodies, rejected invocation text, subprocess details and credentials are excluded from frontend errors; structured codes use fixed safe messages. Source/index admission still canonicalizes the trust boundary and refuses symlinks/reparse routes. Frontend queues, event streams, native frames/wire/output and local probe streams all have explicit bounds.
 
+GitHub's existing medium [glib advisory GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g) remains open against the unchanged all-platform Cargo lockfile. `cargo tree --locked --all-features --target x86_64-pc-windows-msvc --invert glib` returned no dependency to print: glib is absent from the verified Windows target. This change does not remediate dependencies selected for unsupported platforms or claim that the entire repository has no advisories.
+
 See [answer-service.md](../architecture/answer-service.md) for state transitions, production limits, ownership and reproducible commands. The frontend, local preparation and integration worklogs contain the focused red/green evidence.
 
 ## Remaining evidence limits
@@ -82,4 +84,4 @@ This verifies real Windows processes, loopback sockets, native channel serializa
 
 Already-running synchronous SQLite context work may finish in its bounded pool after the request stops waiting; it cannot emit an answer or enter a provider attempt. Existing non-answer management health/start commands retain their synchronous behavior. Settings application and dispatch are separate operations, so an accepted in-flight provider request retains its original attribution. The general browser profile's strict 240 Hz field must be interpreted independently from cadence-aware checks and does not establish packaged compositor performance.
 
-The focused PR targets latest main and must remain unmerged. Final hosted CI status is reported on the attached PR after checking its head revision; local tests do not substitute for that status.
+[PR #23](https://github.com/KB-Helios/Lumen/pull/23) targets the freshly verified latest main and remains unmerged. Final hosted CI status is reported on the attached PR after checking its head revision against [its live checks](https://github.com/KB-Helios/Lumen/pull/23/checks); local tests do not substitute for that status.
