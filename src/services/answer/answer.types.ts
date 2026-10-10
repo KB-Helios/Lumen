@@ -37,6 +37,7 @@ export const maxAnswerTextBytes = 1024 * 1024;
 export const maxAnswerStreamBytes = 4 * 1024 * 1024;
 export const maxAnswerQueuedEvents = 4096;
 export const maxAnswerEvents = 32768;
+export const answerDeliverySchema = z.strictObject({eventCount: z.number().int().nonnegative().max(maxAnswerEvents)});
 const attribution = z.string().min(1).max(512);
 const tokenCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const answerCitationSchema = z.strictObject({

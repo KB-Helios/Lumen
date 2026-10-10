@@ -30,6 +30,17 @@ describe('AI runtime settings', () => {
     expect(useSettingsStore.getState().ai.runtimeMode).toBe('local');
   });
 
+  it('keeps runtime application errors transient while persisting the selected preferences', async () => {
+    useSettingsStore.setState({localRuntimeError: 'apply-failed'});
+    await useSettingsStore.getState().updateAi({runtimeMode: 'local'});
+
+    const saved = JSON.parse(window.localStorage.getItem('lumen-management-settings') ?? '{}');
+    expect(saved.ai.runtimeMode).toBe('local');
+    expect(saved).not.toHaveProperty('localRuntimeError');
+    useSettingsStore.getState().reset();
+    expect(useSettingsStore.getState().localRuntimeError).toBeNull();
+  });
+
   it('fails closed when an existing AI settings payload predates cloud answer consent', () => {
     const parsed = parseSettings({
       ...defaultSettings,

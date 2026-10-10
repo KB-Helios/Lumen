@@ -21,6 +21,10 @@ fn short_windows_path(path: &Path) -> PathBuf {
 fn watcher_path_admission_expands_short_ancestors_for_deleted_paths() {
     let root = std::fs::canonicalize(std::env::var_os("ProgramFiles").unwrap()).unwrap();
     let short = short_windows_path(&root);
+    assert_ne!(
+        short, root,
+        "short-alias fixture unavailable: ProgramFiles has no distinct 8.3 alias"
+    );
     assert_eq!(index_worker::event_path(&root, &short), Some(root.clone()));
     let relative = Path::new("lumen-missing-event-fixture").join("İstanbul.txt");
     assert_eq!(

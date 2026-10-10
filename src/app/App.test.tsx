@@ -16,8 +16,11 @@ import {windowsAiService} from '../services/windows-ai';
 import {unsupportedWindowsAiSnapshot} from '../services/windows-ai/unavailable-windows-ai-service';
 import {defaultWindowsAiPreferences, type WindowsAgentActivation} from '../services/windows-ai/windows-ai.types';
 import {App} from './App';
+// Load the lazy settings fixture before measuring asynchronous application ownership.
+import '../features/settings/SettingsShell';
 import {createIndexedRoot} from '../features/settings/indexed-root';
 import {DevelopmentFileSearchService} from '../services/search/development-file-search-service';
+import * as nativeAiModule from '../services/ai/native-ai-service';
 
 const nativeCalls = vi.hoisted(() => [] as {command: string; args?: Record<string, unknown>}[]);
 const nativeState = vi.hoisted(() => ({generation: 1}));
@@ -53,6 +56,85 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('keeps the newer App application successful when the page later rejects the same runtime preferences', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, '', '/?service=memory');
+    useSettingsStore.setState({hydrated: true, activePage: 'local-ai'});
+    useLauncherStore.getState().show('settings');
+    vi.spyOn(nativeAiModule, 'isNativeRuntime').mockReturnValue(true);
+    const health = vi.spyOn(nativeAiModule.nativeAiService, 'localRuntimeHealth').mockResolvedValue({
+      profile: 'generic-local', state: 'ready', accelerator: 'CPU',
+      answerModel: 'fixture-answer', embeddingModel: 'fixture-embedding', transcriptionModel: 'fixture-transcription',
+      baseUrl: 'http://127.0.0.1:13305/v1',
+      lemonade: {installed: true, version: '11.5.2', requiredVersion: '11.5.2', state: 'ready'},
+      flm: {installed: false, requiredVersion: '0.9.46', state: 'missing'},
+      mistralRs: {installed: false, requiredVersion: '0.9.0', state: 'missing'},
+    });
+    let rejectPage!: (error: Error) => void;
+    let warmApplications = 0;
+    vi.spyOn(nativeAiModule.nativeAiService, 'setLocalRuntimeMode').mockImplementation((_, keepWarm) => {
+      if (!keepWarm || ++warmApplications > 1) return Promise.resolve();
+      return new Promise<void>((_, reject) => {rejectPage = reject;});
+    });
+    render(<App windowService={new BrowserWindowService()} />);
+    await waitFor(() => expect(health).toHaveBeenCalled());
+    await screen.findByText(/The loopback provider is ready/);
+    await user.click(screen.getByRole('switch', {name: 'Keep local model warm'}));
+    await waitFor(() => expect(warmApplications).toBe(2));
+    await act(async () => {rejectPage(new Error('obsolete same-preference busy fixture'));});
+
+    expect(useSettingsStore.getState().localRuntimeError).toBeNull();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(useSettingsStore.getState().ai.keepLocalWarm).toBe(true);
+  });
+
+  it('handles rejected local runtime settings without retaining raw native error text', async () => {
+    window.history.replaceState({}, '', '/?service=memory');
+    useSettingsStore.setState({hydrated: true});
+    vi.spyOn(nativeAiModule, 'isNativeRuntime').mockReturnValue(true);
+    const applyMode = vi.spyOn(nativeAiModule.nativeAiService, 'setLocalRuntimeMode')
+      .mockRejectedValue(new Error('busy fixture sk-private-key https://private.example subprocess output'));
+
+    render(<App windowService={new BrowserWindowService()} />);
+
+    await waitFor(() => expect(applyMode).toHaveBeenCalledWith('auto', false));
+    await waitFor(() => expect(useSettingsStore.getState().localRuntimeError).toBe('apply-failed'));
+    expect(JSON.stringify(useSettingsStore.getState())).not.toMatch(/sk-private-key|private\.example|subprocess output/);
+  });
+
+  it('ignores an obsolete runtime settings rejection after a newer preference succeeds', async () => {
+    window.history.replaceState({}, '', '/?service=memory');
+    useSettingsStore.setState({hydrated: true, localRuntimeError: null});
+    vi.spyOn(nativeAiModule, 'isNativeRuntime').mockReturnValue(true);
+    let rejectOld!: (error: Error) => void;
+    const applyMode = vi.spyOn(nativeAiModule.nativeAiService, 'setLocalRuntimeMode')
+      .mockImplementationOnce(() => new Promise<void>((_, reject) => {rejectOld = reject;}))
+      .mockResolvedValue(undefined);
+    render(<App windowService={new BrowserWindowService()} />);
+    await waitFor(() => expect(rejectOld).toBeDefined());
+
+    act(() => useSettingsStore.setState((state) => ({ai: {...state.ai, runtimeMode: 'local'}})));
+    await waitFor(() => expect(applyMode).toHaveBeenCalledWith('local', false));
+    await act(async () => {rejectOld(new Error('obsolete busy fixture'));});
+
+    expect(useSettingsStore.getState().localRuntimeError).toBeNull();
+  });
+
+  it('handles a late runtime settings rejection after unmount without publishing an error', async () => {
+    window.history.replaceState({}, '', '/?service=memory');
+    useSettingsStore.setState({hydrated: true, localRuntimeError: null});
+    vi.spyOn(nativeAiModule, 'isNativeRuntime').mockReturnValue(true);
+    let rejectMode!: (error: Error) => void;
+    vi.spyOn(nativeAiModule.nativeAiService, 'setLocalRuntimeMode')
+      .mockImplementation(() => new Promise<void>((_, reject) => {rejectMode = reject;}));
+    const {unmount} = render(<App windowService={new BrowserWindowService()} />);
+    await waitFor(() => expect(rejectMode).toBeDefined());
+    unmount();
+    await act(async () => {rejectMode(new Error('late busy fixture'));});
+
+    expect(useSettingsStore.getState().localRuntimeError).toBeNull();
+  });
+
   it.each(['configured', 'empty', 'paused'] as const)('waits for real settings hydration before making a held query actionable with %s roots', async savedPolicy => {
     let finishHydration!: (settings: LumenSettings) => void;
     vi.spyOn(settingsPersistence, 'read').mockImplementation(() => new Promise(resolve => {finishHydration = resolve;}));

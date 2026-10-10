@@ -2,7 +2,7 @@ import {randomBytes} from 'node:crypto';
 import {createServer} from 'node:http';
 import {createInterface} from 'node:readline';
 
-const scenarios = new Set(['fallback', 'stall', 'retry', 'replacement-a', 'replacement-b', 'burst', 'failure']);
+const scenarios = new Set(['fallback', 'stall', 'retry', 'replacement-a', 'replacement-b', 'burst', 'failure', 'delivery-order']);
 
 // This listener exists only in the explicitly launched test process, never in Lumen.
 export async function createAnswerNativeBridge({stdin, stdout}) {

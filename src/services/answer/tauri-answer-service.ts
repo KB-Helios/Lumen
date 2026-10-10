@@ -1,7 +1,7 @@
 import {Channel, invoke} from '@tauri-apps/api/core';
 
 import type {AnswerService} from './answer-service';
-import {answerEventSchema, isTerminalAnswerEvent, maxAnswerEvents, maxAnswerQueuedEvents, maxAnswerStreamBytes, maxAnswerTextBytes, type AnswerEvent, type AnswerRequest} from './answer.types';
+import {answerDeliverySchema, answerEventSchema, isTerminalAnswerEvent, maxAnswerEvents, maxAnswerQueuedEvents, maxAnswerStreamBytes, maxAnswerTextBytes, type AnswerEvent, type AnswerRequest} from './answer.types';
 
 const failureMessages: Record<string, string> = {
   rate_limited: 'The answer provider is rate limited. Retry later or select Local.',
@@ -32,7 +32,8 @@ export class TauriAnswerService implements AnswerService {
     const queued: AnswerEvent[] = [];
     const encoder = new TextEncoder();
     let wake: (() => void) | undefined;
-    let commandDone = false;
+    let acknowledgedEvents: number | undefined;
+    let deliveryTimer: ReturnType<typeof setTimeout> | undefined;
     let terminalReceived = false;
     let disposed = false;
     let cancelled = false;
@@ -65,6 +66,10 @@ export class TauriAnswerService implements AnswerService {
       const size = encoder.encode(JSON.stringify(event)).byteLength;
       streamBytes += size;
       eventCount += 1;
+      if (acknowledgedEvents !== undefined && eventCount > acknowledgedEvents) {
+        reject('The answer service sent an invalid acknowledgement. Retry the request.');
+        return;
+      }
       if (outputBytes > maxAnswerTextBytes || queuedBytes + size > maxAnswerTextBytes
         || streamBytes > maxAnswerStreamBytes || queued.length >= maxAnswerQueuedEvents || eventCount > maxAnswerEvents) {
         reject('The answer exceeded its size or buffer limit. Retry the request.');
@@ -72,15 +77,32 @@ export class TauriAnswerService implements AnswerService {
       }
       queuedBytes += size;
       terminalReceived = isTerminalAnswerEvent(event);
+      if (terminalReceived) {
+        clearTimeout(requestTimer);
+        clearTimeout(deliveryTimer);
+      }
       queued.push(event);
       notify();
     });
+    // Install deadlines only after Channel registration succeeds. Native work
+    // has a 120 s deadline; command resolution is not a Channel ordering barrier.
+    const requestTimer = setTimeout(() => {
+      reject('The answer request exceeded its time limit. Retry the request.');
+    }, 125_000);
     signal.addEventListener('abort', cancel, {once: true});
-    void invoke<void>('start_answer', {request, onEvent: channel}).then(() => {
-      commandDone = true;
+    void invoke<unknown>('start_answer', {request, onEvent: channel}).then((payload) => {
+      if (disposed || terminalReceived || failure || signal.aborted) return;
+      const parsed = answerDeliverySchema.safeParse(payload);
+      if (!parsed.success || parsed.data.eventCount < eventCount) {
+        reject('The answer service sent an invalid acknowledgement. Retry the request.');
+        return;
+      }
+      acknowledgedEvents = parsed.data.eventCount;
+      deliveryTimer = setTimeout(() => {
+        reject('The answer service exceeded its delivery time limit. Retry the request.');
+      }, 5000);
       notify();
     }, () => {
-      commandDone = true;
       if (!terminalReceived && !signal.aborted && !disposed && !failure) {
         reject('The answer service could not start or finish the request. Retry the request.');
       }
@@ -96,7 +118,7 @@ export class TauriAnswerService implements AnswerService {
           queuedBytes -= encoder.encode(JSON.stringify(event)).byteLength;
           yield event;
           if (isTerminalAnswerEvent(event)) return;
-        } else if (commandDone) {
+        } else if (acknowledgedEvents !== undefined && eventCount >= acknowledgedEvents) {
           throw new Error('The answer ended before it was complete. Retry the request.');
         } else {
           await new Promise<void>((resolve) => { wake = resolve; });
@@ -104,10 +126,12 @@ export class TauriAnswerService implements AnswerService {
       }
     } finally {
       disposed = true;
+      clearTimeout(requestTimer);
+      clearTimeout(deliveryTimer);
       queued.length = 0;
       channel.onmessage = () => undefined;
       signal.removeEventListener('abort', cancel);
-      if (!commandDone && !terminalReceived) cancel();
+      if (!terminalReceived) cancel();
     }
   }
 }

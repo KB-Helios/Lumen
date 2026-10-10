@@ -306,6 +306,18 @@ fn profile_for(flm: bool, accelerator: &str) -> &'static str {
 }
 
 impl LocalRuntimeSupervisor {
+    fn answer_process_alive(&self) -> Result<bool, &'static str> {
+        Ok(self
+            .process
+            .lock()
+            .map_err(|_| "local_runtime_unavailable")?
+            .as_mut()
+            .map(|process| process.child.try_wait())
+            .transpose()
+            .map_err(|_| "local_runtime_unavailable")?
+            .is_some_and(|status| status.is_none()))
+    }
+
     pub(super) async fn prepare_answer(
         &self,
         cancellation: &CancellationToken,
@@ -326,16 +338,7 @@ impl LocalRuntimeSupervisor {
             .answer_fixture
             .as_ref()
             .map_or(address, |fixture| fixture.address);
-        let existing = self
-            .process
-            .lock()
-            .map_err(|_| "local_runtime_unavailable")?
-            .as_mut()
-            .map(|process| process.child.try_wait())
-            .transpose()
-            .map_err(|_| "local_runtime_unavailable")?
-            .is_some_and(|status| status.is_none());
-        if existing && answer_ready(address, cancellation, deadline).await? {
+        if self.answer_process_alive()? && answer_ready(address, cancellation, deadline).await? {
             if let Some(error) = preparation_interrupted(cancellation, deadline) {
                 return Err(error);
             }
@@ -375,9 +378,7 @@ impl LocalRuntimeSupervisor {
             return Err(error);
         }
 
-        let mut owned = if existing {
-            None
-        } else {
+        let spawn = || -> Result<RuntimeProcess, &'static str> {
             let mut command = Command::new(server);
             if let Some(root) = binaries.root.as_deref() {
                 command
@@ -410,12 +411,13 @@ impl LocalRuntimeSupervisor {
                     return Err("local_runtime_unavailable");
                 }
             };
-            Some(RuntimeProcess {
+            Ok(RuntimeProcess {
                 child,
                 #[cfg(windows)]
                 job: job.0 as isize,
             })
         };
+        let mut owned = None;
         let readiness_deadline = deadline.min(tokio::time::Instant::now() + Duration::from_secs(8));
         loop {
             if let Some(error) = preparation_interrupted(cancellation, deadline) {
@@ -423,6 +425,10 @@ impl LocalRuntimeSupervisor {
             }
             if tokio::time::Instant::now() >= readiness_deadline {
                 return Err("local_runtime_unavailable");
+            }
+            // Management may replace the process, or it may exit during an async wait.
+            if owned.is_none() && !self.answer_process_alive()? {
+                owned = Some(spawn()?);
             }
             if let Some(process) = &mut owned
                 && process
@@ -448,6 +454,7 @@ impl LocalRuntimeSupervisor {
                             .try_wait()
                             .is_ok_and(|status| status.is_none())
                     }) {
+                        // TCP readiness cannot identify which competing process serves this port.
                         return Err("local_runtime_unavailable");
                     }
                     *current = Some(process);
@@ -602,6 +609,10 @@ impl LocalRuntimeSupervisor {
     }
 
     pub fn start(&self) -> Result<(), String> {
+        // Synchronous management callers must never block a Tokio worker on answer startup.
+        let _startup = self.answer_startup.try_lock().map_err(|_| {
+            "The local runtime is already preparing. Retry when preparation finishes.".to_owned()
+        })?;
         let health = self.health();
         if health.lemonade.state != "ready" || health.flm.state == "update-required" {
             return Err(health
@@ -664,6 +675,11 @@ impl LocalRuntimeSupervisor {
             "auto" => Ok(()),
             "cloud" if keep_warm => self.start(),
             "cloud" => {
+                // Do not acknowledge Stop while preparation can still adopt a new child.
+                let _startup = self.answer_startup.try_lock().map_err(|_| {
+                    "The local runtime is already preparing. Retry when preparation finishes."
+                        .to_owned()
+                })?;
                 *self
                     .process
                     .lock()

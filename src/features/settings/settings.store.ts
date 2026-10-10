@@ -24,6 +24,7 @@ interface SettingsMeta {
   hydrated: boolean;
   persistenceStatus: SettingsPersistenceStatus;
   persistenceError: string | null;
+  localRuntimeError: 'apply-failed' | null;
 }
 
 interface SettingsActions {
@@ -36,6 +37,8 @@ interface SettingsActions {
   setRootsAndAi(roots: IndexedRoot[], patch: Partial<AiSettings>): Promise<boolean>;
   updateSearch(patch: Partial<SearchSettings>): Promise<boolean>;
   updateAi(patch: Partial<AiSettings>): Promise<boolean>;
+  beginLocalRuntimeApplication(mode: AiSettings['runtimeMode'], keepWarm: boolean): number;
+  finishLocalRuntimeApplication(revision: number, error: SettingsMeta['localRuntimeError']): void;
   setCloudAnswerConsent(granted: boolean): Promise<boolean>;
   updateComputerUse(patch: Partial<ComputerUseSettings>): Promise<boolean>;
   setComputerUseConsent(granted: boolean, consent?: 'cloudConsent' | 'desktopControlConsent' | 'desktopCloudConsent'): Promise<boolean>;
@@ -97,12 +100,15 @@ const initialMeta: SettingsMeta = {
   hydrated: false,
   persistenceStatus: 'idle',
   persistenceError: null,
+  localRuntimeError: null,
 };
 
 export const useSettingsStore = create<SettingsState>()(
   subscribeWithSelector((set, get) => {
     let writeRevision = 0;
     let writeQueue = Promise.resolve();
+    let runtimeRevision = 0;
+    let runtimeApplication: {revision: number; mode: AiSettings['runtimeMode']; keepWarm: boolean} | undefined;
     const computerUseConsentRevisions = {cloudConsent: 0, desktopControlConsent: 0, desktopCloudConsent: 0};
 
     async function persist(
@@ -146,6 +152,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       reset: () => {
         writeRevision += 1;
+        runtimeRevision += 1;
+        runtimeApplication = undefined;
         computerUseConsentRevisions.cloudConsent += 1;
         computerUseConsentRevisions.desktopControlConsent += 1;
         computerUseConsentRevisions.desktopCloudConsent += 1;
@@ -178,6 +186,20 @@ export const useSettingsStore = create<SettingsState>()(
       updateAi: (patch) => {
         set((state) => ({ai: {...state.ai, ...patch}}));
         return persist();
+      },
+      // App and Settings can apply the same preferences; only the latest owner publishes a result.
+      beginLocalRuntimeApplication: (mode, keepWarm) => {
+        const revision = ++runtimeRevision;
+        runtimeApplication = {revision, mode, keepWarm};
+        set({localRuntimeError: null});
+        return revision;
+      },
+      finishLocalRuntimeApplication: (revision, error) => {
+        const ai = get().ai;
+        if (runtimeApplication?.revision === revision
+          && runtimeApplication.mode === ai.runtimeMode && runtimeApplication.keepWarm === ai.keepLocalWarm) {
+          set({localRuntimeError: error});
+        }
       },
       setCloudAnswerConsent: (granted) => persist(
         () => {

@@ -63,26 +63,40 @@ mockIPC(async (command, args) => {
     const decoder = new TextDecoder('utf-8', {fatal: true});
     let buffer = '';
     let done = false;
+    let eventCount: number | undefined;
     while (!done) {
       const chunk = await reader.read();
       buffer += decoder.decode(chunk.value, {stream: !chunk.done});
       if (buffer.length > 256 * 1024) throw new Error('Integration record exceeds test limit.');
       let newline: number;
       while ((newline = buffer.indexOf('\n')) >= 0) {
-        const message = JSON.parse(buffer.slice(0, newline)) as {requestId: number; event?: unknown; done?: boolean; error?: string};
+        const message = JSON.parse(buffer.slice(0, newline)) as {requestId: number; event?: unknown; done?: boolean; eventCount?: number; error?: string};
         buffer = buffer.slice(newline + 1);
         if (message.requestId !== request.requestId) throw new Error('Integration request identity mismatch.');
         if (message.event) {
-          const started = performance.now();
-          testWindow.__TAURI_INTERNALS__.runCallback(channel.id, {index: index++, message: message.event});
-          metrics.callbackMs += performance.now() - started;
-          metrics.nativeEvents++;
+          const sequence = index++;
+          const deliver = () => {
+            const started = performance.now();
+            testWindow.__TAURI_INTERNALS__.runCallback(channel.id, {index: sequence, message: message.event});
+            metrics.callbackMs += performance.now() - started;
+            metrics.nativeEvents++;
+          };
+          // Model the separate fetch delivery of a large Tauri message. The
+          // actual JS Channel must buffer the later terminal/end indices.
+          if (request.query === 'delivery-order' && (message.event as AnswerEvent).type === 'delta') {
+            setTimeout(deliver, 30);
+          } else deliver();
         }
-        if (message.done) { done = true; if (message.error) throw new Error('Native fixture failed.'); }
+        if (message.done) {
+          done = true;
+          if (message.error) throw new Error('Native fixture failed.');
+          eventCount = message.eventCount;
+        }
       }
       if (chunk.done) { if (!done) throw new Error('Native integration ended without done.'); break; }
     }
     await reader.cancel();
+    return {eventCount};
   } catch (error) {
     if (!abort.signal.aborted) throw error;
   } finally {

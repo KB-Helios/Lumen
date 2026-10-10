@@ -1,11 +1,12 @@
-import {render, screen, waitFor} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {AppProviders} from '../../../app/AppProviders';
 import {nativeAiService} from '../../../services/ai/native-ai-service';
 import type {ProvisioningService, ProvisioningStatus} from '../../../services/ai/provisioning-service';
 import {LocalAiPage} from './LocalAiPage';
+import {useSettingsStore} from '../settings.store';
 
 vi.mock('../../../services/ai/native-ai-service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../services/ai/native-ai-service')>();
@@ -15,6 +16,7 @@ vi.mock('../../../services/ai/native-ai-service', async (importOriginal) => {
     nativeAiService: {
       ...actual.nativeAiService,
       localRuntimeHealth: vi.fn(),
+      setLocalRuntimeMode: vi.fn(),
     },
   };
 });
@@ -49,6 +51,9 @@ describe('LocalAiPage native refresh', () => {
   });
 
   beforeEach(() => {
+    useSettingsStore.getState().reset();
+    vi.mocked(nativeAiService.setLocalRuntimeMode).mockReset();
+    vi.mocked(nativeAiService.setLocalRuntimeMode).mockResolvedValue(undefined);
     vi.mocked(nativeAiService.localRuntimeHealth).mockReset();
     vi.mocked(nativeAiService.localRuntimeHealth).mockResolvedValue({
       profile: 'generic-local',
@@ -62,6 +67,72 @@ describe('LocalAiPage native refresh', () => {
       flm: {installed: true, version: '0.9.43', requiredVersion: '0.9.43', state: 'ready'},
       mistralRs: {installed: false, requiredVersion: '0.7', state: 'missing'},
     });
+  });
+  afterEach(() => useSettingsStore.getState().reset());
+
+  it('shows safe retry guidance when mode application rejects despite already-loaded health', async () => {
+    const user = userEvent.setup();
+    vi.mocked(nativeAiService.setLocalRuntimeMode)
+      .mockRejectedValue(new Error('busy fixture sk-private-key https://private.example subprocess output'));
+    render(
+      <AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}>
+        <LocalAiPage provisioningService={service(provisioningStatus('ready'))} />
+      </AppProviders>,
+    );
+    await screen.findByText(/The loopback provider is ready/);
+    await user.click(screen.getByRole('switch', {name: 'Keep local model warm'}));
+
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('The local runtime settings could not be applied. Wait for current preparation to finish, then retry.');
+    expect(notice).not.toHaveTextContent(/sk-private-key|private\.example|subprocess output/);
+    expect(useSettingsStore.getState().ai.keepLocalWarm).toBe(true);
+    expect(nativeAiService.setLocalRuntimeMode).toHaveBeenCalledWith('auto', true);
+
+    vi.mocked(nativeAiService.setLocalRuntimeMode).mockResolvedValue(undefined);
+    await user.click(screen.getByRole('button', {name: 'Retry local runtime settings'}));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(nativeAiService.setLocalRuntimeMode).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not replace a newer successful mode application with an old rejection', async () => {
+    const user = userEvent.setup();
+    let rejectOld!: (error: Error) => void;
+    vi.mocked(nativeAiService.setLocalRuntimeMode)
+      .mockImplementationOnce(() => new Promise<void>((_, reject) => {rejectOld = reject;}))
+      .mockResolvedValue(undefined);
+    render(
+      <AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}>
+        <LocalAiPage provisioningService={service(provisioningStatus('ready'))} />
+      </AppProviders>,
+    );
+    await screen.findByText(/The loopback provider is ready/);
+    const toggle = screen.getByRole('switch', {name: 'Keep local model warm'});
+    await user.click(toggle);
+    await user.click(toggle);
+    await act(async () => {rejectOld(new Error('obsolete busy fixture'));});
+
+    expect(useSettingsStore.getState().ai.keepLocalWarm).toBe(false);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(nativeAiService.setLocalRuntimeMode).toHaveBeenLastCalledWith('auto', false);
+  });
+
+  it('handles a pending mode rejection after unmount without changing the runtime notice', async () => {
+    const user = userEvent.setup();
+    useSettingsStore.setState({localRuntimeError: null});
+    let rejectMode!: (error: Error) => void;
+    vi.mocked(nativeAiService.setLocalRuntimeMode)
+      .mockImplementation(() => new Promise<void>((_, reject) => {rejectMode = reject;}));
+    const {unmount} = render(
+      <AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}>
+        <LocalAiPage provisioningService={service(provisioningStatus('ready'))} />
+      </AppProviders>,
+    );
+    await screen.findByText(/The loopback provider is ready/);
+    await user.click(screen.getByRole('switch', {name: 'Keep local model warm'}));
+    unmount();
+    await act(async () => {rejectMode(new Error('late busy fixture'));});
+
+    expect(useSettingsStore.getState().localRuntimeError).toBeNull();
   });
 
   it('refreshes native health when a deterministic preview model is removed', async () => {

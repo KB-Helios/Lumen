@@ -1,12 +1,18 @@
 use std::{
     collections::{HashMap, VecDeque},
     future::Future,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU32, Ordering},
+    },
     time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, ipc::Channel};
+use tauri::{
+    State,
+    ipc::{Channel, InvokeResponseBody},
+};
 use tokio_util::sync::CancellationToken;
 
 use crate::improvement::{
@@ -93,6 +99,25 @@ pub enum AnswerEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         code: Option<String>,
     },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnswerDelivery {
+    event_count: u32,
+}
+
+fn acknowledged_channel(
+    destination: Channel<InvokeResponseBody>,
+) -> (Channel<AnswerEvent>, Arc<AtomicU32>) {
+    let count = Arc::new(AtomicU32::new(0));
+    let sent = count.clone();
+    let channel = Channel::new(move |body| {
+        destination.send(body)?;
+        sent.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    });
+    (channel, count)
 }
 
 #[derive(Default)]
@@ -464,7 +489,7 @@ async fn stream_attempt(
 )]
 pub async fn start_answer(
     request: AnswerRequest,
-    on_event: Channel<AnswerEvent>,
+    on_event: Channel<InvokeResponseBody>,
     runtime: State<'_, AnswerRuntime>,
     supervisor: State<'_, GatewaySupervisor>,
     local_runtime: State<'_, LocalRuntimeSupervisor>,
@@ -472,7 +497,8 @@ pub async fn start_answer(
     consent: State<'_, PersistedConsent>,
     registry: State<'_, ProviderRegistry>,
     improvement: State<'_, std::sync::Arc<ImprovementRuntime>>,
-) -> Result<(), String> {
+) -> Result<AnswerDelivery, String> {
+    let (on_event, event_count) = acknowledged_channel(on_event);
     let active = runtime.begin(request.request_id);
     let cancellation = active.token.as_ref();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(120);
@@ -566,7 +592,9 @@ pub async fn start_answer(
             },
         );
     }
-    Ok(())
+    Ok(AnswerDelivery {
+        event_count: event_count.load(Ordering::Relaxed),
+    })
 }
 
 #[tauri::command]
@@ -577,6 +605,55 @@ pub fn cancel_answer(request_id: u64, runtime: State<'_, AnswerRuntime>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delivery_acknowledgement_counts_forwarded_events_without_reserializing() {
+        let received = Arc::new(Mutex::new(Vec::new()));
+        let output = received.clone();
+        let destination = Channel::<InvokeResponseBody>::new(move |body| {
+            let InvokeResponseBody::Json(json) = body else {
+                panic!("expected JSON");
+            };
+            output.lock().unwrap().push(json);
+            Ok(())
+        });
+        let (channel, count) = acknowledged_channel(destination);
+        send(
+            &channel,
+            AnswerEvent::Delta {
+                text: "x".repeat(16_384),
+            },
+        )
+        .unwrap();
+        send(&channel, AnswerEvent::Cancelled).unwrap();
+        assert_eq!(count.load(Ordering::Relaxed), 2);
+        let messages = received.lock().unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&messages[0]).unwrap()["text"],
+            "x".repeat(16_384)
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&messages[1]).unwrap()["type"],
+            "cancelled"
+        );
+        assert_eq!(
+            serde_json::to_value(AnswerDelivery { event_count: 2 }).unwrap(),
+            serde_json::json!({"eventCount": 2})
+        );
+    }
+
+    #[test]
+    fn delivery_acknowledgement_excludes_rejected_channel_sends() {
+        let destination = Channel::<InvokeResponseBody>::new(|_| {
+            Err(std::io::Error::other("closed fixture receiver").into())
+        });
+        let (channel, count) = acknowledged_channel(destination);
+        assert_eq!(
+            send(&channel, AnswerEvent::Cancelled).unwrap_err().code,
+            "receiver_closed"
+        );
+        assert_eq!(count.load(Ordering::Relaxed), 0);
+    }
 
     #[test]
     fn local_mode_never_has_cloud_fallback() {

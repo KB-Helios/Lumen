@@ -1,5 +1,5 @@
 {
-  "evidence": "Three installed-Edge profiles of the unchanged frontend selection path; sampler and thresholds unchanged. Observed variability does not establish a cause or improvement.",
+  "evidence": "Installed-Edge profiles with the unchanged sampler and thresholds. Earlier failures are retained. Observed variability does not establish a cause, improvement, or guaranteed frame rate.",
   "runs": [
     {
       "sequence": 1,
@@ -212,6 +212,86 @@
         "rapidSelectionSamples": 30,
         "rapidSelectionSelectedRows": 1,
         "rapidSelectionSynchronousDurationMs": 1.2999999998137355,
+        "rapidSelectionBrowserLongTasksOver50Ms": []
+      },
+      "strict240Hz": {
+        "input": true,
+        "selection": false,
+        "hover": false,
+        "passed": false
+      },
+      "checks": {
+        "warmLauncher": true,
+        "input": true,
+        "selection": true,
+        "hover": true,
+        "hoverReadiness": true,
+        "hoverSynchronousDispatch": true,
+        "hoverBrowserLongTasks": true,
+        "reactCommit": true,
+        "browserLongTasks": true,
+        "settledAnimations": true,
+        "settledActivityIndicator": true,
+        "idleCpu": true,
+        "memory": true,
+        "environmentEligibility": true,
+        "rapidBurst": true,
+        "rapidSelection": true
+      },
+      "passed": true
+    },
+    {
+      "sequence": 4,
+      "nativeCheckConcurrent": false,
+      "source": "post-review working tree before follow-up commit",
+      "generatedAt": "2026-10-10T04:33:08.856Z",
+      "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56",
+      "browser": {
+        "name": "Microsoft Edge",
+        "version": "155.0.4283.45"
+      },
+      "budgets": {
+        "warmLauncherP95Ms": 20,
+        "nominal240HzPaintFrameMs": 4.166666666666667,
+        "effectivePaintFrameBudgetMs": 6.300000000001091,
+        "effectiveHoverFrameBudgetMs": 10.299999999999727,
+        "inputResponseP95Ms": 6.300000000001091,
+        "selectionToPaintP95Ms": 6.300000000001091,
+        "hoverToPaintP95Ms": 10.299999999999727,
+        "ordinaryReactCommitP95Ms": 3,
+        "synchronousWorkMs": 16,
+        "browserLongTaskMs": 50,
+        "activeAnimationsAfterSettle": 0,
+        "activeActivityIndicatorsAfterSettle": 0,
+        "idleCpuPercent": 2,
+        "jsHeapMegabytes": 100
+      },
+      "measured": {
+        "warmLauncherP95Ms": 6,
+        "inputResponseP95Ms": 0.09999999962747097,
+        "selectionToPaintP95Ms": 4.699999999254942,
+        "hoverToPaintP95Ms": 7.099999999627471,
+        "hoverFrameIntervalP95Ms": 7.199999999254942,
+        "hoverNominalFrameIntervalP95Ms": 10.299999999999727,
+        "hoverReadySamples": 80,
+        "hoverSynchronousDispatchMaxMs": 0.7000000011175871,
+        "hoverBrowserLongTasksOver50Ms": [],
+        "ordinaryReactCommitP95Ms": 0,
+        "repeatedBrowserLongTasksOver50Ms": [],
+        "activeAnimationsAfterSettle": 0,
+        "activeActivityIndicatorsAfterSettle": 0,
+        "idleCpuPercent": 0.3636363636363636,
+        "jsHeapMegabytes": 31.530555725097656,
+        "observedRefreshEstimateHz": 238,
+        "medianFrameIntervalMs": 4.199999999998909,
+        "p95FrameIntervalMs": 4.300000000001091,
+        "rapidBurstInputSamples": 30,
+        "rapidBurstFinalValue": "rapid-burst-30",
+        "rapidBurstSynchronousDurationMs": 1.199999999254942,
+        "rapidBurstBrowserLongTasksOver50Ms": [],
+        "rapidSelectionSamples": 30,
+        "rapidSelectionSelectedRows": 1,
+        "rapidSelectionSynchronousDurationMs": 1.300000000745058,
         "rapidSelectionBrowserLongTasksOver50Ms": []
       },
       "strict240Hz": {

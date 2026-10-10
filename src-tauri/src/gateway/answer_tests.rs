@@ -918,12 +918,13 @@ fn native_bridge() {
                     let cancellation = active.token.as_ref();
                     let request_id = request.request_id;
                     let messages = output.clone();
-                    let channel = Channel::new(move |body| {
+                    let destination = Channel::<InvokeResponseBody>::new(move |body| {
                         let InvokeResponseBody::Json(body) = body else { panic!("JSON fixture channel only"); };
                         let event: serde_json::Value = serde_json::from_str(&body).unwrap();
                         bridge_write(&messages, &serde_json::json!({"requestId":request_id,"event":event}));
                         Ok(())
                     });
+                    let (channel, event_count) = acknowledged_channel(destination);
                     let source = Citation { file_id: "fixture-source".into(), label: "Fixture source".into(), page: Some(2), timestamp_seconds: None };
                     send(&channel, AnswerEvent::Citation { citation: source }).unwrap();
                     let mut routes = vec![local_route()];
@@ -947,11 +948,13 @@ fn native_bridge() {
                                 send(channel, AnswerEvent::Usage { usage: Usage { input_tokens: 7, output_tokens: 99, remaining_tokens: Some(0), reset_at: None } })?;
                             }
                             let stall = request.query == "replacement-a" || (request.query == "retry" && retry == 1);
+                            let delayed = format!("Delayed channel fixture 🌍{}", "x".repeat(16_384));
                             let text = if cloud { "obsolete cloud output" }
                                 else if stall { "Partial stalled answer" }
                                 else { match request.query.as_str() {
                                     "fallback" => "Local fixture answer 🌍", "retry" => "Retry fixture answer",
                                     "replacement-b" => "Replacement fixture answer", "burst" => "burst",
+                                    "delivery-order" => &delayed,
                                     _ => return Err(RouteFailure::new("invalid_request")),
                                 } };
                             let provider = fixture_provider(text.into(), cloud, stall, cancellation.clone());
@@ -960,7 +963,7 @@ fn native_bridge() {
                     }).await;
                     if let Err(failure) = result { finish_failure(&channel, failure); }
                     drop(active);
-                    bridge_write(&output, &serde_json::json!({"requestId":request_id,"done":true}));
+                    bridge_write(&output, &serde_json::json!({"requestId":request_id,"done":true,"eventCount":event_count.load(Ordering::Relaxed)}));
                 }));
             }
         }

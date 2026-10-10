@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {WindowsLocalAiControls} from '../../windows-ai/WindowsAiControls';
 
 import {ProgressBar} from 'react-aria-components';
@@ -73,23 +73,61 @@ export function LocalAiPage({
   const providerName = useGatewayStore((state) => state.providerName);
   const keepLocalWarm = useSettingsStore((state) => state.ai.keepLocalWarm);
   const runtimeMode = useSettingsStore((state) => state.ai.runtimeMode);
+  const localRuntimeError = useSettingsStore((state) => state.localRuntimeError);
   const updateAi = useSettingsStore((state) => state.updateAi);
   const [nativeHealth, setNativeHealth] = useState<LocalRuntimeHealth>();
   const [nativeError, setNativeError] = useState('');
   const [provisioning, setProvisioning] = useState<ProvisioningStatus>();
   const [provisioningError, setProvisioningError] = useState('');
+  const mounted = useRef(false);
+  const runtimeRevision = useRef(0);
+  const healthRevision = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    const unsubscribe = useSettingsStore.subscribe((state) => state.ai, (next, previous) => {
+      if (next.runtimeMode !== previous.runtimeMode || next.keepLocalWarm !== previous.keepLocalWarm) {
+        runtimeRevision.current += 1;
+        healthRevision.current += 1;
+      }
+    });
+    return () => {
+      mounted.current = false;
+      runtimeRevision.current += 1;
+      healthRevision.current += 1;
+      unsubscribe();
+    };
+  }, [model, native]);
   const refreshNative = useCallback(async () => {
     if (!native || model) return;
+    const revision = ++healthRevision.current;
     try {
-      setNativeHealth(await nativeAiService.localRuntimeHealth());
+      const health = await nativeAiService.localRuntimeHealth();
+      if (!mounted.current || revision !== healthRevision.current) return;
+      setNativeHealth(health);
       setNativeError('');
     } catch (error) {
+      if (!mounted.current || revision !== healthRevision.current) return;
       setNativeError(error instanceof Error ? error.message : String(error));
     }
   }, [model, native]);
   useEffect(() => {
     void refreshNative();
+    return () => { healthRevision.current += 1; };
   }, [refreshNative]);
+  const applyRuntimeMode = async (keepWarm: boolean) => {
+    const revision = ++runtimeRevision.current;
+    const application = useSettingsStore.getState().beginLocalRuntimeApplication(runtimeMode, keepWarm);
+    try {
+      await nativeAiService.setLocalRuntimeMode(runtimeMode, keepWarm);
+      if (!mounted.current || revision !== runtimeRevision.current) return;
+      useSettingsStore.getState().finishLocalRuntimeApplication(application, null);
+      await refreshNative();
+    } catch {
+      if (mounted.current && revision === runtimeRevision.current) {
+        useSettingsStore.getState().finishLocalRuntimeApplication(application, 'apply-failed');
+      }
+    }
+  };
   useEffect(() => {
     if (!native || model) return;
     let current = true;
@@ -160,8 +198,10 @@ export function LocalAiPage({
           <LumenText tone="secondary">{hardware.description}</LumenText>
         </div>
       </section>
-      <SettingsCallout>
-        {nativeHealth
+      <SettingsCallout tone={localRuntimeError ? 'error' : 'info'}>
+        {localRuntimeError
+          ? 'The local runtime settings could not be applied. Wait for current preparation to finish, then retry.'
+          : nativeHealth
           ? `${nativeHealth.profile} · ${nativeHealth.accelerator}. ${nativeHealth.detail ?? 'The loopback provider is ready.'}`
           : nativeError || provisioningError || provisioning?.detail || 'Exact filename and content search remain independent of local inference.'}
       </SettingsCallout>
@@ -187,7 +227,7 @@ export function LocalAiPage({
               <LumenButton aria-label="Cancel local core download" size="small" variant="quiet" onPress={cancelProvisioning}>Cancel</LumenButton>
             ) : null}
             {['loading', 'ready', 'fallback-active'].includes(view.state) ? <LocalAiIcon size={22} /> : null}
-            {native ? <LumenButton aria-label={nativeHealth ? 'Refresh local runtime' : 'Retry runtime check'} size="small" variant="quiet" onPress={() => void refreshNative()}><LumenUiIcon name="refresh" size="small" /> {nativeHealth ? 'Refresh' : 'Retry'}</LumenButton> : null}
+            {native ? <LumenButton aria-label={localRuntimeError ? 'Retry local runtime settings' : nativeHealth ? 'Refresh local runtime' : 'Retry runtime check'} size="small" variant="quiet" onPress={() => void (localRuntimeError ? applyRuntimeMode(keepLocalWarm) : refreshNative())}><LumenUiIcon name="refresh" size="small" /> {localRuntimeError || !nativeHealth ? 'Retry' : 'Refresh'}</LumenButton> : null}
           </div>
         </SettingRow>
         <SettingRow label="Provider" description={nativeHealth?.baseUrl ?? 'No native runtime detected.'}>
@@ -204,7 +244,7 @@ export function LocalAiPage({
             isSelected={keepLocalWarm}
             onChange={(value) => {
               void updateAi({keepLocalWarm: value});
-              if (isNativeRuntime()) void nativeAiService.setLocalRuntimeMode(runtimeMode, value).then(refreshNative);
+              if (native) void applyRuntimeMode(value);
             }}
           />
         </SettingRow>

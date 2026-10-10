@@ -69,9 +69,16 @@ fn readiness_fixture() -> (LocalRuntimeSupervisor, PathBuf, PathBuf) {
 }
 
 fn adopt_existing(supervisor: &LocalRuntimeSupervisor) -> u32 {
+    adopt_process(
+        supervisor,
+        &supervisor.answer_fixture.as_ref().unwrap().server_arguments,
+    )
+}
+
+fn adopt_process(supervisor: &LocalRuntimeSupervisor, arguments: &[String]) -> u32 {
     let mut command = Command::new(env::current_exe().unwrap());
     command
-        .args(&supervisor.answer_fixture.as_ref().unwrap().server_arguments)
+        .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -92,6 +99,21 @@ fn adopt_existing(supervisor: &LocalRuntimeSupervisor) -> u32 {
     pid
 }
 
+async fn acknowledged_pid(directory: &Path, deadline: tokio::time::Instant) -> u32 {
+    loop {
+        if let Ok(pid) = fs::read_to_string(directory.join("pid"))
+            && let Ok(pid) = pid.parse()
+        {
+            return pid;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "child did not acknowledge startup"
+        );
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+}
+
 fn wait_for_pid(directory: &Path) -> u32 {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -106,6 +128,13 @@ fn wait_for_pid(directory: &Path) -> u32 {
         );
         std::thread::sleep(Duration::from_millis(2));
     }
+}
+
+fn acknowledge_pid(directory: &Path) {
+    // Deadline termination must not expose a partially written PID acknowledgement.
+    let pending = directory.join("pid.pending");
+    fs::write(&pending, std::process::id().to_string()).unwrap();
+    fs::rename(pending, directory.join("pid")).unwrap();
 }
 
 #[cfg(windows)]
@@ -467,13 +496,278 @@ fn a_cancelled_waiter_does_not_start_a_second_probe() {
 }
 
 #[test]
+fn preparation_does_not_report_success_when_only_its_redundant_child_is_ready() {
+    let _serial = FIXTURE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let (mut supervisor, probe_directory, server_directory) = readiness_fixture();
+    let fixture = supervisor.answer_fixture.as_mut().unwrap();
+    fixture.server_arguments.extend([
+        "--skip".into(),
+        format!("lumen-answer-listen-{}", fixture.address.port()),
+        "--skip".into(),
+        "lumen-answer-server-wait-for-release".into(),
+    ]);
+    let marker = format!("lumen-answer-server-{}", uuid::Uuid::new_v4());
+    let management_directory = env::temp_dir().join(&marker);
+    fs::create_dir(&management_directory).unwrap();
+    let arguments = child_arguments("server_child", marker);
+    let (result, (redundant, management)) = tauri::async_runtime::block_on(async {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        let cancellation = CancellationToken::new();
+        tokio::join!(supervisor.prepare_answer(&cancellation, deadline), async {
+            let redundant = acknowledged_pid(&server_directory, deadline).await;
+            let management = adopt_process(&supervisor, &arguments);
+            assert_eq!(
+                acknowledged_pid(&management_directory, deadline).await,
+                management
+            );
+            fs::write(server_directory.join("release"), b"ready").unwrap();
+            (redundant, management)
+        })
+    });
+    assert_eq!(
+        result,
+        Err("local_runtime_unavailable"),
+        "TCP readiness cannot establish ownership of an unexpected registered child"
+    );
+    assert_eq!(
+        supervisor
+            .process
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .child
+            .id(),
+        management
+    );
+    #[cfg(windows)]
+    {
+        assert!(!is_alive(redundant));
+        assert!(is_alive(management));
+    }
+    drop(supervisor);
+    let _ = fs::remove_dir_all(probe_directory);
+    let _ = fs::remove_dir_all(server_directory);
+    let _ = fs::remove_dir_all(management_directory);
+}
+
+#[test]
+fn cloud_stop_cannot_acknowledge_an_unadopted_answer_startup() {
+    let _serial = FIXTURE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let (mut supervisor, probe_directory, server_directory) = readiness_fixture();
+    let fixture = supervisor.answer_fixture.as_mut().unwrap();
+    fixture.server_arguments.extend([
+        "--skip".into(),
+        format!("lumen-answer-listen-{}", fixture.address.port()),
+        "--skip".into(),
+        "lumen-answer-server-wait-for-release".into(),
+    ]);
+    let (preparation, (stop, pid)) = tauri::async_runtime::block_on(async {
+        let cancellation = CancellationToken::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        tokio::join!(supervisor.prepare_answer(&cancellation, deadline), async {
+            let pid = acknowledged_pid(&server_directory, deadline).await;
+            let stop = supervisor.apply_mode("cloud", false);
+            fs::write(server_directory.join("release"), b"ready").unwrap();
+            (stop, pid)
+        })
+    });
+    assert_eq!(preparation, Ok(()));
+    assert!(
+        stop.is_err_and(|message| message.contains("already preparing")),
+        "cloud stop must not acknowledge success while an answer can still adopt its owned child"
+    );
+    assert_eq!(
+        supervisor
+            .process
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .child
+            .id(),
+        pid
+    );
+    #[cfg(windows)]
+    assert!(is_alive(pid));
+    // Retry once startup admission is free retains the existing cold-cloud semantics.
+    assert_eq!(supervisor.apply_mode("cloud", false), Ok(()));
+    assert!(supervisor.process.lock().unwrap().is_none());
+    #[cfg(windows)]
+    assert!(
+        !is_alive(pid),
+        "acknowledged cloud stop must reap the registered runtime"
+    );
+    drop(supervisor);
+    let _ = fs::remove_dir_all(probe_directory);
+    let _ = fs::remove_dir_all(server_directory);
+}
+
+#[test]
+fn management_start_cannot_replace_a_runtime_during_answer_preparation() {
+    let _serial = FIXTURE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let (supervisor, directory) = fixture("hung");
+    let cancellation = CancellationToken::new();
+    let (preparation, (management, probe)) = tauri::async_runtime::block_on(async {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        tokio::join!(supervisor.prepare_answer(&cancellation, deadline), async {
+            let probe = acknowledged_pid(&directory, deadline).await;
+            let management = supervisor.start();
+            cancellation.cancel();
+            (management, probe)
+        })
+    });
+    assert_eq!(preparation, Err("cancelled"));
+    assert!(
+        management.unwrap_err().contains("already preparing"),
+        "management must respect the shared startup admission before probing or registering a competing child"
+    );
+    assert!(supervisor.process.lock().unwrap().is_none());
+    #[cfg(windows)]
+    assert!(!is_alive(probe));
+    let _ = fs::remove_dir_all(directory);
+}
+
+#[test]
+fn preparation_restarts_a_process_that_exits_during_version_admission() {
+    let _serial = FIXTURE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let (mut supervisor, probe_directory, server_directory) = readiness_fixture();
+    let original = adopt_existing(&supervisor);
+    wait_for_pid(&server_directory);
+    let fixture = supervisor.answer_fixture.as_mut().unwrap();
+    fixture
+        .arguments
+        .extend(["--skip".into(), "lumen-answer-wait-for-release".into()]);
+    fixture.server_arguments.extend([
+        "--skip".into(),
+        format!("lumen-answer-listen-{}", fixture.address.port()),
+    ]);
+    let result = tauri::async_runtime::block_on(async {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        let cancellation = CancellationToken::new();
+        let (result, ()) =
+            tokio::join!(supervisor.prepare_answer(&cancellation, deadline), async {
+                acknowledged_pid(&probe_directory, deadline).await;
+                let mut process = supervisor.process.lock().unwrap();
+                let child = &mut process.as_mut().unwrap().child;
+                child.kill().unwrap();
+                child.wait().unwrap();
+                fs::remove_file(server_directory.join("pid")).unwrap();
+                fs::write(probe_directory.join("release"), b"ready").unwrap();
+            });
+        result
+    });
+    assert_eq!(
+        result,
+        Ok(()),
+        "the exited process must be replaced within this request"
+    );
+    let replacement = supervisor
+        .process
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .child
+        .id();
+    assert_ne!(replacement, original);
+    assert_eq!(wait_for_pid(&server_directory), replacement);
+    #[cfg(windows)]
+    {
+        assert!(!is_alive(original));
+        assert!(is_alive(replacement));
+    }
+    drop(supervisor);
+    let _ = fs::remove_dir_all(probe_directory);
+    let _ = fs::remove_dir_all(server_directory);
+}
+
+#[test]
+fn preparation_rejects_an_unexpected_ready_management_registration_without_reaping_it() {
+    let _serial = FIXTURE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let (supervisor, probe_directory, server_directory) = readiness_fixture();
+    let marker = format!("lumen-answer-server-{}", uuid::Uuid::new_v4());
+    let management_directory = env::temp_dir().join(&marker);
+    fs::create_dir(&management_directory).unwrap();
+    let mut arguments = child_arguments("server_child", marker);
+    arguments.extend([
+        "--skip".into(),
+        format!(
+            "lumen-answer-listen-{}",
+            supervisor.answer_fixture.as_ref().unwrap().address.port()
+        ),
+    ]);
+    let (result, (redundant, management)) = tauri::async_runtime::block_on(async {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        let cancellation = CancellationToken::new();
+        tokio::join!(supervisor.prepare_answer(&cancellation, deadline), async {
+            let redundant = acknowledged_pid(&server_directory, deadline).await;
+            let management = adopt_process(&supervisor, &arguments);
+            assert_eq!(
+                acknowledged_pid(&management_directory, deadline).await,
+                management
+            );
+            (redundant, management)
+        })
+    });
+    assert_eq!(
+        result,
+        Err("local_runtime_unavailable"),
+        "unexpected registration must fail closed even when the port is ready"
+    );
+    assert_eq!(
+        supervisor
+            .process
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .child
+            .id(),
+        management
+    );
+    #[cfg(windows)]
+    {
+        assert!(
+            !is_alive(redundant),
+            "redundant owned startup must be reaped"
+        );
+        assert!(is_alive(management));
+    }
+    drop(supervisor);
+    let _ = fs::remove_dir_all(probe_directory);
+    let _ = fs::remove_dir_all(server_directory);
+    let _ = fs::remove_dir_all(management_directory);
+}
+
+#[test]
 #[ignore = "owned subprocess fixture, invoked only by answer preparation tests"]
 fn probe_child() {
     let marker = env::args()
         .find(|argument| argument.starts_with("lumen-answer-probe-"))
         .unwrap();
     let directory = env::temp_dir().join(&marker);
-    fs::write(directory.join("pid"), std::process::id().to_string()).unwrap();
+    acknowledge_pid(&directory);
+    if env::args().any(|argument| argument == "lumen-answer-wait-for-release") {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !directory.join("release").exists() {
+            assert!(
+                Instant::now() < deadline,
+                "version admission was not released"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
     if marker.starts_with("lumen-answer-probe-overflow-") {
         std::io::stderr().write_all(&vec![b'x'; 65_536]).unwrap();
         std::io::stderr().flush().unwrap();
@@ -496,11 +790,18 @@ fn server_child() {
     let marker = env::args()
         .find(|argument| argument.starts_with("lumen-answer-server-"))
         .unwrap();
-    fs::write(
-        env::temp_dir().join(marker).join("pid"),
-        std::process::id().to_string(),
-    )
-    .unwrap();
+    let directory = env::temp_dir().join(marker);
+    acknowledge_pid(&directory);
+    if env::args().any(|argument| argument == "lumen-answer-server-wait-for-release") {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !directory.join("release").exists() {
+            assert!(
+                Instant::now() < deadline,
+                "server readiness was not released"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
     let _listener = env::args()
         .find_map(|argument| {
             argument

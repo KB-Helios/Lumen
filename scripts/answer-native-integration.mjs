@@ -7,6 +7,7 @@ import {URLSearchParams} from 'node:url';
 import {chromium} from '@playwright/test';
 
 import {createAnswerNativeBridge} from './lib/answer-native-bridge.mjs';
+import {finishNativeAnswerProcess} from './lib/answer-native-shutdown.mjs';
 import {withLumenDevServer} from './lib/lumen-dev-server.mjs';
 
 const nativeTest = 'gateway::answer::transport_tests::native_bridge';
@@ -40,6 +41,8 @@ async function run(url) {
   });
   let bridge;
   let browser;
+  let report;
+  const failures = [];
   try {
     let processFailure;
     native.on('error', (error) => { processFailure = error; });
@@ -50,7 +53,7 @@ async function run(url) {
     const page = await browser.newPage({viewport: {width: 900, height: 600}});
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const report = {recordedAt: new Date().toISOString(), browserVersion: browser.version(), evidence: 'loopback-native-transport-installed-edge', binary, nativeTest,
+    report = {recordedAt: new Date().toISOString(), browserVersion: browser.version(), evidence: 'loopback-native-transport-installed-edge', binary, nativeTest,
       packagedWebViewVerified: false, liveProviderVerified: false,
       obsoleteUsagePrecondition: 'test-only metadata injection; production transport emits completed usage',
       scenarios: {}, nativeMemory: {samplesBytes: []}};
@@ -114,6 +117,14 @@ async function run(url) {
     report.scenarios.burst = await metrics();
     await drained();
 
+    await submit('delivery-order', 'local');
+    await phase('completed');
+    const delayedText = `Delayed channel fixture 🌍${'x'.repeat(16_384)}`;
+    assert.equal((await state()).text, delayedText);
+    assert.equal(await page.getByTestId('answer-region').innerText(), delayedText);
+    report.scenarios.deliveryOrder = await metrics();
+    await drained();
+
     // Warm the same native process before measuring repeated failures.
     for (let index = 0; index < 35; index++) {
       await submit('failure', 'local');
@@ -131,22 +142,22 @@ async function run(url) {
     assert.equal(cancelled.length >= 2, true, 'Stop and replacement must reach native cancellation.');
     for (const sample of cancelled) assert.ok(sample.cancelToNativeDoneMs < 250, `Native cancellation took ${sample.cancelToNativeDoneMs} ms.`);
     assert.deepEqual(errors, []);
-    const output = path.resolve('artifacts/performance/answer-native-integration.json');
-    await mkdir(path.dirname(output), {recursive: true});
-    await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
-    process.stdout.write(`Native answer integration passed. Evidence: ${output}\n`);
+  } catch (error) {
+    failures.push(error);
   } finally {
+    try { await browser?.close(); } catch (error) { failures.push(error); }
+    try { await bridge?.close(); } catch (error) { failures.push(error); }
     try {
-      await browser?.close();
-    } finally {
-      try {
-        await bridge?.close();
-      } finally {
-        native.stdin.end();
-        if (native.exitCode === null) native.kill();
-      }
-    }
+      const shutdown = await finishNativeAnswerProcess(native);
+      if (report) report.nativeShutdown = shutdown;
+    } catch (error) { failures.push(error); }
   }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, 'Native answer integration or cleanup failed.');
+  const output = path.resolve('artifacts/performance/answer-native-integration.json');
+  await mkdir(path.dirname(output), {recursive: true});
+  await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
+  process.stdout.write(`Native answer integration passed. Evidence: ${output}\n`);
 }
 
 await withLumenDevServer(run);
