@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-10T04:39:18.735Z",
-  "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56",
+  "generatedAt": "2026-10-11T14:09:01.304Z",
+  "gitSha": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
   "browser": {
     "name": "Microsoft Edge"
   },
@@ -26,14 +26,16 @@
       ],
       "deterministicAdapter": true,
       "audio": false,
-      "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56"
+      "gitSha": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8"
     },
     {
       "id": "settings-routing",
       "file": "artifacts/recordings/settings-routing.webm",
       "title": "Settings navigation and operational routes",
       "flows": [
-        "settings navigation",
+        "all eleven settings pages",
+        "providers",
+        "Computer Use",
         "appearance",
         "local AI route",
         "AgentGateway route",
@@ -41,7 +43,7 @@
       ],
       "deterministicAdapter": true,
       "audio": false,
-      "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56"
+      "gitSha": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8"
     },
     {
       "id": "onboarding",
@@ -57,7 +59,7 @@
       ],
       "deterministicAdapter": true,
       "audio": false,
-      "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56"
+      "gitSha": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8"
     },
     {
       "id": "answer-submission",
@@ -73,7 +75,7 @@
       ],
       "deterministicAdapter": true,
       "audio": false,
-      "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56"
+      "gitSha": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8"
     },
     {
       "id": "answer-approval-states",
@@ -90,7 +92,7 @@
       ],
       "deterministicAdapter": true,
       "audio": false,
-      "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56"
+      "gitSha": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8"
     },
     {
       "id": "activity-provider-states",
@@ -106,7 +108,7 @@
       ],
       "deterministicAdapter": true,
       "audio": false,
-      "gitSha": "f02682ce1213c8a1af96e0c765811f8808ed2a56"
+      "gitSha": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8"
     }
   ]
 }
