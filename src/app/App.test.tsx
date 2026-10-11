@@ -28,6 +28,12 @@ vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tauri-apps/api/core')>(),
   invoke: async (command: string, args?: Record<string, unknown>) => {
     nativeCalls.push({command, args});
+    if (command === 'get_provisioning_status') return {
+      profileId: 'local-core', label: 'Local core', version: '11.5.2', installedVersion: '11.5.2',
+      state: 'ready', phase: 'idle', downloadedBytes: 4_000, totalBytes: 4_000,
+      requiredDiskBytes: 4_200_000_000, progress: 100,
+      canDownload: false, canUpdate: false, canCancel: false, detail: null, models: [],
+    };
     if (command === 'synchronize_index_roots' || command === 'get_index_status') return {phase: 'ready', generation: nativeState.generation, pendingItems: 0, indexedItems: 0, queuedEnrichment: 0, skippedItems: 0, message: 'Ready'};
     if (command === 'search_hybrid') return {items: [], semantic: {phase: 'disabled', reason: null}};
     if (command === 'search_filenames') return {
@@ -84,6 +90,7 @@ describe('App', () => {
     await act(async () => {rejectPage(new Error('obsolete same-preference busy fixture'));});
 
     expect(useSettingsStore.getState().localRuntimeError).toBeNull();
+    expect(nativeCalls.filter(call => call.command === 'get_provisioning_status')).toHaveLength(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(useSettingsStore.getState().ai.keepLocalWarm).toBe(true);
   });
