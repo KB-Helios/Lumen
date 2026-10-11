@@ -1,5 +1,13 @@
 # DPI and responsive validation report
 
+## UI refinement update, 2026-10-11
+
+The Task 5 installed-Edge matrix passed with all eleven settings pages and four onboarding scenes at 100/125/150/175/200% text scales in dark/light/opaque/reduced-effects/reduced-motion/forced-colors contexts. It covers Rust's logical default/minimum/maximum bounds: collapsed 700 × 66 / 620 × 66 / 760 × 66; expanded 800 × 540 / 720 × 320 / 960 × 600; onboarding 800 × 600 / 720 × 560 / 960 × 720; settings 880 × 600 / 760 × 520 / 1080 × 760; gallery 1120 × 760 / 880 × 640 / 1440 × 960; plus 520 × 340 stress layouts and provider dialogs. Required controls stay contained and reachable, horizontal overflow stays <=1 px and focus restores after dialogs. Keyboard selection scrolls the latest target into view without moving query focus, including 10,000-result virtual collections.
+
+These are simulated Edge renderer dimensions and CSS text scales. Production descendants use the assigned viewport after removing only the DEV browser host's default-size cap; child layouts and native Rust dimensions are unchanged. They do not prove Windows display scaling, native HWND geometry, physical mixed-DPI transitions or attached 4K/ultrawide panels. The present host has one 2560 × 1600 display configured at 240 Hz. Native current-source results are tracked separately in the [dated UI completion report](2026-10-11-ui-completion-motion.md); the 150% native smoke below remains historical evidence.
+
+## Historical phase-one snapshot
+
 **Date:** 2026-07-31  
 **Native host:** 2560 × 1440 physical, 1707 × 960 logical, 150 percent scale, 1707 × 912 work area with bottom taskbar  
 **Result:** Automated logical-pixel/text-scale matrix and native 150 percent smoke check passed.

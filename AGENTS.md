@@ -44,7 +44,7 @@ Focused runs:
 The plain browser has no Tauri IPC, so deterministic states are reached via query params (wired in `src/app/App.tsx`):
 
 - `?service=memory` — deterministic in-memory search data; also bypasses onboarding. Used by e2e, recordings, profiler.
-- `?gallery=1&scenario=<id>[&theme=...]` — 53-state visual gallery (see `artifacts/screenshots/manifest.json` for IDs).
+- `?gallery=1&scenario=<id>[&theme=...]` — 86-state visual gallery (registry: `src/features/gallery/scenarios.ts`; captured IDs: `artifacts/screenshots/manifest.json`).
 - `?mode=foundation` — shell preview; `Ctrl+Shift+L` cycles dark/light/opaque.
 - `?onboarding=1` / `?onboarded=1` — force or bypass onboarding.
 
@@ -72,7 +72,7 @@ The plain browser has no Tauri IPC, so deterministic states are reached via quer
 
 `artifacts/` is committed and expected to be regenerated after UI/perf changes:
 
-- `bun run capture:gallery` → `artifacts/screenshots/` (53 states + contact sheet + manifest)
+- `bun run capture:gallery` → `artifacts/screenshots/` (86 states + contact sheet + manifest)
 - `bun run record:interactions` → `artifacts/recordings/` (6 WebM studies + manifest)
 - `bun run profile` → `artifacts/performance/profile-summary.json` (240 Hz frame budgets, driven via the dev-only `window.__LUMEN_DIAGNOSTICS__`)
 

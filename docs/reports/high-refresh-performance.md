@@ -1,8 +1,38 @@
 # High-refresh performance report
 
+## UI refinement measurement, 2026-10-11
+
+**Status:** incomplete acceptance. The source-final scratch profile fails hover, ordinary React and aggregate strict-240 checks. Final committed-source regeneration is pending; the dated [UI completion report](2026-10-11-ui-completion-motion.md) tracks final gates and native evidence separately.
+
+The host is 2560 × 1600 configured at 240 Hz, AMD Radeon 890M driver 32.0.31041.1004, installed Edge 155.0.4283.45 and WebView2 154.0.4258.62. Win32 inventory in `artifacts/performance/ui-display-inventory.json` advertises only 60/240 Hz at this resolution: 60 Hz has not been measured and 120/144/165 Hz are unavailable in that inventory. Browser estimation of approximately 238 Hz is callback cadence, not presented frames.
+
+The revised profiler records synchronous input response separately from input-to-next-rAF callback, retains unsorted raw intervals and actual hover callback endpoints with independent computed-style readiness, and samples ordinary React commits over 24 representative query changes. It requires 60 complete positive cadence intervals; missing cadence stays unavailable, and observation stops on hide, timeout or unmount. Timed phases exclude tracing/screenshots; the interaction trace is a separate study. Legacy `*ToPaint` field names refer to a callback before presentation, not compositor paint. Browser GPU compositing status describes the measured Edge process only.
+
+| Measurement | Original raw baseline | Revised unchanged-UI baseline | Source-final Task 5 scratch |
+| --- | ---: | ---: | ---: |
+| Warm visible p95 | 2.4 ms | 3.5 ms | 6.3 ms |
+| Synchronous input p95 | 0.1 ms | 0.1 ms | 0.1 ms |
+| Input-to-next-callback p95 | Not sampled | 5.2 ms | 4.3 ms |
+| Selection-to-callback p95 | 4.2 ms | 3.2 ms | 5.9 ms |
+| Hover-to-callback p95 / paired budget | 6.9 / 10.2 ms | 4.7 / 4.3 ms, fail | 4.9 / 4.3 ms, fail |
+| Ordinary React p95 / sample count | Empty sampling; reported 0 is not evidence | 8.7 ms / 163, fail | 7.4 ms / 146, fail |
+| Idle renderer CPU | 0.327% | 0.111% | 0.138% |
+| Post-GC JS heap | 31.429 MiB | 31.497 MiB | 31.905 MiB |
+| Aggregate strict 240 Hz | Fail | Fail | Fail |
+
+Original raw: `artifacts/performance/ui-audit-original-baseline.json`, generated `2026-10-10T14:40:23.798Z`, SHA `4e12b66209f2c313c084109ca0212bd364b11099`. Revised raw: `artifacts/performance/ui-audit-revised-baseline.json`, generated `2026-10-10T15:12:46.824Z`, SHA `2002b80f387f4e34e5213546e88b90beb9fe76d3`, dirty worktree. Task 5 scratch: `%TEMP%/lumen-ui-audit-d61a/task-5-final/profile-summary.json`, generated `2026-10-11T01:25:04.659Z`, SHA `1fce4d51029acb42165c8c22845d79c12a33d43c`, dirty worktree containing Task 5 changes. These snapshots have different instrumentation/source states; differences are observations, not a guaranteed latency improvement. Earlier first-pass hover observations in the plan are separate from these preserved raw captures.
+
+The Task 5 scratch run passes warm <20 ms, cadence-aware input/selection (6.4 ms budget), direct 30-event input/selection bursts (0.6/2.1 ms, each <16 ms), no browser Long Tasks >=50 ms, idle <2%, heap <100 MiB, 0 px settled selection error and zero settled/hidden animations, activity indicators and row measurements. Its hover has all 80 readiness samples, but 4.9 ms exceeds 4.3 ms; ordinary React 7.4 ms exceeds 3 ms. Aggregate `passed` and strict-240 remain false. A calculated strict-120 pass on this 240 Hz host does not constitute a measured physical 120 Hz context. Hidden lifecycle samples use the launcher visibility store on a fresh browser page, 100 ms observations after 500 ms settling; native/document observer cleanup also has component regressions. This does not measure native HWND hiding.
+
+The observer fix removed sustained idle work observed at 13.882% before the fix; the subsequent observer-only run measured 0.131%. No tolerance, callback endpoint, sample filter, GPU flag or permanent promotion was added to obtain a pass. Actual WebView2 presentation, alternate display captures, live providers and manual Narrator remain separate acceptance requirements.
+
+## Historical baseline, 2026-07-31 and refresh, 2026-08-09
+
+The following snapshot predates the current refinement. Its empty ordinary-React sample value and “to paint” labels must not be used as current performance acceptance; the revised method and failures above govern the new work.
+
 **Original baseline:** 2026-07-31; Windows 11 build 26200, NVIDIA GeForce RTX 5070 Ti, 2560 × 1440 at 150 percent scale; driver-reported 500 Hz; Edge 150  
 **Task 12 refresh:** 2026-08-09; AMD Radeon 890M, 2560 × 1600 at 240 Hz; Edge 151.0.4129.72  
-**Result:** The current cadence-aware release profile passes and retains the raw strict-240 result separately. Lumen does not claim a fixed 240 FPS output.
+**Historical result:** That cadence-aware profile passed its then-current sampling and retained the raw strict-240 failure separately. Lumen does not claim a fixed 240 FPS output.
 
 ## Method
 

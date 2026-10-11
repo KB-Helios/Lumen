@@ -1,5 +1,15 @@
 # Accessibility validation report
 
+## UI refinement update, 2026-10-11
+
+Task 5's installed-Edge run passed 107/107 cases with one worker and no retries. The production-component matrix covers all eleven settings pages, four onboarding steps, launcher/preview/gallery and provider dialogs across dark/light/opaque/reduced-effects/reduced-motion/forced-colors contexts, 100/125/150/175/200% text scales, Rust default/minimum/maximum logical sizes and a 520 × 340 stress viewport. Checks include accessible controls, <=1 px horizontal overflow, reachable actions, focus restoration, stable answer streaming, IME input identity and keyboard selection through 10,000 virtualized results. Gallery and service states are explicitly simulated DEV fixtures; this browser result does not prove native dialog, Windows text-scaling or screen-reader speech behavior.
+
+One System/Full/Reduced preference drives motion. Reduced CSS removes cosmetic spatial movement while preserving virtualizer/slider transforms and <=80 ms opacity. Glass intensity affects decorative layers only; opaque, reduced-effects and forced-colors overrides preserve foreground text. Async completion, confirmations, credentials, copy and provisioning expose pending/error/retry feedback and preserve newer operations.
+
+The current branch has no observed manual Narrator speech pass. The historical smoke below is an earlier host/source snapshot and cannot establish current screen-reader acceptance. Final committed-source checks and the exact browser/native/manual evidence boundary are recorded in the [dated UI completion report](2026-10-11-ui-completion-motion.md).
+
+## Historical phase-one snapshot
+
 **Date:** 2026-07-31  
 **Environment:** Windows 11 build 26200, Microsoft Edge/WebView2 150.0.4078.105, English Lumen UI  
 **Result:** Phase-one automated and native smoke checks passed, with the manual limits listed below.
