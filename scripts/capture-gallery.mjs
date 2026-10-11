@@ -21,6 +21,11 @@ async function captureScreenshot(page, options) {
 }
 
 async function waitForScenario(page, scenario) {
+  if (['providers-add', 'providers-edit', 'providers-remove'].includes(scenario.id)) await page.getByRole('dialog').waitFor();
+  if (scenario.id === 'providers-populated') await page.getByRole('button', {name: /^Edit simulated-long/}).waitFor();
+  if (scenario.id === 'providers-error') await page.getByRole('alert').waitFor();
+  if (scenario.id === 'local-runtime-provisioning') await page.getByRole('button', {name: 'Cancel local core download'}).waitFor();
+  if (['local-runtime-error', 'local-runtime-cancelled'].includes(scenario.id)) await page.getByRole('button', {name: 'Download local core'}).waitFor();
   const grid = page.getByRole('grid', {name: 'Search results'});
   if (await grid.count() > 0) {
     const count = Number(await grid.getAttribute('aria-rowcount'));

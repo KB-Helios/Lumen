@@ -1,4 +1,4 @@
-import {useLayoutEffect, useRef, type ReactNode, type RefObject} from 'react';
+import {memo, useCallback, useLayoutEffect, useRef, type ReactNode, type RefObject} from 'react';
 
 import {GlassCommandPalette} from '../../components/ui/GlassCommandPalette';
 import {LumenMark} from '../../design-system/icons/LumenMark';
@@ -26,7 +26,7 @@ interface LauncherComposerProps {
   voiceActive?: boolean;
 }
 
-function LauncherComposer({
+const LauncherComposer = memo(function LauncherComposer({
   inputRef,
   intentLocked,
   onComputerSubmit,
@@ -79,7 +79,7 @@ function LauncherComposer({
       </kbd>
     </div>
   );
-}
+});
 
 function LauncherFooter({
   searching,
@@ -163,14 +163,14 @@ export function CollapsedLauncher({
     );
   }, [focusOnMount, inputRef, visible, windowService]);
 
-  const handleEscapeEmpty = () => {
+  const handleEscapeEmpty = useCallback(() => {
     void requestWindowHide(windowService);
-  };
+  }, [windowService]);
 
-  const handleIntentChange = () => {
+  const handleIntentChange = useCallback(() => {
     clearQuery();
     setIntent(intent === 'computer' ? 'search' : 'computer');
-  };
+  }, [clearQuery, intent, setIntent]);
 
   return (
     <GlassCommandPalette

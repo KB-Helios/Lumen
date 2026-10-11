@@ -41,7 +41,7 @@ test('visits every settings page without a pointer and restores search focus', a
   await page.keyboard.press('Control+,');
   await expect(page.getByRole('navigation', {name: 'Settings'})).toBeVisible();
 
-  for (const name of ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Privacy', 'Diagnostics']) {
+  for (const name of ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Providers', 'Computer Use', 'Activity', 'Privacy', 'Diagnostics']) {
     const tab = page.getByRole('tab', {name});
     await tab.focus();
     await page.keyboard.press('Enter');

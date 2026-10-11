@@ -13,6 +13,15 @@ test('gallery capture consumes registry categories exposed by scenario options',
   assert.doesNotMatch(captureGallery, /function categoryFor/);
 });
 
+test('gallery capture waits for the production provider and runtime fixture states', () => {
+  assert.match(captureGallery, /providers-add/);
+  assert.match(captureGallery, /providers-edit/);
+  assert.match(captureGallery, /providers-remove/);
+  assert.match(captureGallery, /getByRole\('dialog'\)/);
+  assert.match(captureGallery, /local-runtime-provisioning/);
+  assert.match(captureGallery, /Cancel local core download/);
+});
+
 test('approval recording clicks and asserts both deterministic decisions', () => {
   assert.match(recordInteractions, /getByRole\('button', \{name: 'Approve once'\}\)\.click\(\)/);
   assert.match(recordInteractions, /getByRole\('status', \{name: 'Working'\}\)/);

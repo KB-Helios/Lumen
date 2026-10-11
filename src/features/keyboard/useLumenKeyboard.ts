@@ -1,4 +1,4 @@
-import {useEffect, type RefObject} from 'react';
+import {useEffect, useMemo, type RefObject} from 'react';
 
 import type {SearchResult} from '../../services/search/search.types';
 import {
@@ -90,6 +90,8 @@ export function useLumenKeyboard({
   onSelect,
   onShowDetails,
 }: LumenKeyboardOptions) {
+  const selectable = useMemo(() => results.filter((result) => (result.availability ?? 'available') === 'available'), [results]);
+  const selectionIndices = useMemo(() => new Map(selectable.map((result, index) => [result.id, index])), [selectable]);
   useEffect(() => {
     const setRegion = (region: LauncherFocusRegion) => {
       useLauncherStore.getState().setFocusRegion(region);
@@ -159,14 +161,11 @@ export function useLumenKeyboard({
     };
 
     const moveSelection = (direction: -1 | 1) => {
-      const selectable = results.filter(
-        (result) => (result.availability ?? 'available') === 'available',
-      );
       if (selectable.length === 0) {
         return;
       }
       const liveSelectedId = readSelectionIntent() ?? selectedId;
-      const currentIndex = selectable.findIndex((result) => result.id === liveSelectedId);
+      const currentIndex = liveSelectedId === null ? -1 : selectionIndices.get(liveSelectedId) ?? -1;
       const nextIndex = currentIndex < 0
         ? direction > 0 ? 0 : selectable.length - 1
         : Math.min(selectable.length - 1, Math.max(0, currentIndex + direction));
@@ -275,6 +274,8 @@ export function useLumenKeyboard({
     onSelect,
     onShowDetails,
     results,
+    selectable,
+    selectionIndices,
     selectedId,
   ]);
 }

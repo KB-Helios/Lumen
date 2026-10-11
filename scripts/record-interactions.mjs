@@ -114,13 +114,13 @@ async function record(baseUrl) {
       id: 'settings-routing',
       file: 'settings-routing.webm',
       title: 'Settings navigation and operational routes',
-      flows: ['settings navigation', 'appearance', 'local AI route', 'AgentGateway route', 'privacy controls'],
+      flows: ['all eleven settings pages', 'providers', 'Computer Use', 'appearance', 'local AI route', 'AgentGateway route', 'privacy controls'],
     }, async (page) => {
       await page.goto(`${baseUrl}/?onboarded=1&service=memory`);
       await page.getByRole('searchbox', {name: 'Search files'}).waitFor();
       await page.keyboard.press('Control+,');
       await page.getByRole('navigation', {name: 'Settings'}).waitFor();
-      for (const pageName of ['Appearance', 'Local AI', 'AgentGateway', 'Privacy']) {
+      for (const pageName of ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Providers', 'Computer Use', 'Activity', 'Privacy', 'Diagnostics']) {
         await page.getByRole('tab', {name: pageName, exact: true}).click();
         await page.getByRole('heading', {name: pageName, exact: true}).waitFor();
         await pause(page, 520);

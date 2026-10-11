@@ -38,20 +38,29 @@ export function SelectionCapsule({
     }
     let observer: ResizeObserver | undefined;
     let styleObserver: MutationObserver | undefined;
+    let observedRow: HTMLElement | null = null;
     let movement: ReturnType<typeof animate> | undefined;
     let lastTransform: string | undefined;
     let selectionFrame: number | undefined;
     let active = true;
-    const updateSelection = (fileId: string | null) => {
-      selectionRef.current = fileId;
+    const isVisible = () => document.visibilityState !== 'hidden' && useLauncherStore.getState().visible;
+    const disconnectRow = () => {
       observer?.disconnect();
       observer = undefined;
       styleObserver?.disconnect();
       styleObserver = undefined;
+      observedRow = null;
+    };
+    const updateSelection = (fileId: string | null) => {
+      selectionRef.current = fileId;
+      if (!active || !isVisible()) return;
       const selected = fileId
         ? [...(container?.querySelectorAll<HTMLElement>('[data-result-id]') ?? [])]
             .find((element) => element.dataset.resultId === fileId)
         : null;
+      if (selected !== observedRow) {
+        disconnectRow();
+      }
       if (!selected) {
         movement?.stop();
         movement = undefined;
@@ -61,6 +70,7 @@ export function SelectionCapsule({
         return;
       }
       const measure = () => {
+        if (!active || !isVisible()) return;
         if (!selected.isConnected) { scheduleSelection(selectionRef.current); return; }
         if (selected.dataset.resultId !== selectionRef.current) return;
         // Rects include virtual-row transforms; offsetTop alone does not.
@@ -87,6 +97,9 @@ export function SelectionCapsule({
         hasPositioned.current = true;
       };
       measure();
+      // Re-observing the same row emits another initial resize notification and prevents idle settling.
+      if (selected === observedRow) return;
+      observedRow = selected;
       if (typeof ResizeObserver === 'function') {
         observer = new ResizeObserver(() => scheduleSelection(selectionRef.current));
         observer.observe(selected);
@@ -99,6 +112,7 @@ export function SelectionCapsule({
     };
     const scheduleSelection = (fileId: string | null) => {
       selectionRef.current = fileId;
+      if (!active || !isVisible()) return;
       if (selectionFrame !== undefined) return;
       // Key bursts keep their latest intent without repeatedly measuring or
       // interrupting native animations before the display can paint.
@@ -111,26 +125,33 @@ export function SelectionCapsule({
     // React Aria collections and virtual rows can mount after this effect.
     const contentObserver = typeof MutationObserver === 'function'
       ? new MutationObserver(() => scheduleSelection(selectionRef.current)) : undefined;
-    contentObserver?.observe(container, {childList: true, subtree: true});
-    const stopHidden = () => {
-      if (document.visibilityState === 'hidden' || !useLauncherStore.getState().visible) {
+    const syncVisibility = () => {
+      if (!isVisible()) {
         movement?.stop();
         movement = undefined;
         if (lastTransform) capsule.style.transform = lastTransform;
+        if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+        selectionFrame = undefined;
+        disconnectRow();
+        contentObserver?.disconnect();
+        hasPositioned.current = false;
+      } else {
+        contentObserver?.observe(container, {childList: true, subtree: true});
+        updateSelection(selectionRef.current);
       }
     };
-    document.addEventListener('visibilitychange', stopHidden);
-    const unsubscribeVisibility = useLauncherStore.subscribe((state) => state.visible, stopHidden);
+    if (isVisible()) contentObserver?.observe(container, {childList: true, subtree: true});
+    document.addEventListener('visibilitychange', syncVisibility);
+    const unsubscribeVisibility = useLauncherStore.subscribe((state) => state.visible, syncVisibility);
     const unsubscribe = useSelectionStore.subscribe(
       (state) => state.selectedId,
       scheduleSelection,
     );
     return () => {
       active = false;
-      observer?.disconnect();
-      styleObserver?.disconnect();
+      disconnectRow();
       contentObserver?.disconnect();
-      document.removeEventListener('visibilitychange', stopHidden);
+      document.removeEventListener('visibilitychange', syncVisibility);
       unsubscribe();
       unsubscribeVisibility();
       if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);

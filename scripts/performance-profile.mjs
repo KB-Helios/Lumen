@@ -261,6 +261,44 @@ async function profile(baseUrl) {
     ) / elapsedSeconds * 100;
     const heapMegabytes = metric(afterGarbageCollection.metrics, 'JSHeapUsedSize') / (1024 * 1024);
 
+    // Untimed lifecycle verification after all existing timed phases. Count real row
+    // measurements without changing hover/input instrumentation or retained samples.
+    await page.addInitScript(() => {
+      window.__LUMEN_ROW_MEASUREMENTS__ = 0;
+      const measure = globalThis.HTMLElement.prototype.getBoundingClientRect;
+      globalThis.HTMLElement.prototype.getBoundingClientRect = function () {
+        if (this.hasAttribute('data-result-id')) window.__LUMEN_ROW_MEASUREMENTS__ += 1;
+        return measure.call(this);
+      };
+    });
+    await page.goto(`${baseUrl}/?onboarded=1&service=memory`);
+    await search.fill('report');
+    await page.locator('[data-result-id][data-selected="true"]').waitFor();
+    await page.waitForTimeout(500);
+    const selectionAlignmentErrorPx = await page.evaluate(() => {
+      const selected = document.querySelector('[data-result-id][data-selected="true"]');
+      const capsule = document.querySelector('[data-selection-capsule]');
+      if (!selected || !capsule) return null;
+      const rowBounds = selected.getBoundingClientRect();
+      const capsuleBounds = capsule.getBoundingClientRect();
+      return Math.max(Math.abs(rowBounds.top - capsuleBounds.top), Math.abs(rowBounds.height - capsuleBounds.height));
+    });
+    await page.evaluate(() => { window.__LUMEN_ROW_MEASUREMENTS__ = 0; });
+    await page.waitForTimeout(100);
+    const settledSelectionMeasurements = await page.evaluate(() => window.__LUMEN_ROW_MEASUREMENTS__);
+    // Simulate the typed native visibility store transition; this is browser lifecycle
+    // evidence, not native HWND hide or presentation acceptance.
+    await page.evaluate(async () => {
+      const {useLauncherStore} = await import('/src/features/launcher/launcher.store.ts');
+      useLauncherStore.getState().hide();
+    });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { window.__LUMEN_ROW_MEASUREMENTS__ = 0; });
+    await page.waitForTimeout(100);
+    const hiddenSelectionMeasurements = await page.evaluate(() => window.__LUMEN_ROW_MEASUREMENTS__);
+    const hiddenAnimations = await page.evaluate(() => document.getAnimations().filter((animation) => animation.playState === 'running').length);
+    const hiddenActivityIndicators = await page.locator('[data-activity-running="true"]').count();
+
     const measured = {
       warmLauncherP95Ms: percentile(warmSamples, 0.95),
       inputResponseP95Ms: percentile(inputSamples, 0.95),
@@ -278,6 +316,11 @@ async function profile(baseUrl) {
       repeatedBrowserLongTasksOver50Ms: selectionMetrics.browserLongTasks,
       activeAnimationsAfterSettle: activeAnimations,
       activeActivityIndicatorsAfterSettle: activeActivityIndicators,
+      selectionAlignmentErrorPx,
+      settledSelectionMeasurements,
+      hiddenSelectionMeasurements,
+      hiddenAnimations,
+      hiddenActivityIndicators,
       idleCpuPercent,
       jsHeapMegabytes: heapMegabytes,
       observedRefreshEstimateHz: refresh.medianFrameIntervalMs === null ? null : Math.round(1000 / refresh.medianFrameIntervalMs),
@@ -349,6 +392,11 @@ async function profile(baseUrl) {
       settledAnimations: measured.activeAnimationsAfterSettle === 0,
       settledActivityIndicator: measured.activeActivityIndicatorsAfterSettle ===
         budgets.activeActivityIndicatorsAfterSettle,
+      selectionAlignment: Number.isFinite(selectionAlignmentErrorPx) && selectionAlignmentErrorPx <= 1,
+      settledMeasurements: settledSelectionMeasurements === 0,
+      hiddenMeasurements: hiddenSelectionMeasurements === 0,
+      hiddenAnimations: hiddenAnimations === 0,
+      hiddenActivityIndicator: hiddenActivityIndicators === 0,
       idleCpu: measured.idleCpuPercent < budgets.idleCpuPercent,
       memory: measured.jsHeapMegabytes < budgets.jsHeapMegabytes,
       environmentEligibility: environmentEligibility.cadenceAwareRelease,
@@ -372,6 +420,7 @@ async function profile(baseUrl) {
       measurementBoundary: 'input-response is synchronous handler time; input-next-frame, selection-paint and hover timings end at an actual requestAnimationFrame callback before presentation. React samples are a separate 24-query phase with 250 ms settling, not imperative row selection. Cadence and GPU evidence describe this Edge process, not native WebView2 presentation.',
       profile: 'warm deterministic browser adapter, 800x540 viewport, 30 paced input samples, 120 paced selection samples, 80 fresh hover transitions with paired actual callback endpoints, independent next-callback state and token-color readiness, separate nominal rAF cadence, direct dispatch timing, renderer-side synchronous 30-event input and selection bursts, plus activity-indicator settle verification',
       hoverEvidenceBoundary: 'Legacy hoverToPaint fields measure dispatch to the next actual animation callback, with independent computed-style readiness; they do not measure compositor paint. hoverFrameInterval fields use actual callback endpoints; nominal rendering timestamps and callback offsets are retained in samples.hover.',
+      lifecycleEvidenceBoundary: 'Selection alignment and settled/hidden row-measurement counts run after timed phases on a fresh browser page. Hidden state uses the launcher visibility store, not native HWND hiding. Each zero-measurement observation is 100 ms after 500 ms settling. Native and document visibility observer cleanup also have focused component regressions.',
       target: {
         refreshRateHz: 240,
         frameBudgetMs: targetFrameBudgetMs,

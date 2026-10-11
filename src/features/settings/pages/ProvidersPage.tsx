@@ -9,8 +9,8 @@ import {tauriProvidersService} from '../../../services/providers/tauri-providers
 import {SettingSection} from '../components/SettingSection';
 import {SettingsCallout, SettingsPage} from '../components/SettingsPage';
 import {StatusBadge} from '../components/StatusBadge';
-import {AuthCenterPanel} from '../components/AuthCenterPanel';
-import {UsagePanel} from '../components/UsagePanel';
+import {AuthCenterPanel, type AuthCenterApi} from '../components/AuthCenterPanel';
+import {UsagePanel, type UsageApi} from '../components/UsagePanel';
 import {AddProviderDialog} from '../components/AddProviderDialog';
 import {EditProviderDialog} from '../components/EditProviderDialog';
 import {ConfirmationDialog} from '../components/ConfirmationDialog';
@@ -40,11 +40,15 @@ const ALL_APPS = [...SWITCH_APPS, ...ADDITIVE_APPS];
 export interface ProvidersPageProps {
   providersService?: ProvidersService;
   nativeRuntime?: boolean;
+  authApi?: AuthCenterApi;
+  usageApi?: UsageApi;
 }
 
 export function ProvidersPage({
   providersService = tauriProvidersService,
   nativeRuntime,
+  authApi,
+  usageApi,
 }: ProvidersPageProps = {}) {
   const native = nativeRuntime ?? isNativeRuntime();
   const [healthy, setHealthy] = useState<boolean | null>(null);
@@ -157,11 +161,11 @@ export function ProvidersPage({
         <LumenText tone="tertiary" variant="meta">Adding or editing saves a profile. Switch or Enable applies it to the tool. API keys are stored in Windows Credential Manager.</LumenText>
       </div>
       <SettingSection title="Authorization center" description="OAuth sign-in for ChatGPT, Anthropic, and xAI through the loopback sidecar. Only link status is shown; secrets never leave the sidecar.">
-        <AuthCenterPanel nativeRuntime={native} />
+        <AuthCenterPanel nativeRuntime={native} api={authApi} />
       </SettingSection>
       <SettingSection title="Usage" description="Recent per-provider request counts from the sidecar. Pricing and model breakdowns follow later.">
         <div className="p-5">
-          <UsagePanel nativeRuntime={native} />
+          <UsagePanel nativeRuntime={native} api={usageApi} />
         </div>
       </SettingSection>
     </SettingsPage>

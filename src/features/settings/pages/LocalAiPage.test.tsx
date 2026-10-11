@@ -200,4 +200,49 @@ describe('LocalAiPage native refresh', () => {
     expect(await screen.findByRole('button', {name: 'Cancel local core download'})).toBeEnabled();
     expect(screen.getByText('25%')).toBeVisible();
   });
+
+  it.each(['start', 'cancel'] as const)('keeps a rejected provisioning %s visible alongside unavailable runtime health without replaying it', async (operation) => {
+    const user = userEvent.setup();
+    vi.mocked(nativeAiService.localRuntimeHealth).mockRejectedValue(new Error('runtime unavailable'));
+    const provisioning = service(provisioningStatus(operation === 'start' ? 'missing' : 'working'));
+    vi.mocked(provisioning[operation]).mockRejectedValue(new Error(`provisioning ${operation} failed`));
+    render(<AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}><LocalAiPage provisioningService={provisioning} /></AppProviders>);
+
+    await user.click(await screen.findByRole('button', {name: operation === 'start' ? 'Download local core' : 'Cancel local core download'}));
+    expect(await screen.findByText(`provisioning ${operation} failed`)).toBeVisible();
+    expect(screen.getByText('runtime unavailable')).toBeVisible();
+    expect(provisioning[operation]).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', {name: 'Cancel local core download'})).toBeEnabled();
+  });
+
+  it('keeps cancellation authoritative when an older start resolves afterwards', async () => {
+    const user = userEvent.setup();
+    let resolveStart!: (status: ProvisioningStatus) => void;
+    const provisioning = service(provisioningStatus('missing'));
+    vi.mocked(provisioning.start).mockImplementation(() => new Promise((resolve) => { resolveStart = resolve; }));
+    render(<AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}><LocalAiPage provisioningService={provisioning} /></AppProviders>);
+    await user.click(await screen.findByRole('button', {name: 'Download local core'}));
+    await user.click(await screen.findByRole('button', {name: 'Cancel local core download'}));
+    expect(await screen.findByRole('button', {name: 'Download local core'})).toBeEnabled();
+    await act(async () => { resolveStart(provisioningStatus('working')); });
+    expect(screen.queryByRole('button', {name: 'Cancel local core download'})).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Download local core'})).toBeEnabled();
+  });
+
+  it('drops an old provisioning operation after the service is replaced and admits the new service download', async () => {
+    const user = userEvent.setup();
+    let finish!: (status: ProvisioningStatus) => void;
+    const oldService = service(provisioningStatus('missing'));
+    vi.mocked(oldService.start).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const nextService = service(provisioningStatus('cancelled'));
+    const view = (provider: ProvisioningService) => <AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}><LocalAiPage provisioningService={provider} /></AppProviders>;
+    const {rerender} = render(view(oldService));
+    await user.click(await screen.findByRole('button', {name: 'Download local core'}));
+    rerender(view(nextService));
+    expect(await screen.findByRole('button', {name: 'Download local core'})).toBeEnabled();
+    await act(async () => { finish(provisioningStatus('working')); });
+    expect(screen.queryByRole('button', {name: 'Cancel local core download'})).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Download local core'}));
+    expect(nextService.start).toHaveBeenCalledWith('local-core');
+  });
 });

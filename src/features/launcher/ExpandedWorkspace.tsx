@@ -1,5 +1,5 @@
 import type {ReactNode} from 'react';
-import {Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
+import {memo, Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
 
 import {useLumenMotion} from '../../design-system/MotionProvider';
@@ -38,7 +38,7 @@ export interface ExpandedWorkspaceProps {
   onSelectionChange(fileId: string | null): void;
 }
 
-function SelectionBoundResults({
+const SelectionBoundResults = memo(function SelectionBoundResults({
   openingId,
   reducedMotion,
   results,
@@ -80,7 +80,7 @@ function SelectionBoundResults({
       onSelectionChange={onSelectionChange}
     />
   );
-}
+});
 
 function useSettledSelection(delayMs = 48) {
   const [selectedId, setSelectedId] = useState(
@@ -103,7 +103,7 @@ function useSettledSelection(delayMs = 48) {
   return selectedId;
 }
 
-function SelectionBoundPreview({
+const SelectionBoundPreview = memo(function SelectionBoundPreview({
   reducedMotion,
   selectedId: selectedIdOverride,
   service,
@@ -117,9 +117,9 @@ function SelectionBoundPreview({
     ? settledSelectedId
     : selectedIdOverride;
   return <LazyPreviewPane fileId={fileId} reducedMotion={reducedMotion} service={service} />;
-}
+});
 
-function SelectionBoundActions({
+const SelectionBoundActions = memo(function SelectionBoundActions({
   isOpening,
   results,
   selectedId: selectedIdOverride,
@@ -153,7 +153,7 @@ function SelectionBoundActions({
       onPin={onPin}
     />
   );
-}
+});
 
 function SelectionAnnouncement({
   announcement,
@@ -284,7 +284,7 @@ export function ExpandedWorkspace({
               <span className="font-sans text-[0.6875rem] text-[color:var(--einui-command-muted-text)]">{countLabel}</span>
             </header>
             <SelectionBoundResults
-              emptyState={emptyLabel(lifecycle, error)}
+              emptyState={results.length === 0 ? emptyLabel(lifecycle, error) : 'No files found'}
               openingId={openingId}
               reducedMotion={reducedMotion}
               results={results}

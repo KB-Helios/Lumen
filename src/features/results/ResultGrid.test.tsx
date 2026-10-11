@@ -1,10 +1,13 @@
-import {render, screen, waitFor} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import type {SearchResult} from '../../services/search/search.types';
 import {appearanceStore} from '../../state/appearance.store';
 import {ResultGrid} from './ResultGrid';
+import * as resultVirtualizer from './useResultVirtualizer';
+import {useSelectionStore} from '../launcher/selection.store';
+import {useLauncherStore} from '../launcher/launcher.store';
 
 function file(id: string, overrides: Partial<SearchResult> = {}): SearchResult {
   return {
@@ -24,6 +27,37 @@ function file(id: string, overrides: Partial<SearchResult> = {}): SearchResult {
 }
 
 describe('ResultGrid', () => {
+  it('coalesces unmounted virtual targets by index and cancels pending scroll on replacement, hide and unmount', async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let next = 0;
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { frames.set(++next, callback); return next; }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => frames.delete(id)));
+    const scrollToIndex = vi.fn();
+    vi.spyOn(resultVirtualizer, 'useResultVirtualizer').mockReturnValue({isVirtualized: true, totalSize: 580000,
+      virtualItems: [{key: 'file-0', index: 0, start: 0, size: 58, end: 58, lane: 0}], scrollToIndex});
+    const results = Array.from({length: 10000}, (_, index) => file(`file-${index}`));
+    const {rerender, unmount} = render(<ResultGrid results={results} selectedId="file-0" reducedMotion />);
+    await act(async () => {});
+    frames.clear();
+    act(() => { useSelectionStore.getState().select('file-9980'); useSelectionStore.getState().select('file-9999'); });
+    expect(scrollToIndex).not.toHaveBeenCalled();
+    act(() => { const callbacks = [...frames.values()]; frames.clear(); for (const callback of callbacks) callback(0); });
+    expect(scrollToIndex).toHaveBeenCalledOnce();
+    expect(scrollToIndex).toHaveBeenLastCalledWith(9999);
+    act(() => useSelectionStore.getState().select('file-9980'));
+    rerender(<ResultGrid results={[file('replacement')]} selectedId="replacement" reducedMotion />);
+    act(() => { const callbacks = [...frames.values()]; frames.clear(); for (const callback of callbacks) callback(0); });
+    expect(scrollToIndex).toHaveBeenCalledOnce();
+    act(() => { useSelectionStore.getState().select('replacement'); useLauncherStore.getState().hide(); });
+    expect(frames.size).toBe(0);
+    act(() => { useLauncherStore.getState().show('expanded'); useSelectionStore.getState().select('replacement'); });
+    unmount();
+    expect(frames.size).toBe(0);
+    vi.unstubAllGlobals();
+    useSelectionStore.getState().reset();
+    useLauncherStore.getState().reset();
+  });
+
   it('navigates from the replacement selection when the grid owns keyboard focus', async () => {
     const user = userEvent.setup();
     const onSelectionChange = vi.fn();

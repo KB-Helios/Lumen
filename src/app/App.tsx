@@ -163,7 +163,7 @@ function galleryAppearance() {
   const appearance: AppearancePreferences = {
     mode: theme === 'light' ? 'light' : 'dark',
     transparency: theme === 'opaque' ? 'disabled' : 'native',
-    effects: theme === 'opaque' ? 'reduced' : 'full',
+    effects: theme === 'opaque' || theme === 'reduced-effects' ? 'reduced' : 'full',
     motion: theme === 'reduced-motion' ? 'reduced' : 'full',
   };
   return {appearance, forceHighContrast: theme === 'high-contrast'};
