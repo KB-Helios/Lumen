@@ -103,7 +103,7 @@ export function WindowsPrivacyControls() {
 export function WindowsAppContentControls() {
   const {snapshot, disabled, run, refresh} = useControls();
   const feature = snapshot?.features.find((item) => item.id === 'appContentSearch');
-  const action = (operation: () => Promise<{ok: boolean; message: string}>) => void run(async () => { const result = await operation(); if (!result.ok) throw new Error(result.message); await refresh(); useWindowsAiStore.setState({message: result.message}); });
+  const action = async (operation: () => Promise<{ok: boolean; message: string}>) => (await run(async () => { const result = await operation(); if (!result.ok) throw new Error(result.message); await refresh(); useWindowsAiStore.setState({message: result.message}); return true; })) === true;
   return <>
     <WindowsAiNotice />
     <SettingSection title="Lumen app content" description="Search the shipped public help and action catalogue. Personal file contents are kept in Lumen's confined SQLite index.">
