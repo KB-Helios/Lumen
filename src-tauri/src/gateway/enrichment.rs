@@ -13,7 +13,7 @@ use std::{
 use serde::Serialize;
 use tauri::State;
 
-use crate::search::EnrichmentJobRecord;
+use crate::{local_http, search::EnrichmentJobRecord};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -252,24 +252,31 @@ impl EnrichmentSupervisor {
         if self.is_paused() {
             return false;
         }
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .unwrap_or_default();
+        let client = match local_http::client(Duration::from_secs(5)) {
+            Ok(client) => client,
+            Err(error) => {
+                *self
+                    .detail
+                    .lock()
+                    .unwrap_or_else(|value| value.into_inner()) =
+                    Some(error.message("Rivet queue sync"));
+                return false;
+            }
+        };
         for job in jobs {
-            let response = client
-                .post(self.endpoint("/jobs"))
-                .bearer_auth(&self.bearer)
-                .json(job)
-                .send()
-                .await
-                .and_then(reqwest::Response::error_for_status);
+            let response = local_http::response(
+                client
+                    .post(self.endpoint("/jobs"))
+                    .bearer_auth(&self.bearer)
+                    .json(job),
+            )
+            .await;
             if let Err(error) = response {
                 *self
                     .detail
                     .lock()
                     .unwrap_or_else(|value| value.into_inner()) =
-                    Some(format!("Rivet queue sync is waiting: {error}"));
+                    Some(error.message("Rivet queue sync"));
                 return false;
             }
         }
@@ -277,20 +284,11 @@ impl EnrichmentSupervisor {
     }
 
     pub async fn queue_status(&self) -> Result<serde_json::Value, String> {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .map_err(|error| error.to_string())?
-            .get(self.endpoint("/jobs"))
-            .bearer_auth(&self.bearer)
-            .send()
+        let client = local_http::client(Duration::from_secs(5))
+            .map_err(|error| error.message("Enrichment queue"))?;
+        local_http::json(client.get(self.endpoint("/jobs")).bearer_auth(&self.bearer))
             .await
-            .map_err(|error| error.to_string())?
-            .error_for_status()
-            .map_err(|error| error.to_string())?
-            .json()
-            .await
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.message("Enrichment queue"))
     }
 
     pub(crate) async fn improvement_request(
@@ -307,36 +305,28 @@ impl EnrichmentSupervisor {
             "clear" => (reqwest::Method::DELETE, "/improvements"),
             _ => return Err("Invalid improvement queue operation.".into()),
         };
-        reqwest::Client::builder()
-            .no_proxy()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .map_err(|_| "Improvement queue is unavailable.")?
-            .request(method, self.endpoint(path))
-            .bearer_auth(&self.bearer)
-            .json(body)
-            .send()
-            .await
-            .map_err(|_| "Improvement queue is unavailable.")?
-            .error_for_status()
-            .map_err(|_| "Improvement queue refused the request.")?
-            .json()
-            .await
-            .map_err(|_| "Improvement queue returned invalid data.".into())
+        let client = local_http::client(Duration::from_secs(5))
+            .map_err(|error| error.message("Improvement queue"))?;
+        local_http::json(
+            client
+                .request(method, self.endpoint(path))
+                .bearer_auth(&self.bearer)
+                .json(body),
+        )
+        .await
+        .map_err(|error| error.message("Improvement queue"))
     }
 
     pub async fn resume(&self) -> Result<(), String> {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .map_err(|error| error.to_string())?
-            .post(self.endpoint("/jobs/resume"))
-            .bearer_auth(&self.bearer)
-            .send()
-            .await
-            .map_err(|error| error.to_string())?
-            .error_for_status()
-            .map_err(|error| error.to_string())?;
+        let client = local_http::client(Duration::from_secs(5))
+            .map_err(|error| error.message("Enrichment queue"))?;
+        local_http::response(
+            client
+                .post(self.endpoint("/jobs/resume"))
+                .bearer_auth(&self.bearer),
+        )
+        .await
+        .map_err(|error| error.message("Enrichment queue"))?;
         self.user_paused.store(false, Ordering::Relaxed);
         Ok(())
     }
@@ -416,7 +406,156 @@ pub fn restart_enrichment(state: State<'_, EnrichmentSupervisor>) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::local_http_tests as http;
     use std::{thread, time::Duration};
+
+    fn local_fixture(
+        base: &str,
+    ) -> (
+        crate::search::test_support::SearchFixture,
+        EnrichmentSupervisor,
+    ) {
+        let fixture = crate::search::test_support::SearchFixture::new("local-http-enrichment");
+        let mut supervisor = EnrichmentSupervisor::new(
+            PathBuf::from("unused"),
+            PathBuf::from("unused"),
+            fixture.root().join("runtime"),
+        )
+        .unwrap();
+        supervisor.control_port = reqwest::Url::parse(base).unwrap().port().unwrap();
+        (fixture, supervisor)
+    }
+
+    #[test]
+    fn local_http_enrichment_refuses_redirects() {
+        let mut outcomes = Vec::new();
+        for operation in ["queue", "improvement", "resume", "sync"] {
+            let (target, target_server) = http::server(http::json("{}"), Duration::ZERO);
+            let (base, server) = http::server(format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {target}/stolen\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").into_bytes(), Duration::ZERO);
+            let (_fixture, supervisor) = local_fixture(&base);
+            let failed = tauri::async_runtime::block_on(async {
+                match operation {
+                    "queue" => supervisor.queue_status().await.is_err(),
+                    "improvement" => supervisor
+                        .improvement_request("lease", &serde_json::json!({}))
+                        .await
+                        .is_err(),
+                    "resume" => supervisor.resume().await.is_err(),
+                    _ => {
+                        !supervisor
+                            .sync_jobs(&[EnrichmentJobRecord {
+                                idempotency_key: "fixture".into(),
+                                file_id: "fixture".into(),
+                                content_hash: "hash".into(),
+                                kind: "ocr".into(),
+                                route: "fixture".into(),
+                            }])
+                            .await
+                    }
+                }
+            });
+            server.join().unwrap();
+            let redirected = target_server.join().unwrap();
+            outcomes.push((operation, failed, redirected.is_empty()));
+        }
+        assert_eq!(
+            outcomes,
+            [
+                ("queue", true, true),
+                ("improvement", true, true),
+                ("resume", true, true),
+                ("sync", true, true)
+            ]
+        );
+    }
+
+    #[test]
+    fn local_http_enrichment_bounds_json_bodies() {
+        let mut bounded = Vec::new();
+        for chunked in [false, true] {
+            let (base, server) = http::server(http::oversized(chunked), Duration::ZERO);
+            let (_fixture, supervisor) = local_fixture(&base);
+            let result = tauri::async_runtime::block_on(supervisor.queue_status());
+            server.join().unwrap();
+            bounded.push(result.is_err());
+        }
+        assert_eq!(bounded, [true, true]);
+    }
+
+    #[test]
+    fn local_http_enrichment_status_operations_bound_body() {
+        let mut bounded = Vec::new();
+        for operation in ["resume", "sync"] {
+            let (base, server) = http::server(http::oversized(true), Duration::ZERO);
+            let (_fixture, supervisor) = local_fixture(&base);
+            supervisor.pause();
+            let failed = tauri::async_runtime::block_on(async {
+                if operation == "resume" {
+                    supervisor.resume().await.is_err()
+                } else {
+                    supervisor.user_paused.store(false, Ordering::Relaxed);
+                    !supervisor
+                        .sync_jobs(&[EnrichmentJobRecord {
+                            idempotency_key: "fixture".into(),
+                            file_id: "fixture".into(),
+                            content_hash: "hash".into(),
+                            kind: "ocr".into(),
+                            route: "fixture".into(),
+                        }])
+                        .await
+                }
+            });
+            server.join().unwrap();
+            bounded.push((failed, operation != "resume" || supervisor.is_paused()));
+        }
+        assert_eq!(bounded, [(true, true), (true, true)]);
+    }
+
+    #[test]
+    fn local_http_enrichment_failures_are_sanitized() {
+        let (base, server) = http::server(http::json("{fixture-secret"), Duration::ZERO);
+        let (_fixture, supervisor) = local_fixture(&base);
+        let error = tauri::async_runtime::block_on(supervisor.queue_status()).unwrap_err();
+        server.join().unwrap();
+        assert_eq!(error, "Enrichment queue returned invalid data.");
+        let error = tauri::async_runtime::block_on(supervisor.resume()).unwrap_err();
+        assert_eq!(error, "Enrichment queue is unavailable.");
+    }
+
+    #[test]
+    fn local_http_enrichment_deadline_includes_status_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = http::server_parts(
+            listener,
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n".to_vec(),
+            b"{}".to_vec(),
+            Duration::from_secs(6),
+        );
+        let (_fixture, supervisor) = local_fixture(&base);
+        supervisor.pause();
+        let began = std::time::Instant::now();
+        let result = tauri::async_runtime::block_on(supervisor.resume());
+        let elapsed = began.elapsed();
+        server.join().unwrap();
+        assert!(result.is_err());
+        assert!(supervisor.is_paused());
+        assert!(elapsed < Duration::from_secs(6));
+    }
+
+    #[test]
+    #[ignore = "invoked only by isolated proxy regression"]
+    fn local_http_proxy_probe_enrichment() {
+        assert_eq!(
+            std::env::var("LUMEN_LOCAL_HTTP_PROXY_PROBE").as_deref(),
+            Ok("1")
+        );
+        let (base, server) = http::server(http::json("[]"), Duration::ZERO);
+        let (_fixture, supervisor) = local_fixture(&base);
+        let result = tauri::async_runtime::block_on(supervisor.queue_status());
+        assert!(result.is_ok());
+        assert!(!server.join().unwrap().is_empty());
+    }
 
     #[test]
     fn queue_transport_failure_reports_stop_before_another_submission() {

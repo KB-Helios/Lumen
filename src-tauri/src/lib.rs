@@ -3,6 +3,9 @@ mod computer_use;
 mod consent;
 mod gateway;
 mod improvement;
+mod local_http;
+#[cfg(test)]
+mod local_http_tests;
 mod privacy;
 pub mod provider_switcher;
 mod search;

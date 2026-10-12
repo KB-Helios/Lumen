@@ -82,9 +82,7 @@ async fn request_embeddings(
         return Err("The embedding batch is outside Lumen's limits.".to_owned());
     }
     let (base_url, bearer) = gateway.endpoint(true);
-    let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
+    let response = crate::local_http::client(std::time::Duration::from_secs(20))
         .map_err(|_| "The embedding client is unavailable.".to_owned())?
         .post(format!("{base_url}/v1/embeddings"))
         .bearer_auth(bearer)
@@ -92,11 +90,14 @@ async fn request_embeddings(
         .json(&serde_json::json!({"model": EMBEDDING_MODEL, "input": inputs}))
         .send()
         .await
-        .map_err(|_| "The local embedding route is unavailable.".to_owned())?
-        .error_for_status()
-        .map_err(|_| "The local embedding route rejected the request.".to_owned())?
-        .json::<EmbeddingResponse>()
+        .map_err(|_| "The local embedding route is unavailable.".to_owned())?;
+    if !response.status().is_success() {
+        return Err("The local embedding route rejected the request.".to_owned());
+    }
+    let bytes = crate::local_http::body(response)
         .await
+        .map_err(|_| "The local embedding response is invalid.".to_owned())?;
+    let response = serde_json::from_slice::<EmbeddingResponse>(&bytes)
         .map_err(|_| "The local embedding response is invalid.".to_owned())?;
     validate_embeddings(response, inputs.len())
 }
@@ -184,6 +185,97 @@ pub async fn embed_query(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::local_http_tests as http;
+    use std::{net::TcpListener, path::PathBuf, time::Duration};
+
+    fn local_request(reply: Vec<u8>) -> Result<Vec<Vec<f32>>, String> {
+        let fixture = crate::search::test_support::SearchFixture::new("local-http-embedding");
+        let gateway = GatewaySupervisor::new(PathBuf::from("unused"), fixture.root(), &[]).unwrap();
+        let (base, _) = gateway.endpoint(true);
+        let listener = TcpListener::bind(base.strip_prefix("http://").unwrap()).unwrap();
+        let server = http::server_at(listener, reply, Duration::ZERO);
+        let result = tauri::async_runtime::block_on(request_embeddings(
+            &gateway,
+            &["fixture-private".into()],
+        ));
+        server.join().unwrap();
+        result
+    }
+
+    #[test]
+    fn local_http_embedding_refuses_redirects() {
+        let (target, server) = http::server(
+            http::json(r#"{"data":[{"index":0,"embedding":[1.0]}]}"#),
+            Duration::ZERO,
+        );
+        let result = local_request(format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {target}/stolen\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").into_bytes());
+        let redirected = server.join().unwrap();
+        assert!(result.is_err());
+        assert!(
+            redirected.is_empty(),
+            "no query text or bearer may reach redirect target"
+        );
+    }
+
+    #[test]
+    fn local_http_embedding_bounds_chunked_and_declared_bodies() {
+        // A valid vector response with oversized harmless whitespace exposes unbounded decoding.
+        let body = format!(
+            r#"{{"data":[{{"index":0,"embedding":[1.0]}}]}}{}"#,
+            " ".repeat(http::LIMIT)
+        );
+        let mut bounded = Vec::new();
+        for chunked in [false, true] {
+            let reply = if chunked {
+                format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n{body}\r\n0\r\n\r\n", body.len()).into_bytes()
+            } else {
+                http::json(&body)
+            };
+            bounded.push(local_request(reply).is_err());
+        }
+        assert_eq!(bounded, [true, true]);
+    }
+
+    #[test]
+    fn local_http_embedding_retains_twenty_second_body_deadline() {
+        let fixture =
+            crate::search::test_support::SearchFixture::new("local-http-embedding-deadline");
+        let gateway = GatewaySupervisor::new(PathBuf::from("unused"), fixture.root(), &[]).unwrap();
+        let (base, _) = gateway.endpoint(true);
+        let listener = TcpListener::bind(base.strip_prefix("http://").unwrap()).unwrap();
+        let body = r#"{"data":[{"index":0,"embedding":[1.0]}]}"#;
+        let server = http::server_parts(
+            listener,
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .into_bytes(),
+            body.as_bytes().to_vec(),
+            Duration::from_secs(21),
+        );
+        let began = std::time::Instant::now();
+        let result =
+            tauri::async_runtime::block_on(request_embeddings(&gateway, &["fixture".into()]));
+        let elapsed = began.elapsed();
+        server.join().unwrap();
+        assert!(result.is_err());
+        assert!(elapsed >= Duration::from_secs(19));
+        assert!(elapsed < Duration::from_secs(21));
+    }
+
+    #[test]
+    #[ignore = "invoked only by isolated proxy regression"]
+    fn local_http_proxy_probe_embedding() {
+        assert_eq!(
+            std::env::var("LUMEN_LOCAL_HTTP_PROXY_PROBE").as_deref(),
+            Ok("1")
+        );
+        assert_eq!(
+            local_request(http::json(r#"{"data":[{"index":0,"embedding":[1.0]}]}"#)).unwrap(),
+            vec![vec![1.0]]
+        );
+    }
 
     #[test]
     fn vectors_are_finite_ordered_and_dimension_consistent() {
