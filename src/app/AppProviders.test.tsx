@@ -1,4 +1,4 @@
-import {render, screen} from '@testing-library/react';
+import {act, render, screen} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import type {AppearancePreferences} from '../design-system/theme';
@@ -41,13 +41,20 @@ function expectApplicationRoot(root: HTMLElement) {
 
 describe('AppProviders appearance contract', () => {
   it('shares decorative glass intensity with a neutral 72 baseline', () => {
-    useSettingsStore.setState({presentation: {glassIntensity: 36}});
+    useSettingsStore.setState({presentation: {glassIntensity: 36}, hydrated: true});
     const root = renderAppearance(fullMotion);
     expect(root.style.getPropertyValue('--lumen-glass-strength')).toBe('0.5');
     expect(root.style.opacity).toBe('');
   });
+  it('does not apply glass intensity until settings hydration completes', () => {
+    useSettingsStore.setState({presentation: {glassIntensity: 72}, hydrated: false});
+    const root = renderAppearance(fullMotion);
+    expect(root.style.getPropertyValue('--lumen-glass-strength')).toBe('');
+    act(() => useSettingsStore.setState({presentation: {glassIntensity: 36}, hydrated: true}));
+    expect(root.style.getPropertyValue('--lumen-glass-strength')).toBe('0.5');
+  });
   afterEach(() => {
-    useSettingsStore.setState({presentation: {glassIntensity: 72}});
+    useSettingsStore.setState({presentation: {glassIntensity: 72}, hydrated: false});
     appearanceStore.setState({density: 'comfortable'});
     vi.unstubAllGlobals();
   });

@@ -27,6 +27,8 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::paths;
+#[path = "profile_ownership.rs"]
+mod profile_ownership;
 
 const STATE_VERSION: u32 = 1;
 pub(super) static PROFILE_LOCK: Mutex<()> = Mutex::new(());
@@ -1349,13 +1351,12 @@ fn opencode_node(target: &ProviderTarget) -> Value {
     })
 }
 
-/// Minimal OpenClaw provider node (`models.providers.<id>`), matching the
-/// `OpenClawProviderConfig` shape (`base_url`, `api_key`, `models[].id`).
+/// Minimal OpenClaw provider node (`models.providers.<id>`).
 fn openclaw_node(target: &ProviderTarget) -> Value {
     serde_json::json!({
-        "base_url": target.base_url,
-        "api_key": target.api_key,
-        "models": [{ "id": target.model }],
+        "baseUrl": target.base_url,
+        "apiKey": target.api_key,
+        "models": [{ "id": target.model, "name": target.model }],
     })
 }
 
@@ -1591,48 +1592,7 @@ pub(super) fn activate_profile(
     target: &ProviderTarget,
 ) -> Result<Vec<PathBuf>, String> {
     recover_profile(home, app)?;
-    match app {
-        "claude" => switch_claude(home, target),
-        "codex" => switch_codex(home, target),
-        "gemini" => switch_gemini(home, target),
-        "opencode" | "openclaw" => {
-            let path = if app == "opencode" {
-                paths::opencode_config(home)
-            } else {
-                paths::openclaw_config(home)
-            };
-            let mut node = read_bytes(&path)?
-                .map(|bytes| parse_json_object(&path, &bytes))
-                .transpose()?
-                .and_then(|value| {
-                    let providers = if app == "opencode" {
-                        value.get("provider")
-                    } else {
-                        value
-                            .get("models")
-                            .and_then(|models| models.get("providers"))
-                    };
-                    providers
-                        .and_then(|providers| providers.get(&target.id))
-                        .cloned()
-                })
-                .unwrap_or_else(|| serde_json::json!({}));
-            merge_profile_fields(
-                &mut node,
-                if app == "opencode" {
-                    opencode_node(target)
-                } else {
-                    openclaw_node(target)
-                },
-            );
-            if app == "opencode" {
-                Ok(vec![upsert_opencode(home, &target.id, node)?])
-            } else {
-                Ok(vec![upsert_openclaw(home, &target.id, node)?])
-            }
-        }
-        _ => Err("unknown app; expected claude, codex, gemini, opencode, or openclaw".into()),
-    }
+    profile_ownership::activate(home, app, target)
 }
 
 fn merge_profile_fields(existing: &mut Value, desired: Value) {
@@ -1708,9 +1668,10 @@ pub(super) fn profile_status(
         } else {
             openclaw_node(target)
         };
+        let owned = profile_ownership::is_owned(home, app, &target.id, &path, &bytes)?;
         return Ok((
-            node.is_some_and(|node| contains_profile_fields(node, &expected)),
-            node.is_some(),
+            owned && node.is_some_and(|node| contains_profile_fields(node, &expected)),
+            owned && node.is_some(),
         ));
     }
     let enabled = current(&DeviceStore::for_home(home), app)?.as_deref() == Some(&target.id);
@@ -1723,18 +1684,21 @@ pub(super) fn profile_status(
         "gemini" => apply_gemini_env(Some(&bytes), &path, Some(target))?,
         _ => unreachable!(),
     };
-    Ok((expected.as_deref() == Some(&bytes), true))
+    let active = expected.as_deref() == Some(&bytes);
+    let owned = profile_ownership::is_owned(home, app, &target.id, &path, &bytes)?;
+    // Older exclusive activations have only the current-id journal; exact live matching is required.
+    let legacy = !profile_ownership::has_snapshot(home, app, &target.id)? && active;
+    Ok((active && (owned || legacy), owned || legacy))
 }
 
 /// Removing an inactive exclusive profile must never clear another profile's live keys.
-pub(super) fn remove_managed_profile(home: &Path, app: &str, id: &str) -> Result<bool, String> {
+pub(super) fn remove_managed_profile(
+    home: &Path,
+    app: &str,
+    target: &ProviderTarget,
+) -> Result<bool, String> {
     recover_profile(home, app)?;
-    if matches!(app, "claude" | "codex" | "gemini")
-        && current(&DeviceStore::for_home(home), app)?.as_deref() != Some(id)
-    {
-        return Ok(false);
-    }
-    remove_provider(home, app, id)
+    profile_ownership::remove(home, app, target)
 }
 
 /// Switch a tool's live config to a provider.

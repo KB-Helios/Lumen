@@ -62,7 +62,7 @@ export function AppProviders({
   const storedEffects = useAppearanceStore((state) => state.effects);
   const storedMotion = useAppearanceStore((state) => state.motion);
   const storedDensity = useAppearanceStore((state) => state.density);
-  const glassIntensity = useSettingsStore((state) => state.presentation.glassIntensity);
+  const glassIntensity = useSettingsStore((state) => state.hydrated ? state.presentation.glassIntensity : undefined);
   const hydrateAppearance = useAppearanceStore((state) => state.hydrate);
   const storedAppearance = useMemo<AppearancePreferences>(
     () => ({
@@ -130,7 +130,7 @@ export function AppProviders({
         data-density={storedDensity}
         data-motion={resolvedAppearance.motion}
         data-reduced-motion={reducedMotion}
-        style={{'--lumen-glass-strength': glassIntensity / 72} as CSSProperties}
+        style={glassIntensity === undefined ? undefined : {'--lumen-glass-strength': glassIntensity / 72} as CSSProperties}
       >
         <UNSAFE_PortalProvider getContainer={() => portalContainerRef.current ?? document.body}>
           <Profiler id="Lumen" onRender={recordCommit}>{children}</Profiler>

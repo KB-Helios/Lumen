@@ -56,7 +56,8 @@ describe('core settings pages', () => {
   it('waits for typed native root removal admission and retains rejection for retry', async () => {
     const user = userEvent.setup();
     Reflect.defineProperty(window, '__TAURI_INTERNALS__', {configurable: true, value: {}});
-    vi.spyOn(settingsPersistence, 'write').mockResolvedValue();
+    let persisted: Parameters<typeof settingsPersistence.write>[0] | undefined;
+    vi.spyOn(settingsPersistence, 'write').mockImplementation(async (settings) => {persisted = settings;});
     const status = {phase: 'ready' as const, generation: 1, pendingItems: 0, indexedItems: 1, queuedEnrichment: 0, skippedItems: 0, message: 'Index ready.'};
     vi.spyOn(nativeAiService, 'indexStatus').mockResolvedValue(status);
     let reject!: (error: Error) => void;
@@ -72,6 +73,7 @@ describe('core settings pages', () => {
     expect(screen.getByRole('dialog', {name: 'Remove indexed root'})).toBeVisible();
     expect(screen.getAllByRole('alert').some((alert) => alert.textContent?.includes('could not be completed'))).toBe(true);
     expect(useSettingsStore.getState().roots).toHaveLength(1);
+    expect(persisted?.roots).toHaveLength(1);
     await user.click(screen.getByRole('button', {name: 'Remove root permanently'}));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(useSettingsStore.getState().roots).toHaveLength(0);

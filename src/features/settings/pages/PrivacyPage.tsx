@@ -107,7 +107,7 @@ export function PrivacyPage({
       setMessage(result.saved
         ? `Saved ${result.fileName ?? payload.filename}.`
         : 'Diagnostic export cancelled.');
-      return result.saved;
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Diagnostics could not be prepared.');
       return false;

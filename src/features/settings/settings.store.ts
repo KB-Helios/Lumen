@@ -185,7 +185,18 @@ export const useSettingsStore = create<SettingsState>()(
             return removal;
           },
           async () => {
-            await admit(removal.roots, removal.ai.cloudEnrichedRootIds);
+            try {
+              await admit(removal.roots, removal.ai.cloudEnrichedRootIds);
+            } catch (error) {
+              try {
+                await settingsPersistence.write(stateSettings(get()));
+              } catch {
+                // Disk still holds the removal; keep UI state consistent with that committed value.
+                set((state) => ({roots: state.roots.filter((root) => root.id !== id), ai: {...state.ai, cloudEnrichedRootIds: state.ai.cloudEnrichedRootIds.filter((rootId) => rootId !== id)}}));
+                throw new Error('Native removal failed and the saved root settings could not be restored.');
+              }
+              throw error;
+            }
             set((state) => ({roots: state.roots.filter((root) => root.id !== id), ai: {...state.ai, cloudEnrichedRootIds: state.ai.cloudEnrichedRootIds.filter((rootId) => rootId !== id)}}));
           },
         );

@@ -265,13 +265,17 @@ impl<C: Credentials> ProfileStore<C> {
     pub fn remove(&self, app: ProviderApp, id: &str) -> Result<bool, String> {
         files::validate_provider_id(id)?;
         let profiles = self.load()?;
-        if !profiles
+        let profile = profiles
             .iter()
-            .any(|profile| profile.app == app && profile.id == id)
-        {
-            return Err("Provider profile was not found".into());
-        }
-        files::remove_managed_profile(&self.home, app.name(), id)
+            .find(|profile| profile.app == app && profile.id == id)
+            .ok_or("Provider profile was not found")?;
+        let key = Zeroizing::new(
+            self.credentials
+                .get(&profile.credential)
+                .map_err(|_| "Stored provider credential is unavailable")?,
+        );
+        let target = files::ProviderTarget::new(id, &profile.base_url, &key, &profile.model)?;
+        files::remove_managed_profile(&self.home, app.name(), &target)
             .map_err(|_| "Provider removal failed; retry to recover the pending operation".into())
     }
 }
@@ -703,6 +707,172 @@ mod tests {
         assert!(store.save(invalid, true).is_err());
         assert!(store.credentials.entries.borrow().is_empty());
         assert!(!store.root.join("profiles.json").exists());
+    }
+
+    #[test]
+    fn openclaw_activation_uses_documented_connection_fields() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        store
+            .save(input(ProviderApp::Openclaw, Some("fixture-secret")), true)
+            .unwrap();
+        store.activate(ProviderApp::Openclaw, "fixture").unwrap();
+        let live: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(paths::openclaw_config(&store.home)).unwrap())
+                .unwrap();
+        let node = &live["models"]["providers"]["fixture"];
+        assert!(
+            node["baseUrl"] == "https://fixture.example/v1" && node["apiKey"] == "fixture-secret"
+        );
+        assert!(node.get("base_url").is_none() && node.get("api_key").is_none());
+        assert!(
+            node["models"][0]["name"] == "fixture-model",
+            "OpenClaw requires a nonempty model name"
+        );
+    }
+
+    #[test]
+    fn managed_additive_removal_restores_prior_fields_and_preserves_later_user_edits() {
+        for (app, relative, contents, pointer) in [
+            (
+                ProviderApp::Opencode,
+                ".config/opencode/opencode.json",
+                r#"{"provider":{"fixture":{"npm":"user-package","options":{"baseURL":"https://user.example","apiKey":"user-key","headers":{"X-Keep":"yes"}},"models":{"fixture-model":{"name":"User name","limit":123},"other-model":{"name":"Other"}}}}}"#,
+                "/provider/fixture",
+            ),
+            (
+                ProviderApp::Openclaw,
+                ".openclaw/openclaw.json",
+                r#"{"models":{"providers":{"fixture":{"baseUrl":"https://user.example","apiKey":"user-key","models":[{"id":"fixture-model","name":"User name"},{"id":"other-model","name":"Other"}],"keep":"yes"}}}}"#,
+                "/models/providers/fixture",
+            ),
+        ] {
+            let fixture = Fixture::new();
+            let store = fixture.store();
+            let path = store.home.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, contents).unwrap();
+            store
+                .save(input(app, Some("fixture-secret")), true)
+                .unwrap();
+            store.activate(app, "fixture").unwrap();
+            let mut live: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            live.pointer_mut(pointer).unwrap()["user-added"] = serde_json::json!(true);
+            if app == ProviderApp::Opencode {
+                live.pointer_mut(pointer).unwrap()["options"]["apiKey"] =
+                    serde_json::json!("external-key");
+            } else {
+                live.pointer_mut(pointer).unwrap()["apiKey"] = serde_json::json!("external-key");
+            }
+            std::fs::write(&path, serde_json::to_vec(&live).unwrap()).unwrap();
+            assert!(store.remove(app, "fixture").unwrap());
+            let remaining: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            let mut expected: serde_json::Value = serde_json::from_str(contents).unwrap();
+            expected.pointer_mut(pointer).unwrap()["user-added"] = serde_json::json!(true);
+            if app == ProviderApp::Opencode {
+                expected.pointer_mut(pointer).unwrap()["options"]["apiKey"] =
+                    serde_json::json!("external-key");
+            } else {
+                expected.pointer_mut(pointer).unwrap()["apiKey"] =
+                    serde_json::json!("external-key");
+            }
+            assert!(
+                remaining == expected,
+                "removal must restore prior fields and preserve external changes"
+            );
+            assert!(!store.list().unwrap()[0].enabled);
+        }
+    }
+
+    #[test]
+    fn reactivating_additive_edits_removes_only_the_previous_owned_model() {
+        for (app, relative, pointer) in [
+            (
+                ProviderApp::Opencode,
+                ".config/opencode/opencode.json",
+                "/provider/fixture",
+            ),
+            (
+                ProviderApp::Openclaw,
+                ".openclaw/openclaw.json",
+                "/models/providers/fixture",
+            ),
+        ] {
+            let fixture = Fixture::new();
+            let store = fixture.store();
+            let path = store.home.join(relative);
+            store
+                .save(input(app, Some("fixture-secret")), true)
+                .unwrap();
+            store.activate(app, "fixture").unwrap();
+            let mut live: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            let node = live.pointer_mut(pointer).unwrap();
+            if app == ProviderApp::Opencode {
+                node["models"]["external-model"] = serde_json::json!({"name":"External"});
+            } else {
+                node["models"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(serde_json::json!({"id":"external-model","name":"External"}));
+                assert!(
+                    node.get("baseUrl").is_some() && node.get("apiKey").is_some(),
+                    "OpenClaw uses camel-case connection fields"
+                );
+                assert!(node.get("base_url").is_none() && node.get("api_key").is_none());
+            }
+            std::fs::write(&path, serde_json::to_vec(&live).unwrap()).unwrap();
+            let mut edited = input(app, None);
+            edited.model = "updated-model".into();
+            store.save(edited, false).unwrap();
+            assert!(store.list().unwrap()[0].enabled);
+            store.activate(app, "fixture").unwrap();
+            let live = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                !live.contains("fixture-model"),
+                "obsolete owned model must be removed"
+            );
+            assert!(live.contains("updated-model") && live.contains("external-model"));
+            assert!(store.remove(app, "fixture").unwrap());
+            let live = std::fs::read_to_string(&path).unwrap();
+            assert!(live.contains("external-model") && !live.contains("updated-model"));
+        }
+    }
+
+    #[test]
+    fn exclusive_removal_refuses_external_connection_edits_even_after_saved_edits() {
+        for (app, relative) in [
+            (ProviderApp::Claude, ".claude/settings.json"),
+            (ProviderApp::Codex, ".codex/config.toml"),
+            (ProviderApp::Gemini, ".gemini/.env"),
+        ] {
+            let fixture = Fixture::new();
+            let store = fixture.store();
+            let path = store.home.join(relative);
+            store
+                .save(input(app, Some("fixture-secret")), true)
+                .unwrap();
+            store.activate(app, "fixture").unwrap();
+            let mut edited = input(app, Some("replacement-secret"));
+            edited.model = "saved-model".into();
+            store.save(edited, false).unwrap();
+            assert!(
+                store.list().unwrap()[0].enabled,
+                "saved edits must not discard live ownership"
+            );
+            let external = std::fs::read_to_string(&path)
+                .unwrap()
+                .replace("fixture-secret", "external-secret");
+            std::fs::write(&path, &external).unwrap();
+            assert!(
+                !store.list().unwrap()[0].enabled,
+                "external edits invalidate removal admission"
+            );
+            assert!(!store.remove(app, "fixture").unwrap());
+            assert!(std::fs::read_to_string(&path).unwrap() == external);
+        }
     }
 
     #[test]

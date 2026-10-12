@@ -14,6 +14,7 @@ describe('provider dialogs', () => {
     await user.click(screen.getByRole('button', {name: 'Add provider'}));
     expect(screen.getByRole('button', {name: 'Use Grok CLI'})).toBeDisabled();
     await user.click(screen.getByRole('button', {name: 'Use OpenAI Codex'}));
+    expect(screen.getByRole('textbox', {name: 'Base URL'})).toHaveValue('https://api.openai.com/v1');
     expect(screen.getByRole('button', {name: 'Add'})).toBeDisabled();
     await user.type(screen.getByRole('textbox', {name: 'Model'}), 'test');
     expect(screen.getByRole('button', {name: 'Add'})).toBeDisabled();
