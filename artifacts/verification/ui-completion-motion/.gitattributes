@@ -1,0 +1,3 @@
+# Preserve hashed evidence bytes, including captured output whitespace and line endings.
+*.txt -text -whitespace
+*.json -text
