@@ -1,0 +1,7 @@
+$ node scripts/record-interactions.mjs
+Recorded launcher-search.webm.
+Recorded settings-routing.webm.
+Recorded onboarding.webm.
+Recorded answer-submission.webm.
+Recorded answer-approval-states.webm.
+Recorded activity-provider-states.webm.

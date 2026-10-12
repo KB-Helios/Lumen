@@ -1,0 +1,2 @@
+$ node scripts/capture-gallery.mjs
+Captured 86 gallery states in C:\Users\kevin\.codex\worktrees\d61a\Lumen\artifacts\screenshots.

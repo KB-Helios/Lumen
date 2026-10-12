@@ -1,0 +1,327 @@
+{
+  "recordedAt": "2026-10-11T14:34:24.796Z",
+  "finalSourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+  "nativeVerifiedSourceCommit": "1fce4d51029acb42165c8c22845d79c12a33d43c",
+  "sourceCommitMeaning": "Revision containing the checked source. Owned native credential fixture code was tested before its commit; this field alone does not assert a clean worktree at execution. Profile clean/dirty provenance is in its raw report.",
+  "nativeSourceUnchangedVerifiedWith": "git diff --exit-code 1fce4d51029acb42165c8c22845d79c12a33d43c f0e6b6edc19879b0701088b254a9a3423e7c1fd8 -- src-tauri",
+  "fullEdgeRun": {
+    "passed": 130,
+    "failed": 1,
+    "didNotRun": 2,
+    "ordinaryReactCommitP95Ms": 6.399999991059303,
+    "requiredLessThanMs": 3,
+    "sourceCommit": "57fa37d1f21043bb3eec2c0fcabe861ad4c8cb09",
+    "note": "Later separate runs cover the two skipped cases; they do not turn this full run into a pass."
+  },
+  "frontendTests": {
+    "passed": 704,
+    "files": 82
+  },
+  "nativeTests": {
+    "passed": 304,
+    "ignored": 16
+  },
+  "nativeUiEvidence": {
+    "summary": "artifacts/verification/ui-completion-motion/native-ui-acceptance-summary.json",
+    "artifacts": [
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-acceptance-summary.json",
+        "bytes": 4870,
+        "sha256": "e660c0352e7534715d13e03a5c71fa4c2d5de7503b40aa98856ce000e17bf89c"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-exercise.json",
+        "bytes": 2340,
+        "sha256": "6240c9c4053edd940bc66ff978922a2ef9854e5dc36aedff10057d96e841d51d"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-reopen.json",
+        "bytes": 1718,
+        "sha256": "62b6865e641dcd0df58f5ac88ee7eb5fd521fac4b4e89944c9c33ecb2a1d8083"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-240-callbacks.json",
+        "bytes": 3981,
+        "sha256": "50080eb6b6c6ca675de45ea50ac1881cf799fb7fad42007f407ba1c12bf8a9fe"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-display-sample240.json",
+        "bytes": 651,
+        "sha256": "232d4ff4e1e8941fc7232769b1873dc82e44cfff5c844b37fe716aa40515dc65"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-display-sample60.json",
+        "bytes": 653,
+        "sha256": "ef65050deb60656a0754be24835b15afd861e70c4548ccfa238b55dfec78aee8"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-display-final-readback.json",
+        "bytes": 514,
+        "sha256": "4bd136bf146e5b8d47015c19d9f74b56564dd3adfdd16c477d4923b5c0a24a0d"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-credential-cleanup.json",
+        "bytes": 157,
+        "sha256": "145190591f4238456d168132aa95dd09d15dfb556db37ba8d7f68b271524c251"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-normal-binary-restored.json",
+        "bytes": 255,
+        "sha256": "229123f8e4f7f87334098bc62bea562902187290d6ab1e91f947641fa12b51d9"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-final-audit.json",
+        "bytes": 692,
+        "sha256": "f367a9dfbbf20bd7c3529dfb1dcac9babb02f42d5fad9e2506d0aed4b12ab3d7"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-providers-active.png",
+        "bytes": 114012,
+        "sha256": "7902e328dbb7da3ab6d14be9ec1fc7d9600d838d894225813bf7f1c23b758578"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-providers-removed.png",
+        "bytes": 106515,
+        "sha256": "3881c3b2ee343e34cc8c0dcc6b58103b677faa21c0e0401d2e4bc5fd762de08c"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-failure.png",
+        "bytes": 108627,
+        "sha256": "8ec09e6547a8c43bf96b94c692b53ba9206b5a7097e489cb8a7df70dcfe69e63"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-240-launcher.png",
+        "bytes": 21615,
+        "sha256": "e6b893b8cb3c7518b89d1e254854978cb096bbcc5c0b50f671bdbb15f3466208"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-display-watchdog-readiness.json",
+        "bytes": 225,
+        "sha256": "c645a5002e8f962da50eec4f2af88a090392593dcbe11290896f27e17909e82b"
+      },
+      {
+        "file": "artifacts/verification/ui-completion-motion/native-ui-path-cleanup.json",
+        "bytes": 187,
+        "sha256": "7b657d459f101e55f8db6c060773b144b6836414281abebf0ddf349c54dd83d5"
+      }
+    ],
+    "boundary": "Identifier-isolated release with synthetic owned homes and real Windows Credential Manager; no live provider authentication or compositor presentation measurement"
+  },
+  "ordinaryAppDataUnchangedDuringPackagedSmoke": true,
+  "galleryCaptures": 86,
+  "recordingStudies": 6,
+  "profilePassed": false,
+  "readiness": "draft; required performance and unperformed live/manual presentation acceptance remain open",
+  "gates": [
+    {
+      "name": "post-review-typecheck",
+      "command": "bun run typecheck",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "frontend",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/post-review-typecheck.txt",
+      "outputBytes": 15,
+      "outputSha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+    },
+    {
+      "name": "post-review-lint",
+      "command": "bun run lint",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "frontend",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/post-review-lint.txt",
+      "outputBytes": 28,
+      "outputSha256": "960f1eb37ac4d28430af9bef2c98f32333254854ffde619330f53d373ce0f632"
+    },
+    {
+      "name": "post-review-units",
+      "command": "bun run test -- --no-file-parallelism --maxWorkers=1",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "unit/component",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/post-review-units.txt",
+      "outputBytes": 299,
+      "outputSha256": "6b816e1a81b2a409f3c10d8c4608bd22b66c75175533b454a7864e61d9581e48"
+    },
+    {
+      "name": "post-review-frontend-build",
+      "command": "bun run build",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "frontend release",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/post-review-frontend-build.txt",
+      "outputBytes": 4691,
+      "outputSha256": "e7eabec171c31ee42a40718dd01d77462ecb52ddb9d64f2d2845f54657ec709a"
+    },
+    {
+      "name": "final-edge",
+      "command": "bun run test:e2e",
+      "sourceCommit": "57fa37d1f21043bb3eec2c0fcabe861ad4c8cb09",
+      "boundary": "browser fixtures, before final two-caller correction",
+      "exitCode": 1,
+      "output": "artifacts/verification/ui-completion-motion/final-edge.txt",
+      "outputBytes": 18919,
+      "outputSha256": "eefbc3f3e4b8ef8273e4d5af51b3537b1a650ae4e3d671093c252a041836a853"
+    },
+    {
+      "name": "final-remaining-hover",
+      "command": "bun run test:e2e -- tests/e2e/performance.spec.ts -g \"hover, idle work, animation count, and browser heap remain bounded\"",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "separate browser fixture run",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-remaining-hover.txt",
+      "outputBytes": 682,
+      "outputSha256": "fb68a060a6183c3cf4872a1a4ba26e815f6be5d85694e77b4d40877ccab649cf"
+    },
+    {
+      "name": "final-remaining-static",
+      "command": "bun run test:e2e -- tests/e2e/performance.spec.ts -g \"the static palette keeps one answer region and exposes diagnostics instrumentation\"",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "separate browser fixture run",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-remaining-static.txt",
+      "outputBytes": 499,
+      "outputSha256": "6c00dff383f60e2a28094129e14944ef9b786a5fb5fcc4b9cd3a919fb4b1fb5f"
+    },
+    {
+      "name": "final-native-fmt",
+      "command": "cargo fmt --all -- --check",
+      "sourceCommit": "1fce4d51029acb42165c8c22845d79c12a33d43c",
+      "boundary": "native source unchanged through finalSource",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-native-fmt.txt",
+      "outputBytes": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "final-native-clippy",
+      "command": "cargo clippy --all-targets --all-features -j 1 -- -D warnings",
+      "sourceCommit": "1fce4d51029acb42165c8c22845d79c12a33d43c",
+      "boundary": "native source unchanged through finalSource",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-native-clippy.txt",
+      "outputBytes": 1042,
+      "outputSha256": "b460eb1d5989f96e37890cad5e58a68f0e081b9f6074ce3f29ca76e67a10ec2f"
+    },
+    {
+      "name": "final-native-tests",
+      "command": "cargo test --all-features -j 1 -- --test-threads=1",
+      "sourceCommit": "1fce4d51029acb42165c8c22845d79c12a33d43c",
+      "boundary": "native unit/integration fixtures; ignored tests remain ignored",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-native-tests.txt",
+      "outputBytes": 33389,
+      "outputSha256": "d239e42609e084458019689fd8f1b52881213424737395814e017a67c5b50cc1"
+    },
+    {
+      "name": "native-stop",
+      "command": "cargo test --all-features -j 1 --lib computer_use::coordinator::tests::native_stop_twenty_blocked_worker_samples -- --ignored --exact",
+      "sourceCommit": "002b303d95b403c5d340a56cb6a61595f4fa3e00",
+      "boundary": "held-admission/blocked-stdin Job Object fixture; production Computer Use unchanged",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/native-stop.txt",
+      "outputBytes": 1408,
+      "outputSha256": "b4de118a566e60cd953c15e71f1dfe301790f2226a9c9808eec004daa77df79a"
+    },
+    {
+      "name": "native-edge-wire",
+      "command": "cargo test --all-features -j 1 --lib computer_use::executor::tests::rust_executor_wire_and_warm_pool_verify_real_edge_state -- --ignored --exact",
+      "sourceCommit": "002b303d95b403c5d340a56cb6a61595f4fa3e00",
+      "boundary": "fresh installed-Edge executor fixture; production Computer Use unchanged",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/native-edge-wire.txt",
+      "outputBytes": 359,
+      "outputSha256": "82f094e51d48f8d82e063447443067a5c80f153457274683e245dd4464e78b56"
+    },
+    {
+      "name": "native-credential-platform",
+      "command": "cargo test --lib --all-features -j 1 provider_switcher::profiles::tests::windows_credentials_owned_slot_round_trip -- --exact --ignored --nocapture --test-threads=1",
+      "sourceCommit": "1fce4d51029acb42165c8c22845d79c12a33d43c",
+      "boundary": "actual Windows Credential Manager, owned synthetic UUID slot",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/native-credential-platform.txt",
+      "outputBytes": 1332,
+      "outputSha256": "09eea3366f6de2fd372021e461882396f8466c34b4b7a3723c9e2be87e1ae844"
+    },
+    {
+      "name": "native-credential-injected",
+      "command": "cargo test --lib --all-features -j 1 provider_switcher::profiles::tests -- --test-threads=1",
+      "sourceCommit": "1fce4d51029acb42165c8c22845d79c12a33d43c",
+      "boundary": "injected provider profile fixtures",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/native-credential-injected.txt",
+      "outputBytes": 1324,
+      "outputSha256": "bc392b83827eae0bf12ab71d527c43d7b6d3435eba97fd76d493db53fa60facd"
+    },
+    {
+      "name": "final-tauri-build",
+      "command": "bun run tauri build",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "normal Windows release/NSIS packaging",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-tauri-build.txt",
+      "outputBytes": 16232,
+      "outputSha256": "aabeb8af2e7431e516661ddf96afb54760ca978d741a967fabd30d5146072292"
+    },
+    {
+      "name": "final-packaged-smoke",
+      "command": "powershell -NoProfile -File scripts/smoke-packaged.ps1",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "isolated normal installed package startup/uninstall; separate from interactive provider UI",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-packaged-smoke.txt",
+      "outputBytes": 832,
+      "outputSha256": "f52ef107006159af94df18665bc9ece099ea8f79154a600bf0af71444726e839"
+    },
+    {
+      "name": "final-profile",
+      "command": "bun run profile",
+      "sourceCommit": "a22df58fd6808c1546278eefa6fb3b3df6baeb7a",
+      "boundary": "browser callback/React/idle measurements; compositor presentation is not measured",
+      "exitCode": 1,
+      "output": "artifacts/verification/ui-completion-motion/final-profile.txt",
+      "outputBytes": 1583,
+      "outputSha256": "811afba2caffe8604e6a021699f10da987c94df4cf6691355a7a74a9298eb1ab"
+    },
+    {
+      "name": "final-gallery",
+      "command": "bun run capture:gallery",
+      "sourceCommit": "c58a669f9a3e872527e3df8531c8adbe52d7628f",
+      "boundary": "production-component browser gallery with simulated services",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-gallery.txt",
+      "outputBytes": 131,
+      "outputSha256": "1c1d54b6b6f3fd94601071bc4502d861e405bc3b7770f6b7d8bfd70e045807aa"
+    },
+    {
+      "name": "final-recordings",
+      "command": "bun run record:interactions",
+      "sourceCommit": "f0e6b6edc19879b0701088b254a9a3423e7c1fd8",
+      "boundary": "browser interaction studies",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/final-recordings.txt",
+      "outputBytes": 239,
+      "outputSha256": "7353630a1bb5a4afe122eee1105103af2a138e31806dce6c67ac92ebff324046"
+    },
+    {
+      "name": "publication-lint",
+      "command": "bun run lint",
+      "sourceCommit": "a22df58fd6808c1546278eefa6fb3b3df6baeb7a",
+      "boundary": "all-source zero-warning lint after capture-only correction",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/publication-lint.txt",
+      "outputBytes": 28,
+      "outputSha256": "960f1eb37ac4d28430af9bef2c98f32333254854ffde619330f53d373ce0f632"
+    },
+    {
+      "name": "publication-generator-contracts",
+      "command": "bun run node --test scripts/evidence-generators.contract.test.mjs",
+      "sourceCommit": "a22df58fd6808c1546278eefa6fb3b3df6baeb7a",
+      "boundary": "six existing evidence-generator contracts after capture-only correction",
+      "exitCode": 0,
+      "output": "artifacts/verification/ui-completion-motion/publication-generator-contracts.txt",
+      "outputBytes": 649,
+      "outputSha256": "830499c42373d4a39ce34ce69b5af0b94ce69ed5809db8a28b51b36e47961a07"
+    }
+  ]
+}

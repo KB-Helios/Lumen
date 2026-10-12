@@ -1,0 +1,19 @@
+{
+    "credentialsNoEntry":  true,
+    "watchdogs":  [
+                      {
+                          "parentPid":  49936,
+                          "pid":  51944,
+                          "outsideJob":  false,
+                          "token":  "7648dfd6-3829-417d-ba7c-d08b545470d1"
+                      }
+                  ],
+    "displayRestoredOrUnchanged":  true,
+    "allLumenProcessesExited":  true,
+    "allRecordedProcessesExited":  true,
+    "ownedCredentialCount":  5,
+    "normalBinaryRestored":  true,
+    "finalRefreshHz":  240,
+    "normalSha256":  "4D363A340EA2C5CB03B9187E121E41C8E5162C4DBD90BD39458CFFC519E0A9EA",
+    "recordedProcessCount":  14
+}

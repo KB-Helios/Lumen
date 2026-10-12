@@ -1,0 +1,26 @@
+{
+  "device": "\\\\.\\DISPLAY1",
+  "current": {
+    "bits": 32,
+    "width": 2560,
+    "height": 1600,
+    "flags": 0,
+    "rate": 240,
+    "x": 0,
+    "y": 0,
+    "orientation": 0
+  },
+  "original": {
+    "bits": 32,
+    "width": 2560,
+    "height": 1600,
+    "flags": 0,
+    "rate": 240,
+    "x": 0,
+    "y": 0,
+    "orientation": 0
+  },
+  "matchesOriginal": true,
+  "originalSha256": "78fad2678e2cc9efec153d3d4e287b5591676ece7967fa85fd78e80b8f810ce1",
+  "modeChangedByReadback": false
+}

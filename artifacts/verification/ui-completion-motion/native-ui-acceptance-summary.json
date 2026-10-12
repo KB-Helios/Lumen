@@ -1,0 +1,170 @@
+{
+  "kind": "Isolated release native fixture integration",
+  "productionUiRevision": "f0e6b6e",
+  "ordinaryToolConfigurationTouched": false,
+  "liveProviderAuthentication": "Not attempted",
+  "providers": {
+    "targets": [
+      {
+        "app": "claude",
+        "save": true,
+        "edit": true,
+        "blankKeyRetained": true,
+        "activate": true,
+        "ownedConfigReadback": true,
+        "unrelatedFieldPreserved": true,
+        "processReopen": true,
+        "removeFromLive": true,
+        "savedProfileAndKeyRetainedAfterRemoval": true
+      },
+      {
+        "app": "codex",
+        "save": true,
+        "edit": true,
+        "blankKeyRetained": true,
+        "activate": true,
+        "ownedConfigReadback": true,
+        "unrelatedFieldPreserved": true,
+        "processReopen": true,
+        "removeFromLive": true,
+        "savedProfileAndKeyRetainedAfterRemoval": true
+      },
+      {
+        "app": "gemini",
+        "save": true,
+        "edit": true,
+        "blankKeyRetained": true,
+        "activate": true,
+        "ownedConfigReadback": true,
+        "unrelatedFieldPreserved": true,
+        "processReopen": true,
+        "removeFromLive": true,
+        "savedProfileAndKeyRetainedAfterRemoval": true
+      },
+      {
+        "app": "opencode",
+        "save": true,
+        "edit": true,
+        "blankKeyRetained": true,
+        "activate": true,
+        "ownedConfigReadback": true,
+        "unrelatedFieldPreserved": true,
+        "processReopen": true,
+        "removeFromLive": true,
+        "savedProfileAndKeyRetainedAfterRemoval": true
+      },
+      {
+        "app": "openclaw",
+        "save": true,
+        "edit": true,
+        "blankKeyRetained": true,
+        "activate": true,
+        "ownedConfigReadback": true,
+        "unrelatedFieldPreserved": true,
+        "processReopen": true,
+        "removeFromLive": true,
+        "savedProfileAndKeyRetainedAfterRemoval": true
+      }
+    ],
+    "realCredentialManager": true,
+    "metadataSecretFree": true,
+    "nativeFailureRetry": {
+      "realNativeError": "Provider metadata is invalid",
+      "dialogRetained": true,
+      "retryAvailable": true,
+      "retrySucceeded": true
+    }
+  },
+  "native": {
+    "webviewVersion": "154.0.4258.62",
+    "dpr": 1.5,
+    "settingsViewport": {
+      "width": 880,
+      "height": 600
+    },
+    "launcherViewport": {
+      "width": 700,
+      "height": 66,
+      "horizontalOverflow": false
+    },
+    "launcherInput": {
+      "rapidReversals": 3,
+      "inputDomRetained": true,
+      "caretRetained": true,
+      "settledViewport": {
+        "width": 700,
+        "height": 66
+      }
+    },
+    "reactMetrics": "Not measured (production DEV diagnostics disabled)",
+    "presentationAndInputLatency": "Not measured"
+  },
+  "callbacks240": {
+    "actualDisplay": {
+      "bits": 32,
+      "width": 2560,
+      "height": 1600,
+      "flags": 0,
+      "rate": 240,
+      "x": 0,
+      "y": 0,
+      "orientation": 0
+    },
+    "rawArrayArtifact": "native-ui-240-callbacks.json",
+    "samples": 120,
+    "medianMs": 4.19999999999709,
+    "p95Ms": 4.30000000000291,
+    "strict240BudgetMs": 4.166666666666667,
+    "callbackP95WithinStrict240Budget": false,
+    "measurementBoundary": "requestAnimationFrame callback intervals before presentation; not compositor presentation or a strict native frame-budget pass"
+  },
+  "display60": {
+    "status": "Validated-only; actual capture unperformed",
+    "testReturn": 0,
+    "originalModeTestReturn": 0,
+    "watchdogOutsideJob": false,
+    "blocker": "Independent watchdog reported IsProcessInJob=true; no flags0 mode change was called"
+  },
+  "unavailableCurrentResolutionRefreshRatesHz": [
+    120,
+    144,
+    165
+  ],
+  "cleanup": {
+    "exactOwnedCredentialsDeleted": 5,
+    "credentialNoEntry": true,
+    "userCredentialsEnumerated": false,
+    "allRecordedProcessesExited": true,
+    "normalBinaryRestored": true,
+    "normalSha256": "4D363A340EA2C5CB03B9187E121E41C8E5162C4DBD90BD39458CFFC519E0A9EA",
+    "finalDisplay": {
+      "bits": 32,
+      "width": 2560,
+      "height": 1600,
+      "flags": 0,
+      "rate": 240,
+      "x": 0,
+      "y": 0,
+      "orientation": 0
+    },
+    "displayMatchesOriginal": true
+  },
+  "manualNarrator": "Not measured",
+  "normalNsisAndInstalledSmoke": "Separate root-owned acceptance gates",
+  "publishableArtifacts": [
+    "native-ui-acceptance-summary.json",
+    "native-ui-exercise.json",
+    "native-ui-reopen.json",
+    "native-ui-240-callbacks.json",
+    "native-display-sample240.json",
+    "native-display-sample60.json",
+    "native-display-final-readback.json",
+    "native-ui-credential-cleanup.json",
+    "native-ui-normal-binary-restored.json",
+    "native-ui-final-audit.json",
+    "native-ui-providers-active.png",
+    "native-ui-providers-removed.png",
+    "native-ui-failure.png",
+    "native-ui-240-launcher.png"
+  ]
+}

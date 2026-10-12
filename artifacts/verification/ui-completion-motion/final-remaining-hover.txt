@@ -1,0 +1,10 @@
+$ node scripts/run-e2e.mjs "tests/e2e/performance.spec.ts" -g "hover, idle work, animation count, and browser heap remain bounded"
+
+Running 1 test using 1 worker
+
+(node:30380) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+hover-performance {"browserVersion":"155.0.4283.45","responseP95Ms":7.200000002980232,"frameBudgetMs":8.199999999999818,"readySamples":80,"callbackOffsetGrowthP95Ms":0.8000000000001819,"callbackIntervalP95Ms":7.5}
+  ok 1 tests\e2e\performance.spec.ts:214:1 › hover, idle work, animation count, and browser heap remain bounded (9.9s)
+
+  1 passed (14.1s)

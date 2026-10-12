@@ -1,0 +1,14 @@
+✔ gallery capture consumes registry categories exposed by scenario options (0.7481ms)
+✔ gallery capture waits for the production provider and runtime fixture states (0.1384ms)
+✔ approval recording clicks and asserts both deterministic decisions (0.1993ms)
+✔ development server owns one direct Vite child and awaits its shutdown (0.2948ms)
+✔ recordings explicitly allow motion while gallery captures retain reduced motion (0.1641ms)
+✔ launcher recording sustains the real search lifecycle for active-loop evidence (0.0829ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 108.5704

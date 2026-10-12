@@ -1,0 +1,37 @@
+$ tsc --noEmit && vite build
+vite v8.2.0 building client environment for production...
+[2Ktransforming...✓ 2680 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                   1.50 kB │ gzip:  0.58 kB
+dist/assets/index-C4XoHZ55.css                   63.02 kB │ gzip: 11.46 kB
+dist/assets/root-selection-service-eof-Uh4-.js    0.35 kB │ gzip:  0.26 kB
+dist/assets/rolldown-runtime-B0Z9INg1.js          0.90 kB │ gzip:  0.51 kB
+dist/assets/diagnostics.metrics-BSF17cgf.js       0.96 kB │ gzip:  0.50 kB
+dist/assets/DiagnosticsOverlay-COmxHByK.js        2.50 kB │ gzip:  1.08 kB
+dist/assets/tauri-CVWoFdDw.js                     5.38 kB │ gzip:  1.78 kB
+dist/assets/diagnostics.store-BfATXph4.js         6.01 kB │ gzip:  2.63 kB
+dist/assets/OnboardingFlow-Bonnxez-.js            7.92 kB │ gzip:  3.05 kB
+dist/assets/MotionProvider-DnbyEv3p.js           11.98 kB │ gzip:  4.40 kB
+dist/assets/PreviewPane-WPuZlkcD.js              17.17 kB │ gzip:  5.36 kB
+dist/assets/search.types-By17zYa-.js             40.14 kB │ gzip: 12.53 kB
+dist/assets/LumenUiIcon-BJIxFuhY.js              80.94 kB │ gzip: 27.16 kB
+dist/assets/data-state-DtgTkagA.js               98.05 kB │ gzip: 26.85 kB
+dist/assets/motion-BEKgtDhx.js                  123.21 kB │ gzip: 39.86 kB
+dist/assets/SettingsShell-MHfOz1vb.js           149.50 kB │ gzip: 39.94 kB
+dist/assets/react-core-DVoh6Tdv.js              178.62 kB │ gzip: 56.46 kB
+dist/assets/index-Rn1Hjnaf.js                   212.26 kB │ gzip: 72.28 kB
+dist/assets/lottie_svg-DvETgvxg.js              243.36 kB │ gzip: 63.65 kB
+dist/assets/react-aria-CNPPvd_H.js              251.52 kB │ gzip: 77.02 kB
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/lottie-web/build/player/lottie_svg.js:11559:33 [38;5;246m][0m
+       [38;5;246m│[0m
+ [38;5;246m11559 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m_[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m'[0m[38;5;249m[[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m_[0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m_[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m{[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249m;[0m[38;5;249ms[0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249md[0m[38;5;249m_[0m[38;5;249mb[0m[38;5;249mm[0m[38;5;249m_[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m=[0m[38;5;249m$[0m[38;5;249mb[0m[38;5;249mm[0m[38;5;249m_[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m}[0m[38;5;249m][0m[38;5;249m'[0m[38;5;249m)[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m/[0m[38;5;249m/[0m[38;5;249m [0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m-[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249ma[0m[38;5;249mb[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m-[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249m-[0m[38;5;249me[0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m
+ [38;5;240m      │[0m                                 ──┬─  
+ [38;5;240m      │[0m                                   ╰─── Use of direct `eval` here.
+ [38;5;240m      │[0m 
+ [38;5;240m      │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m───────╯[0m
+
+✓ built in 1.53s

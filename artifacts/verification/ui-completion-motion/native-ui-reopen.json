@@ -1,0 +1,74 @@
+{
+  "phase": "reopen",
+  "at": "2026-10-11T14:23:16.870Z",
+  "identifier": "com.bridgehammer.lumen.nativefixture7a5f49f0f23f4942899f6e3235a7833e",
+  "rows": [
+    {
+      "app": "claude",
+      "remove": true,
+      "savedKeyRetained": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "codex",
+      "remove": true,
+      "savedKeyRetained": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "gemini",
+      "remove": true,
+      "savedKeyRetained": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "opencode",
+      "remove": true,
+      "savedKeyRetained": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "openclaw",
+      "remove": true,
+      "savedKeyRetained": true,
+      "unrelatedFieldPreserved": true
+    }
+  ],
+  "reactMetrics": "Not measured (production diagnostics disabled)",
+  "presentationTiming": "Not measured; CDP/rAF cannot prove compositor presentation",
+  "errors": [],
+  "nativeShow": {
+    "mode": "collapsed",
+    "source": "command",
+    "visible": true
+  },
+  "nativeRoute": {
+    "keyboard": "Ctrl+,",
+    "settingsDOMVisible": true
+  },
+  "runtime": {
+    "url": "http://tauri.localhost/",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.5,
+    "viewport": {
+      "width": 880,
+      "height": 600
+    },
+    "screen": {
+      "width": 1707,
+      "height": 1067
+    }
+  },
+  "processReopen": {
+    "retainedProfiles": 5,
+    "allKeysReadable": true
+  },
+  "geometry": {
+    "viewport": {
+      "width": 880,
+      "height": 600
+    },
+    "horizontalOverflow": false
+  },
+  "status": "pass"
+}
