@@ -1,4 +1,4 @@
-import {useLayoutEffect, useMemo, useRef} from 'react';
+import {useEffect, useLayoutEffect, useMemo, useRef} from 'react';
 import {GridList, type Key, type Selection} from 'react-aria-components';
 import {motion} from 'motion/react';
 
@@ -6,6 +6,7 @@ import {motionTokens} from '../../design-system/motion';
 import type {SearchResult} from '../../services/search/search.types';
 import {useAppearanceStore} from '../../state/appearance.store';
 import {useSelectionStore} from '../launcher/selection.store';
+import {useLauncherStore} from '../launcher/launcher.store';
 import {ResultRow} from './ResultRow';
 import {SelectionCapsule} from './SelectionCapsule';
 import {
@@ -49,10 +50,55 @@ export function ResultGrid({
   const rowHeight = density === 'compact' ? compactResultHeight : comfortableResultHeight;
   const viewportRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const collection = useRef({results, generation: 0, autoFocus: false});
+  if (collection.current.results !== results) {
+    // Reset only React Aria's uncontrolled collection state. Keep the capsule,
+    // viewport and entrance owner mounted, and never take focus from the input.
+    collection.current = {
+      results,
+      generation: collection.current.generation + 1,
+      autoFocus: gridRef.current?.contains(document.activeElement) ?? false,
+    };
+  }
+  const enteredResults = useRef<readonly SearchResult[] | null>(null);
+  useEffect(() => {
+    if (!animateRows || enteredResults.current === results) return;
+    const animations: Animation[] = [];
+    const frame = requestAnimationFrame(() => {
+      enteredResults.current = results;
+      if (document.visibilityState === 'hidden' || !useLauncherStore.getState().visible) return;
+      const {duration, stagger, maxStaggered, reducedDuration} = motionTokens.rowEntrance;
+      const rows = [...(gridRef.current?.querySelectorAll<HTMLElement>('[data-result-id]') ?? [])];
+      for (const [index, row] of rows.slice(0, maxStaggered).entries()) {
+        if (typeof row.animate !== 'function') continue;
+        animations.push(row.animate([{opacity: 0}, {opacity: 1}], {
+          delay: reducedMotion ? 0 : index * stagger * 1000,
+          duration: (reducedMotion ? reducedDuration : duration) * 1000,
+          easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards',
+        }));
+      }
+    });
+    const stop = () => { for (const animation of animations) animation.cancel(); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden' || !useLauncherStore.getState().visible) stop(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const unsubscribeVisibility = useLauncherStore.subscribe((state) => state.visible, onVisibility);
+    return () => {
+      cancelAnimationFrame(frame);
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+      unsubscribeVisibility();
+    };
+  }, [animateRows, reducedMotion, results]);
   const selectedResult = results.find((result) => result.id === selectedId);
   const effectiveSelectedId = selectedResult && (selectedResult.availability ?? 'available') === 'available'
     ? selectedId
     : null;
+  const paintedSelection = useRef(effectiveSelectedId);
+  const previousSelection = useRef(effectiveSelectedId);
+  if (previousSelection.current !== effectiveSelectedId) {
+    paintedSelection.current = effectiveSelectedId;
+    previousSelection.current = effectiveSelectedId;
+  }
   const selectedKeys = useMemo(
     () => new Set<Key>(effectiveSelectedId ? [effectiveSelectedId] : []),
     [effectiveSelectedId],
@@ -72,13 +118,49 @@ export function ResultGrid({
     }
   }, [effectiveSelectedId, onSelectionChange, selectedId]);
 
-  const {isVirtualized, totalSize, virtualItems} = useResultVirtualizer(
+  const {isVirtualized, totalSize, virtualItems, scrollToIndex} = useResultVirtualizer(
     results.length,
     viewportRef,
     (index) => results[index]?.id ?? String(index),
     maxHeight,
     rowHeight,
   );
+  const resultIndices = useMemo(() => new Map(results.map((result, index) => [result.id, index])), [results]);
+  useEffect(() => {
+    let frame: number | undefined;
+    let pendingId: string | null = null;
+    const visible = () => document.visibilityState !== 'hidden' && useLauncherStore.getState().visible;
+    const cancel = () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      frame = undefined;
+    };
+    const schedule = (fileId: string | null) => {
+      pendingId = fileId;
+      if (!visible() || fileId === null) { cancel(); return; }
+      if (frame !== undefined) return;
+      // Keep bursts constant-time; resolve the latest target once, including rows
+      // not yet mounted by the virtualizer, without moving focus from the input.
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        if (!visible() || pendingId === null) return;
+        const index = resultIndices.get(pendingId);
+        if (index === undefined) return;
+        if (isVirtualized) scrollToIndex(index);
+        else [...(gridRef.current?.querySelectorAll<HTMLElement>('[data-result-id]') ?? [])]
+          .find((row) => row.dataset.resultId === pendingId)?.scrollIntoView?.({block: 'nearest', inline: 'nearest', behavior: 'instant'});
+      });
+    };
+    const onVisibility = () => { if (!visible()) cancel(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const unsubscribeVisibility = useLauncherStore.subscribe((state) => state.visible, onVisibility);
+    const unsubscribeSelection = useSelectionStore.subscribe((state) => state.selectedId, schedule);
+    return () => {
+      cancel();
+      unsubscribeSelection();
+      unsubscribeVisibility();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isVirtualized, resultIndices, scrollToIndex]);
   const visibleResults = useMemo<readonly VirtualResult[]>(
     () => virtualItems.flatMap((item) => {
       const result = results[item.index];
@@ -99,6 +181,7 @@ export function ResultGrid({
 
   useLayoutEffect(() => {
     const applySelection = (fileId: string | null) => {
+      paintedSelection.current = fileId;
       for (const row of gridRef.current?.querySelectorAll<HTMLElement>('[data-result-id]') ?? []) {
         const isSelected = row.dataset.resultId === fileId;
         row.setAttribute('aria-selected', String(isSelected));
@@ -106,12 +189,12 @@ export function ResultGrid({
         else row.removeAttribute('data-selected');
       }
     };
-    applySelection(effectiveSelectedId);
+    applySelection(resultIndices.has(paintedSelection.current ?? '') ? paintedSelection.current : effectiveSelectedId);
     return useSelectionStore.subscribe(
       (state) => state.selectedId,
       applySelection,
     );
-  }, [effectiveSelectedId]);
+  }, [effectiveSelectedId, resultIndices, visibleResults]);
 
   const handleSelectionChange = (selection: Selection) => {
     if (selection === 'all') return;
@@ -145,7 +228,9 @@ export function ResultGrid({
       />
       {isVirtualized ? (
         <GridList
+          key={collection.current.generation}
           ref={gridRef}
+          autoFocus={collection.current.autoFocus}
           aria-label="Search results"
           aria-rowcount={results.length}
           className={gridClassName}
@@ -175,7 +260,9 @@ export function ResultGrid({
         </GridList>
       ) : (
         <GridList
+          key={collection.current.generation}
           ref={gridRef}
+          autoFocus={collection.current.autoFocus}
           aria-label="Search results"
           aria-rowcount={results.length}
           className={gridClassName}
@@ -190,10 +277,7 @@ export function ResultGrid({
         >
           {(entry) => (
             <ResultRow
-              animateEntrance={animateRows}
-              entranceIndex={entry.index}
               isOpening={entry.result.id === openingId}
-              reducedMotion={reducedMotion}
               result={entry.result}
               selected={entry.id === effectiveSelectedId}
               totalCount={results.length}

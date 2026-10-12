@@ -1,22 +1,7 @@
 import {invoke} from '@tauri-apps/api/core';
 import {parseProviderPayload, providerUsageRowsSchema, type ProviderUsage} from '../providers/providers.types';
-
-export interface AddProviderInput {
-  app: string;
-  id: string;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-}
-
-export interface UpdateProviderInput {
-  app: string;
-  id: string;
-  baseUrl: string;
-  model: string;
-  /** Omitted (or empty) when the stored key should be kept. */
-  apiKey?: string;
-}
+import {tauriProvidersService} from '../providers/tauri-providers-service';
+import type {ProviderProfileInput} from '../providers/providers.types';
 
 export interface OAuthStart {
   url: string;
@@ -30,38 +15,15 @@ export interface OAuthPoll {
   error?: string;
 }
 
-/**
- * Provider add/update seam behind the settings dialogs. The Rust
- * `add_provider` / `update_provider` commands land with the file-switch
- * engine; until then these typecheck the dialog wiring.
- *
- * The `cliproxy_oauth_*` / `cliproxy_usage` commands below are the same kind
- * of seam for Task 7: they front the sidecar loopback surface
- * (`GET /v8/management/oauth/auth-url?provider=`, `GET /oauth/status?state=`,
- * `DELETE /oauth/session?state=`, `POST /oauth/import?provider=`,
- * `GET /observability/usage/api-keys`). Status is boolean-only; key material
- * is never returned to the webview.
- */
+/** Profile persistence uses the typed provider service; OAuth remains a separate sidecar boundary. */
 export const providersApi = {
-  /** Submit a provider to the native add command and return changed file paths. */
-  add(input: AddProviderInput): Promise<string[]> {
-    return invoke<string[]>('add_provider', {
-      app: input.app,
-      id: input.id,
-      base_url: input.baseUrl,
-      api_key: input.apiKey,
-      model: input.model,
-    });
+  /** Save metadata and a native credential without activating the profile. */
+  add(input: ProviderProfileInput) {
+    return tauriProvidersService.add(input);
   },
   /** Submit provider edits, sending an empty key when the stored key should be retained. */
-  update(input: UpdateProviderInput): Promise<void> {
-    return invoke<void>('update_provider', {
-      app: input.app,
-      id: input.id,
-      base_url: input.baseUrl,
-      api_key: input.apiKey ?? '',
-      model: input.model,
-    });
+  update(input: ProviderProfileInput) {
+    return tauriProvidersService.update(input);
   },
   /** `GET /v8/management/oauth/auth-url?provider=` — returns the sign-in URL, never a secret. */
   oauthAuthUrl(provider: string): Promise<OAuthStart> {

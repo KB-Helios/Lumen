@@ -55,8 +55,37 @@ export const requiredScenarioIds = [
   'computer-use-approval',
   'constrained-work-area',
   'settings-general',
+  'settings-appearance',
+  'settings-indexed-roots',
+  'settings-search',
+  'settings-local-ai',
   'settings-agent-gateway',
+  'settings-providers',
+  'settings-computer-use',
+  'settings-activity',
+  'settings-privacy',
+  'settings-diagnostics',
   'onboarding-welcome',
+  'onboarding-root',
+  'onboarding-shortcut',
+  'onboarding-choices',
+  'providers-populated',
+  'providers-empty',
+  'providers-error',
+  'providers-unavailable',
+  'providers-add',
+  'providers-edit',
+  'providers-remove',
+  'ai-cancelled',
+  'ai-retry',
+  'local-runtime-provisioning',
+  'local-runtime-error',
+  'local-runtime-cancelled',
+  'computer-use-unavailable',
+  'computer-use-denied',
+  'computer-use-target-lost',
+  'computer-use-cancelled',
+  'computer-use-error',
   'windows-ai-ready',
   'windows-ai-unavailable',
   'windows-ai-preparing',
@@ -66,7 +95,9 @@ export const requiredScenarioIds = [
 export type GalleryScenarioId = (typeof requiredScenarioIds)[number];
 export type GalleryPreviewState = 'none' | 'loading' | 'complete' | 'failed';
 export type GalleryResultSet = 'standard' | 'grouped' | 'empty' | 'permission' | 'long' | 'unicode' | 'large';
-export type GalleryAnswerState = 'waiting' | 'streaming' | 'complete' | 'failed';
+export type GalleryAnswerState = 'waiting' | 'streaming' | 'complete' | 'failed' | 'cancelled';
+export type GalleryProviderState = 'populated' | 'empty' | 'error' | 'unavailable' | 'add' | 'edit' | 'remove';
+export type GalleryComputerUseState = 'approval' | 'unavailable' | 'denied' | 'target-lost' | 'cancelled' | 'error';
 
 export interface GalleryLauncherState {
   mode: 'collapsed' | 'expanded';
@@ -89,7 +120,9 @@ export type GallerySurface =
   | {kind: 'settings-page'; page: SettingsPageId}
   | {kind: 'settings-shell'; page: SettingsPageId}
   | {kind: 'onboarding'; step: number}
-  | {kind: 'computer-use'; state: 'approval'}
+  | {kind: 'providers'; state: GalleryProviderState}
+  | {kind: 'local-runtime'; state: 'provisioning' | 'error' | 'cancelled'}
+  | {kind: 'computer-use'; state: GalleryComputerUseState}
   | {kind: 'windows-ai'; state: 'ready' | 'unavailable' | 'preparing' | 'failed'};
 
 export interface GalleryScenario {

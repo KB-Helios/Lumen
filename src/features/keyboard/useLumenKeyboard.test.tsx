@@ -1,4 +1,5 @@
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {createRef} from 'react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
@@ -13,6 +14,8 @@ import {useQueryStore} from '../launcher/query.store';
 import {useScopeStore} from '../launcher/scope.store';
 import {useSelectionStore} from '../launcher/selection.store';
 import {useSettingsStore} from '../settings/settings.store';
+import {useLumenKeyboard} from './useLumenKeyboard';
+import {ResultGrid} from '../results/ResultGrid';
 
 function file(id: string): SearchResult {
   return {
@@ -50,6 +53,44 @@ afterEach(() => {
 });
 
 describe('Lumen keyboard coordination', () => {
+  it('scrolls only the latest keyboard selection on the next frame without taking input focus and cancels on hide', async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let next = 0;
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { frames.set(++next, callback); return next; }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => frames.delete(id)));
+    const scroll = vi.fn();
+    const previous = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    const inputRef = createRef<HTMLInputElement>();
+    const results = [file('a'), file('b'), file('c')];
+    function Harness() {
+      useLumenKeyboard({detailsOpen: false, inputRef, intent: 'search', isExpanded: true,
+        results, selectedId: 'a', onCloseDetails: vi.fn(), onOpen: vi.fn(),
+        onOpenContainingFolder: vi.fn(), onOpenSettings: vi.fn(), onRequestHide: vi.fn(),
+        onSelect: (id) => useSelectionStore.getState().select(id), onShowDetails: vi.fn()});
+      return <><input ref={inputRef} type="search" aria-label="Scroll query" /><ResultGrid reducedMotion results={results} selectedId="a" /></>;
+    }
+    try {
+      const {container} = render(<Harness />);
+      await act(async () => {});
+      frames.clear();
+      inputRef.current!.focus();
+      fireEvent.keyDown(inputRef.current!, {key: 'ArrowDown'});
+      fireEvent.keyDown(inputRef.current!, {key: 'ArrowDown'});
+      expect(scroll).not.toHaveBeenCalled();
+      act(() => { const callbacks = [...frames.values()]; frames.clear(); for (const callback of callbacks) callback(0); });
+      expect(scroll).toHaveBeenCalledOnce();
+      expect(scroll.mock.contexts[0]).toBe(container.querySelector('[data-result-id="c"]'));
+      expect(inputRef.current).toHaveFocus();
+      fireEvent.keyDown(inputRef.current!, {key: 'ArrowUp'});
+      expect(frames.size).toBe(1);
+      act(() => useLauncherStore.getState().hide());
+      expect(frames.size).toBe(0);
+      fireEvent.keyDown(inputRef.current!, {key: 'ArrowUp'});
+      expect(frames.size).toBe(0);
+    } finally { HTMLElement.prototype.scrollIntoView = previous; vi.unstubAllGlobals(); }
+  });
+
   it('uses DOM order for Computer Use from idle through approval and running controls', async () => {
     const user = userEvent.setup();
     const service = new KeyboardComputerUseService();

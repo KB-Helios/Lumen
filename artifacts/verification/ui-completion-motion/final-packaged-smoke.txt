@@ -1,0 +1,23 @@
+{
+    "recordedAt":  "2026-10-11T14:10:50.2877124Z",
+    "installer":  "Lumen_0.1.0_x64-setup.exe",
+    "installerBytes":  203053501,
+    "installerSha256":  "a4ba9cc94deb839e8f1109c465b57c25599f4b0973aecd275c80cb635cfdf0e7",
+    "signatureStatus":  "Unavailable",
+    "cleanProfilePreflight":  true,
+    "exactVector":  true,
+    "vectorVersion":  "1.0.0",
+    "lexicalFallback":  true,
+    "windowShowHide":  true,
+    "diagnosticsExport":  true,
+    "computerUsePackaged":  true,
+    "computerUseNativeStop":  true,
+    "computerUseBrowser":  true,
+    "computerUseDesktop":  true,
+    "computerUseRuntimeInventoryVerified":  true,
+    "computerUseRuntimeFiles":  275,
+    "improvementDefaults":  true,
+    "improvementRuntimeResourceVerified":  true,
+    "uninstall":  true,
+    "profileCleanup":  true
+}

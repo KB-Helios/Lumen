@@ -1,0 +1,10 @@
+$ vitest run --no-file-parallelism "--maxWorkers=1"
+
+ RUN  v4.1.10 C:/Users/kevin/.codex/worktrees/d61a/Lumen
+
+
+ Test Files  82 passed (82)
+      Tests  704 passed (704)
+   Start at  15:44:02
+   Duration  412.40s (transform 12.53s, setup 34.30s, import 117.83s, tests 127.89s, environment 111.08s)
+

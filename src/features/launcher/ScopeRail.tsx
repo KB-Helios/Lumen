@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react';
+import {memo, useEffect, useMemo, useState} from 'react';
 import {Tab, TabList, TabPanel, Tabs} from 'react-aria-components';
 
 import {motion} from 'motion/react';
@@ -23,7 +23,7 @@ export const searchScopes: ReadonlyArray<{id: SearchScope; label: string}> = [
   {id: 'app-content', label: 'App content'},
 ];
 
-export function ScopeRail() {
+export const ScopeRail = memo(function ScopeRail() {
   const {layoutTransition} = useLumenMotion();
   const activeScope = useScopeStore((state) => state.activeScope);
   const setScope = useScopeStore((state) => state.setScope);
@@ -92,4 +92,4 @@ export function ScopeRail() {
       ))}
     </Tabs>
   );
-}
+});

@@ -1,0 +1,188 @@
+$ tauri build
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `bun run stage:sidecars && bun run build`
+$ bun scripts/stage-sidecars.ts && bun run stage:windows-ai && bun run stage:clipproxy
+AgentGateway v1.4.1 already staged and verified.
+Staged the compiled Rivet enrichment worker.
+Staged the Rivet 2.3.10 Windows engine.
+Checked 12 packages in 319ms
+365 INFO: PyInstaller: 6.16.0, contrib hooks: 2026.6
+365 INFO: Python: 3.11.15
+387 INFO: Platform: Windows-10-10.0.26300-SP0
+387 INFO: Python environment: C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.venv
+389 INFO: wrote C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\lumen-computer-use-x86_64-pc-windows-msvc.spec
+409 INFO: Removing temporary files and cleaning cache in C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\pyinstaller-cache\pyinstaller
+2703 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview',
+ 'C:\\Users\\kevin\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python311.zip',
+ 'C:\\Users\\kevin\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\DLLs',
+ 'C:\\Users\\kevin\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\Lib',
+ 'C:\\Users\\kevin\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none',
+ 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv',
+ 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages',
+ 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview']
+3421 INFO: Appending 'binaries' from .spec
+3421 INFO: Appending 'datas' from .spec
+3467 INFO: checking Analysis
+3467 INFO: Building Analysis because Analysis-00.toc is non existent
+3467 INFO: Looking for Python shared library...
+3467 INFO: Using Python shared library: C:\Users\kevin\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python311.dll
+3467 INFO: Running Analysis Analysis-00.toc
+3467 INFO: Target bytecode optimization level: 0
+3467 INFO: Initializing module dependency graph...
+3476 INFO: Initializing module graph hook caches...
+3525 INFO: Analyzing modules for base_library.zip ...
+5843 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6007 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8898 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+13884 INFO: Caching module dependency graph...
+13929 INFO: Analyzing C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\worker.py
+14274 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+14665 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15434 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+16489 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+17193 INFO: Processing standard module hook 'hook-playwright.sync_api.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\playwright\\_impl\\__pyinstaller'
+18847 INFO: Analyzing hidden import 'cua_driver.__main__'
+18849 INFO: Analyzing hidden import 'cua_driver.fleet'
+18875 INFO: Analyzing hidden import 'playwright.__main__'
+18889 INFO: Analyzing hidden import 'playwright._impl.__pyinstaller'
+18893 INFO: Analyzing hidden import 'playwright._impl._async_base'
+18898 INFO: Analyzing hidden import 'playwright._impl._path_utils'
+18914 INFO: Analyzing hidden import 'playwright.async_api'
+18922 INFO: Processing standard module hook 'hook-playwright.async_api.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\playwright\\_impl\\__pyinstaller'
+19601 INFO: Processing module hooks (post-graph stage)...
+20149 INFO: Performing binary vs. data reclassification (208 entries)
+22026 INFO: Looking for ctypes DLLs
+22339 INFO: Analyzing run-time hooks ...
+22340 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+22362 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+22381 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\kevin\\.codex\\worktrees\\d61a\\Lumen\\workers\\computer-use-preview\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+22408 INFO: Creating base_library.zip...
+22433 INFO: Looking for dynamic libraries
+23159 INFO: Extra DLL search directories (AddDllDirectory): []
+23159 INFO: Extra DLL search directories (PATH): []
+24811 INFO: Warnings written to C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\work\lumen-computer-use-x86_64-pc-windows-msvc\warn-lumen-computer-use-x86_64-pc-windows-msvc.txt
+24850 INFO: Graph cross-reference written to C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\work\lumen-computer-use-x86_64-pc-windows-msvc\xref-lumen-computer-use-x86_64-pc-windows-msvc.html
+24941 INFO: checking PYZ
+24941 INFO: Building PYZ because PYZ-00.toc is non existent
+24941 INFO: Building PYZ (ZlibArchive) C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\work\lumen-computer-use-x86_64-pc-windows-msvc\PYZ-00.pyz
+25329 INFO: Building PYZ (ZlibArchive) C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\work\lumen-computer-use-x86_64-pc-windows-msvc\PYZ-00.pyz completed successfully.
+25342 INFO: checking PKG
+25342 INFO: Building PKG because PKG-00.toc is non existent
+25342 INFO: Building PKG (CArchive) lumen-computer-use-x86_64-pc-windows-msvc.pkg
+25408 INFO: Building PKG (CArchive) lumen-computer-use-x86_64-pc-windows-msvc.pkg completed successfully.
+25410 INFO: Bootloader C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+25410 INFO: checking EXE
+25410 INFO: Building EXE because EXE-00.toc is non existent
+25410 INFO: Building EXE from EXE-00.toc
+25410 INFO: Copying bootloader EXE to C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\work\lumen-computer-use-x86_64-pc-windows-msvc\lumen-computer-use-x86_64-pc-windows-msvc.exe
+25537 INFO: Copying icon to EXE
+25614 INFO: Copying 0 resources to EXE
+25614 INFO: Embedding manifest in EXE
+25674 INFO: Appending PKG archive to EXE
+25745 INFO: Fixing EXE headers
+26059 INFO: Building EXE from EXE-00.toc completed successfully.
+26069 INFO: checking COLLECT
+26069 INFO: Building COLLECT because COLLECT-00.toc is non existent
+26071 INFO: Building COLLECT COLLECT-00.toc
+26995 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+27002 INFO: Build complete! The results are available in: C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\computer-use-preview\.build\dist
+Staged fixed Computer Use executor and matching native runtime resources.
+Staged sqlite-vector 1.0.0 (58ac4a99ff6904fd709f01b366cf0477c405b5bda45b96cf00e13d500aa60c6a).
+Verified 8 packaged runtime files.
+$ bun scripts/stage-windows-ai.ts
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Lumen.WindowsAi -> C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\windows-ai\bin\Release\net10.0-windows10.0.26100.0\win-x64\lumen-windows-ai.dll
+  Lumen.WindowsAi -> C:\Users\kevin\.codex\worktrees\d61a\Lumen\workers\windows-ai\.build\win-x64\
+PASS request ids reject spaces and protocol delimiters
+PASS request ids reject empty and overlong values
+PASS request ids permit the shared bounded ASCII alphabet
+PASS text limits count UTF-8 bytes
+PASS text permits the exact UTF-8 boundary
+PASS request parser rejects duplicate protocol fields
+PASS request parser rejects arbitrary process operations
+PASS request parser rejects non-object payloads
+PASS native cancellation cancels an actual async wait
+9/9 tests passed.
+bun test v1.3.14 (0d9b296a)
+
+workers\windows-ai\protocol.test.ts:
+(pass) malformed JSON and unknown operations return bounded errors and recover [1805.07ms]
+(pass) passive status reports the actual architecture without downloads [1185.53ms]
+(pass) operation consent rejects preparation and private content before SDK access [283.83ms]
+(pass) request byte bounds reject oversize UTF-8 and image payloads [342.35ms]
+(pass) cancel unknown request is an idempotent bounded result [285.64ms]
+(pass) trusted catalogue rejects caller-created content before indexing [292.21ms]
+(pass) queued cancellation returns one terminal cancellation without model work [2147.54ms]
+(pass) answer consent is independent of preview text-tool consent [367.06ms]
+
+ 8 pass
+ 0 fail
+ 32 expect() calls
+Ran 8 tests across 1 file. [6.80s]
+Staged Windows AI helper (win-x64); no model, execution provider, identity package, or certificate was installed.
+$ bun scripts/stage-clipproxy.ts
+CLIProxyAPI v8.0.21 already staged and verified.
+$ tsc --noEmit && vite build
+vite v8.2.0 building client environment for production...
+[2Ktransforming...✓ 2680 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                   1.50 kB │ gzip:  0.58 kB
+dist/assets/index-C4XoHZ55.css                   63.02 kB │ gzip: 11.46 kB
+dist/assets/root-selection-service-eof-Uh4-.js    0.35 kB │ gzip:  0.26 kB
+dist/assets/rolldown-runtime-B0Z9INg1.js          0.90 kB │ gzip:  0.51 kB
+dist/assets/diagnostics.metrics-BSF17cgf.js       0.96 kB │ gzip:  0.50 kB
+dist/assets/DiagnosticsOverlay-COmxHByK.js        2.50 kB │ gzip:  1.08 kB
+dist/assets/tauri-CVWoFdDw.js                     5.38 kB │ gzip:  1.78 kB
+dist/assets/diagnostics.store-BfATXph4.js         6.01 kB │ gzip:  2.63 kB
+dist/assets/OnboardingFlow-Bonnxez-.js            7.92 kB │ gzip:  3.05 kB
+dist/assets/MotionProvider-DnbyEv3p.js           11.98 kB │ gzip:  4.40 kB
+dist/assets/PreviewPane-WPuZlkcD.js              17.17 kB │ gzip:  5.36 kB
+dist/assets/search.types-By17zYa-.js             40.14 kB │ gzip: 12.53 kB
+dist/assets/LumenUiIcon-BJIxFuhY.js              80.94 kB │ gzip: 27.16 kB
+dist/assets/data-state-DtgTkagA.js               98.05 kB │ gzip: 26.85 kB
+dist/assets/motion-BEKgtDhx.js                  123.21 kB │ gzip: 39.86 kB
+dist/assets/SettingsShell-MHfOz1vb.js           149.50 kB │ gzip: 39.94 kB
+dist/assets/react-core-DVoh6Tdv.js              178.62 kB │ gzip: 56.46 kB
+dist/assets/index-Rn1Hjnaf.js                   212.26 kB │ gzip: 72.28 kB
+dist/assets/lottie_svg-DvETgvxg.js              243.36 kB │ gzip: 63.65 kB
+dist/assets/react-aria-CNPPvd_H.js              251.52 kB │ gzip: 77.02 kB
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/lottie-web/build/player/lottie_svg.js:11559:33 [38;5;246m][0m
+       [38;5;246m│[0m
+ [38;5;246m11559 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m_[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m'[0m[38;5;249m[[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m_[0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m_[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m{[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249m;[0m[38;5;249ms[0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249md[0m[38;5;249m_[0m[38;5;249mb[0m[38;5;249mm[0m[38;5;249m_[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m=[0m[38;5;249m$[0m[38;5;249mb[0m[38;5;249mm[0m[38;5;249m_[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m}[0m[38;5;249m][0m[38;5;249m'[0m[38;5;249m)[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m/[0m[38;5;249m/[0m[38;5;249m [0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m-[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249ma[0m[38;5;249mb[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m-[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249m-[0m[38;5;249me[0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m
+ [38;5;240m      │[0m                                 ──┬─  
+ [38;5;240m      │[0m                                   ╰─── Use of direct `eval` here.
+ [38;5;240m      │[0m 
+ [38;5;240m      │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m───────╯[0m
+
+[33m[PLUGIN_TIMINGS] [0mYour build spent significant time in plugins. Here is a breakdown:
+  - vite:css-post (86%)
+  - rolldown:vite-resolve (8%)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✓ built in 12.18s
+   Compiling tauri v2.11.5
+   Compiling tauri-macros v2.6.3
+   Compiling tauri-plugin-fs v2.5.1
+   Compiling tauri-plugin-dialog v2.7.2
+   Compiling tauri-plugin-log v2.9.0
+   Compiling tauri-plugin-store v2.4.4
+   Compiling tauri-plugin-opener v2.5.4
+   Compiling tauri-plugin-autostart v2.5.1
+   Compiling tauri-plugin-global-shortcut v2.3.2
+   Compiling tauri-plugin-positioner v2.3.3
+   Compiling lumen v0.1.0 (C:\Users\kevin\.codex\worktrees\d61a\Lumen\src-tauri)
+   Compiling tauri-plugin-single-instance v2.4.3
+    Finished `release` profile [optimized] target(s) in 5m 20s
+       Built application at: C:\Users\kevin\.codex\worktrees\d61a\Lumen\src-tauri\target\release\lumen.exe
+        Info Patching C:\Users\kevin\.codex\worktrees\d61a\Lumen\src-tauri\target\release\lumen.exe with bundle type information: nsis
+        Info Target: x64
+     Running makensis to produce C:\Users\kevin\.codex\worktrees\d61a\Lumen\src-tauri\target\release\bundle\nsis\Lumen_0.1.0_x64-setup.exe
+    Finished 1 bundle at:
+        C:\Users\kevin\.codex\worktrees\d61a\Lumen\src-tauri\target\release\bundle\nsis\Lumen_0.1.0_x64-setup.exe
+

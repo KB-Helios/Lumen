@@ -1,0 +1,208 @@
+{
+  "capturedAt": "2026-10-10T22:08:05.299066+00:00",
+  "api": "EnumDisplaySettingsW (current primary display, read only)",
+  "source": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsw",
+  "measurementBoundary": "Enumeration proves advertised display modes only; no setting was changed and no presentation cadence was measured.",
+  "currentMode": {
+    "width": 2560,
+    "height": 1600,
+    "bitsPerPixel": 32,
+    "displayFlags": 0,
+    "refreshHz": 240
+  },
+  "enumeratedCurrentResolutionRatesHz": [
+    60,
+    240
+  ],
+  "requestedRateAvailability": {
+    "60": true,
+    "120": false,
+    "144": false,
+    "165": false,
+    "240": true
+  },
+  "modes": [
+    {
+      "width": 640,
+      "height": 480,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 640,
+      "height": 480,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 800,
+      "height": 600,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 800,
+      "height": 600,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1280,
+      "height": 1024,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1280,
+      "height": 1024,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1600,
+      "height": 1000,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1600,
+      "height": 1000,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1600,
+      "height": 1200,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1600,
+      "height": 1200,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1680,
+      "height": 1050,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1680,
+      "height": 1050,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 1920,
+      "height": 1200,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 1920,
+      "height": 1200,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 2048,
+      "height": 1536,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 2048,
+      "height": 1536,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    },
+    {
+      "width": 2560,
+      "height": 1600,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 60
+    },
+    {
+      "width": 2560,
+      "height": 1600,
+      "bitsPerPixel": 32,
+      "displayFlags": 0,
+      "refreshHz": 240
+    }
+  ]
+}

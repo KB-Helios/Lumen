@@ -1,4 +1,4 @@
-import type {RefObject} from 'react';
+import {useCallback, type RefObject} from 'react';
 
 import {useVirtualizer} from '@tanstack/react-virtual';
 
@@ -45,10 +45,14 @@ export function useResultVirtualizer(
     overscan: 5,
     useFlushSync: false,
   });
+  const scrollToIndex = useCallback((index: number) => {
+    virtualizer.scrollToIndex(index, {align: 'auto', behavior: 'auto'});
+  }, [virtualizer]);
 
   return {
     isVirtualized: count > resultVirtualizationThreshold,
     totalSize: virtualizer.getTotalSize(),
     virtualItems: virtualizer.getVirtualItems(),
+    scrollToIndex,
   };
 }

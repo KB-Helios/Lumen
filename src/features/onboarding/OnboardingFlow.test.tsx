@@ -51,6 +51,28 @@ afterEach(() => {
 });
 
 describe('OnboardingFlow', () => {
+  it('retains setup choices and offers retry when completion cannot be saved', async () => {
+    const user = userEvent.setup();
+    useOnboardingStore.setState({root: 'C:\\Projects', currentIndex: 3});
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {throw new Error('Disk unavailable');});
+    renderFlow({chooseRoot: vi.fn()});
+    await user.click(screen.getByRole('button', {name: 'Start using Lumen'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Disk unavailable');
+    expect(useOnboardingStore.getState()).toMatchObject({completed: false, root: 'C:\\Projects', currentIndex: 3});
+    await user.click(screen.getByRole('button', {name: 'Start using Lumen'}));
+    await waitFor(() => expect(useOnboardingStore.getState().completed).toBe(true));
+  });
+
+  it('disables the folder picker while its native dialog is pending', async () => {
+    const user = userEvent.setup();
+    const service = new DeferredRootService();
+    useOnboardingStore.setState({currentIndex: 1});
+    renderFlow(service);
+    await user.click(screen.getByRole('button', {name: 'Choose folder'}));
+    expect(screen.getByRole('button', {name: 'Choose folder'})).toBeDisabled();
+    await act(async () => service.resolve(null));
+    expect(screen.getByRole('button', {name: 'Choose folder'})).toBeEnabled();
+  });
   it('lets the surface own the onboarding grid rows directly', () => {
     renderFlow({chooseRoot: vi.fn()});
 

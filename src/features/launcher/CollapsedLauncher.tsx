@@ -1,4 +1,4 @@
-import {useLayoutEffect, useRef, type ReactNode, type RefObject} from 'react';
+import {memo, useCallback, useLayoutEffect, useRef, type ReactNode, type RefObject} from 'react';
 
 import {GlassCommandPalette} from '../../components/ui/GlassCommandPalette';
 import {LumenMark} from '../../design-system/icons/LumenMark';
@@ -26,7 +26,7 @@ interface LauncherComposerProps {
   voiceActive?: boolean;
 }
 
-function LauncherComposer({
+const LauncherComposer = memo(function LauncherComposer({
   inputRef,
   intentLocked,
   onComputerSubmit,
@@ -79,7 +79,7 @@ function LauncherComposer({
       </kbd>
     </div>
   );
-}
+});
 
 function LauncherFooter({
   searching,
@@ -144,9 +144,10 @@ export function CollapsedLauncher({
   }
   previousVisible.current = visible;
   const inputRef = providedInputRef ?? fallbackInputRef;
-  const {expanded, presentationError} = useLauncherPresentation({
+  const retainedWorkspace = useRef(expandedContent);
+  if (hasCommittedQuery) retainedWorkspace.current = expandedContent;
+  const {expanded, presentationError, onWorkspaceExitComplete} = useLauncherPresentation({
     hasContent: hasCommittedQuery,
-    reducedMotion,
     windowService,
   });
 
@@ -162,16 +163,14 @@ export function CollapsedLauncher({
     );
   }, [focusOnMount, inputRef, visible, windowService]);
 
-  const handleEscapeEmpty = () => {
+  const handleEscapeEmpty = useCallback(() => {
     void requestWindowHide(windowService);
-  };
+  }, [windowService]);
 
-  const handleIntentChange = () => {
+  const handleIntentChange = useCallback(() => {
     clearQuery();
     setIntent(intent === 'computer' ? 'search' : 'computer');
-  };
-
-  const visibleWorkspace = expanded ? expandedContent : null;
+  }, [clearQuery, intent, setIntent]);
 
   return (
     <GlassCommandPalette
@@ -188,8 +187,9 @@ export function CollapsedLauncher({
         />
       )}
       expanded={expanded}
+      onWorkspaceExitComplete={onWorkspaceExitComplete}
       scopes={intent === 'search' ? <ScopeRail /> : null}
-      body={visibleWorkspace}
+      body={hasCommittedQuery ? expandedContent : retainedWorkspace.current}
       footer={(
         <LauncherFooter
           searching={searching}

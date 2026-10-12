@@ -1,6 +1,6 @@
-import {forwardRef, type HTMLAttributes, type ReactNode} from 'react';
+import {forwardRef, useState, type HTMLAttributes, type ReactNode} from 'react';
 
-import {motion} from 'motion/react';
+import {AnimatePresence, motion} from 'motion/react';
 
 import {motionTokens} from '../../design-system/motion';
 import {cn} from '../../lib/cn';
@@ -9,6 +9,7 @@ export interface GlassCommandPaletteProps extends HTMLAttributes<HTMLDivElement>
   body?: ReactNode;
   composer: ReactNode;
   expanded: boolean;
+  onWorkspaceExitComplete?: () => void;
   footer?: ReactNode;
   reducedMotion?: boolean;
   scopes?: ReactNode;
@@ -21,6 +22,7 @@ export const GlassCommandPalette = forwardRef<HTMLDivElement, GlassCommandPalett
       className,
       composer,
       expanded,
+      onWorkspaceExitComplete,
       footer,
       reducedMotion = false,
       scopes,
@@ -28,9 +30,8 @@ export const GlassCommandPalette = forwardRef<HTMLDivElement, GlassCommandPalett
     },
     ref,
   ) {
-    const surfaceDuration = expanded
-      ? motionTokens.duration.launcherOpen
-      : motionTokens.duration.launcherClose;
+    const [workspacePresent, setWorkspacePresent] = useState(expanded);
+    if (expanded && !workspacePresent) setWorkspacePresent(true);
     const workspaceDuration = reducedMotion
       ? motionTokens.reduced.opacityDuration
       : motionTokens.duration.launcherExpansion;
@@ -43,7 +44,7 @@ export const GlassCommandPalette = forwardRef<HTMLDivElement, GlassCommandPalett
           'einui-command-palette-wrapper @container relative isolate flex size-full min-w-0 flex-col overflow-visible',
           className,
         )}
-        data-expanded={expanded}
+        data-expanded={expanded || workspacePresent}
         data-upstream="einui-glass-command-palette"
       >
         <span
@@ -64,8 +65,7 @@ export const GlassCommandPalette = forwardRef<HTMLDivElement, GlassCommandPalett
           data-launcher-motion="surface"
           data-material="raised"
           style={{
-            borderRadius: expanded ? 'var(--lumen-radius-surface)' : 'var(--lumen-radius-pill)',
-            transition: `border-radius ${surfaceDuration * 1000}ms cubic-bezier(${(expanded ? motionTokens.easing.standard : motionTokens.easing.exit).join(', ')})`,
+            borderRadius: expanded || workspacePresent ? 'var(--lumen-radius-surface)' : 'var(--lumen-radius-pill)',
           }}
         >
           <span
@@ -84,25 +84,35 @@ export const GlassCommandPalette = forwardRef<HTMLDivElement, GlassCommandPalett
             <div className="einui-command-composer" data-einui-slot="composer">
               {composer}
             </div>
-            {expanded ? (
-              <div className="einui-command-workspace" data-einui-slot="workspace">
+            <AnimatePresence onExitComplete={() => {
+              setWorkspacePresent(false);
+              onWorkspaceExitComplete?.();
+            }}>
+              {expanded ? (
                 <motion.div
-                  animate={{opacity: 1, y: 0}}
+                  key="workspace"
+                  animate={{opacity: 1, transform: 'translateY(0px)'}}
                   className="flex min-h-0 flex-1 flex-col overflow-hidden"
                   data-launcher-motion="workspace"
                   data-motion-duration={`${workspaceDuration * 1000}ms`}
                   data-motion-offset={`${workspaceOffset}px`}
-                  initial={reducedMotion ? {opacity: 0} : {opacity: 0, y: workspaceOffset}}
+                  initial={{opacity: 0, transform: `translateY(${workspaceOffset}px)`}}
+                  exit={{opacity: 0, transform: `translateY(${workspaceOffset}px)`, transition: {
+                    duration: reducedMotion ? 0 : motionTokens.duration.launcherClose,
+                    ease: motionTokens.easing.exit,
+                  }}}
                   transition={{duration: workspaceDuration, ease: motionTokens.easing.standard}}
                 >
+                  <div className="einui-command-workspace flex-col" data-einui-slot="workspace">
                   {scopes !== undefined && scopes !== null ? <div className="einui-command-scopes" data-einui-slot="scopes">{scopes}</div> : null}
                   <div className="einui-command-body" data-einui-slot="body">{body}</div>
+                  </div>
+                  {footer !== undefined && footer !== null ? (
+                    <div className="einui-command-footer" data-einui-slot="footer">{footer}</div>
+                  ) : null}
                 </motion.div>
-              </div>
-            ) : null}
-            {expanded && footer !== undefined && footer !== null ? (
-              <div className="einui-command-footer" data-einui-slot="footer">{footer}</div>
-            ) : null}
+              ) : null}
+            </AnimatePresence>
           </div>
         </div>
       </div>

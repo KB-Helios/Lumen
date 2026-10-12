@@ -21,6 +21,38 @@ test('keeps the 10,000-result scenario virtualized', async ({page}) => {
   expect(await page.locator('[data-result-id]').count()).toBeLessThan(40);
 });
 
+for (const theme of ['dark', 'light', 'opaque', 'reduced-effects', 'reduced-motion', 'forced-colors']) {
+  test(`simulated provider dialogs retain reachable controls and restore focus across all text scales in ${theme}`, async ({page}) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({width: 520, height: 340});
+    await page.emulateMedia({forcedColors: theme === 'forced-colors' ? 'active' : 'none'});
+    for (const scale of [100, 125, 150, 175, 200]) {
+      for (const [scenario, trigger] of [
+        ['providers-add', 'Add provider'],
+        ['providers-edit', 'Edit simulated-long-profile-name-for-responsive-layout'],
+        ['providers-remove', 'Remove simulated-long-profile-name-for-responsive-layout from live'],
+      ]) {
+        await page.goto(`/?gallery=1&scenario=${scenario}&capture=1&scale=${scale}&theme=${theme}`);
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible();
+        await expect.poll(() => dialog.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+        for (const control of await dialog.locator('button:not([disabled]), input:not([disabled])').all()) {
+          await control.focus();
+          await expect(control).toBeFocused();
+          await expect(control).toBeInViewport();
+          const bounds = await control.boundingBox();
+          expect(bounds?.x ?? -1).toBeGreaterThanOrEqual(-1);
+          expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(521);
+        }
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        await expect(page.getByRole('button', {name: trigger, exact: true})).toBeFocused();
+        await expect(page.getByRole('button', {name: trigger, exact: true})).toBeInViewport();
+      }
+    }
+  });
+}
+
 test('exposes every appearance axis through stable gallery URLs', async ({page}) => {
   for (const [scenario, attribute, value] of [
     ['theme-light', 'data-resolved-theme', 'light'],

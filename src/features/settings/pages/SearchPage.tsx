@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react';
 import {WindowsAppContentControls} from '../../windows-ai/WindowsAiControls';
 
 import {LumenText} from '../../../design-system/primitives/LumenText';
+import {LumenButton} from '../../../design-system/primitives/LumenButton';
 import {
   semanticSearchService as defaultSemanticSearchService,
   type SemanticSearchService,
@@ -10,7 +11,7 @@ import {
 import {SettingRow} from '../components/SettingRow';
 import {SettingSection} from '../components/SettingSection';
 import {LumenCheckbox, LumenSelect, LumenSlider, LumenSwitch} from '../components/SettingsControls';
-import {SettingsPage} from '../components/SettingsPage';
+import {SettingsCallout, SettingsPage} from '../components/SettingsPage';
 import type {SearchSettings} from '../settings.schema';
 import {useSettingsStore} from '../settings.store';
 
@@ -32,14 +33,21 @@ export function SearchPage({semanticService = defaultSemanticSearchService}: {se
   const search = useSettingsStore((state) => state.search);
   const updateSearch = useSettingsStore((state) => state.updateSearch);
   const [semanticStatus, setSemanticStatus] = useState<SemanticSearchStatus | null>(null);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [checking, setChecking] = useState(true);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let current = true;
+    setChecking(true);
+    setSemanticStatus(null);
+    setAvailabilityError('');
     void semanticService.status()
       .then((status) => { if (current) setSemanticStatus(status); })
-      .catch(() => { if (current) setSemanticStatus(null); });
+      .catch((error: unknown) => { if (current) {setSemanticStatus(null); setAvailabilityError(error instanceof Error ? error.message : 'Search availability could not be checked.');} })
+      .finally(() => {if (current) setChecking(false);});
     return () => { current = false; };
-  }, [semanticService]);
+  }, [semanticService, retry]);
 
   const toggleScope = (scope: SearchSettings['enabledScopes'][number], selected: boolean) => {
     const enabledScopes = selected
@@ -52,6 +60,7 @@ export function SearchPage({semanticService = defaultSemanticSearchService}: {se
 
   return (
     <SettingsPage>
+      {checking ? <LumenText role="status" tone="secondary">Checking search availability…</LumenText> : availabilityError ? <SettingsCallout tone="error">{availabilityError} <LumenButton aria-label="Retry search availability" size="small" onPress={() => setRetry((value) => value + 1)}>Retry</LumenButton></SettingsCallout> : null}
       <SettingSection title="Result scopes" description="Choose which scope tabs stay available in the launcher.">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[8px] p-[16px] @min-[24rem]/settings:grid-cols-2">
           {scopes.map(([id, label]) => (

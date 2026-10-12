@@ -1,4 +1,4 @@
-import {render, screen} from '@testing-library/react';
+import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {describe, expect, it, vi} from 'vitest';
 
@@ -6,6 +6,21 @@ import {AppProviders} from '../../app/AppProviders';
 import {AnswerPanel} from './AnswerPanel';
 
 describe('AnswerPanel', () => {
+  it('ignores a copy completion from a replaced answer and reports clipboard failure', async () => {
+    const user = userEvent.setup();
+    let finish!: () => void;
+    const copy = vi.spyOn(navigator.clipboard, 'writeText').mockImplementationOnce(() => new Promise<void>((resolve) => {finish = resolve;})).mockRejectedValueOnce(new Error('Clipboard denied'));
+    const props = {mode: 'auto' as const, onModeChange: vi.fn(), onOpenCitation: vi.fn(), onRetry: vi.fn(), onStop: vi.fn()};
+    const {rerender} = render(<AppProviders><AnswerPanel {...props} answer={{phase: 'completed', text: 'Old', citations: []}} /></AppProviders>);
+    await user.click(screen.getByRole('button', {name: 'Copy answer'}));
+    expect(screen.getByRole('button', {name: 'Copying answer'})).toBeDisabled();
+    rerender(<AppProviders><AnswerPanel {...props} answer={{phase: 'completed', text: 'New', citations: []}} /></AppProviders>);
+    await act(async () => finish());
+    expect(screen.queryByRole('button', {name: 'Answer copied'})).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Copy answer'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('Clipboard denied');
+    expect(copy).toHaveBeenCalledWith('New');
+  });
   it('does not offer answer actions before a submission exists', () => {
     render(
       <AppProviders>

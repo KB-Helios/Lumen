@@ -71,10 +71,12 @@ export function PrivacyPage({
     setMessage('');
     try {
       const result = await localDataService.clearSearchHistory();
-      await updatePrivacy({historyEntries: result.entryCount});
+      if (!await updatePrivacy({historyEntries: result.entryCount})) throw new Error('History was cleared, but the updated count could not be saved.');
       setMessage('Local search history cleared.');
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Search history could not be cleared.');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -86,8 +88,10 @@ export function PrivacyPage({
     try {
       const result = await localDataService.deleteIndexData();
       setMessage(`Deleted generated data for ${result.deletedFiles} files and ${result.deletedChunks} chunks. Source files were not changed.`);
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'The local index could not be deleted.');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -103,8 +107,10 @@ export function PrivacyPage({
       setMessage(result.saved
         ? `Saved ${result.fileName ?? payload.filename}.`
         : 'Diagnostic export cancelled.');
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Diagnostics could not be prepared.');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -128,7 +134,7 @@ export function PrivacyPage({
             confirmLabel={`Clear ${privacy.historyEntries} history entries`}
             description="This removes local recent-query history. Indexed files are not affected."
             title="Clear search history?"
-            onConfirm={() => void clearHistory()}
+            onConfirm={clearHistory}
           >
             <LumenButton aria-label="Clear search history" isDisabled={busy || privacy.historyEntries === 0} size="small" variant="quiet">
               <LumenUiIcon name="delete" size="small" /> Clear
@@ -140,7 +146,7 @@ export function PrivacyPage({
             confirmLabel="Delete local index data"
             description="This removes generated file, content, and vector records. Selected roots and source files remain unchanged."
             title="Delete the local index?"
-            onConfirm={() => void deleteIndex()}
+            onConfirm={deleteIndex}
           >
             <LumenButton isDisabled={busy} size="small" variant="danger"><LumenUiIcon name="storage" size="small" /> Delete index</LumenButton>
           </ConfirmationDialog>
@@ -158,7 +164,7 @@ export function PrivacyPage({
             confirmVariant="primary"
             description="Review the generated JSON before sharing it. Lumen removes local paths and known secret-bearing fields."
             title="Prepare diagnostic export?"
-            onConfirm={() => void prepareSanitizedExport()}
+            onConfirm={prepareSanitizedExport}
           >
             <LumenButton isDisabled={busy} size="small"><LumenUiIcon name="download" size="small" /> Export</LumenButton>
           </ConfirmationDialog>

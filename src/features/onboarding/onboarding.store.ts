@@ -26,7 +26,7 @@ interface OnboardingData extends PersistedOnboarding {
 interface OnboardingActions {
   back(): void;
   begin(): void;
-  complete(): boolean;
+  complete(): Promise<boolean>;
   hydrate(): Promise<void>;
   next(): void;
   reset(): void;
@@ -88,12 +88,13 @@ async function readPersisted() {
   }
 }
 
-function persist(value: PersistedOnboarding) {
+async function persist(value: PersistedOnboarding) {
   if (!isTauriRuntime()) {
     window.localStorage.setItem(storageKey, JSON.stringify(value));
     return;
   }
-  void nativeStore.set('onboarding', value).then(() => nativeStore.save());
+  await nativeStore.set('onboarding', value);
+  await nativeStore.save();
 }
 
 export const useOnboardingStore = create<OnboardingState>()(
@@ -101,14 +102,14 @@ export const useOnboardingStore = create<OnboardingState>()(
     ...initialData,
     back: () => set((state) => ({currentIndex: Math.max(0, state.currentIndex - 1)})),
     begin: () => set({started: true, currentIndex: 1}),
-    complete: () => {
+    complete: async () => {
       const state = get();
       if (!isValidRoot(state.root)) {
         return false;
       }
       const value = {completed: true, root: state.root, shortcut: state.shortcut};
+      await persist(value);
       set({...value, hydrated: true});
-      persist(value);
       return true;
     },
     hydrate: async () => {

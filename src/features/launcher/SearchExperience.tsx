@@ -263,7 +263,7 @@ export function SearchExperience({
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : 'The pin could not be updated.');
     }
-  }, [controller, service]);
+  }, [controller.refresh, controller.results, controller.selectedId, service]);
 
   const handleShowDetails = useCallback(() => {
     if (!previewsEnabled) {

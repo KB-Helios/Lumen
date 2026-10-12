@@ -1,8 +1,12 @@
-import type {SwitchProviderInput} from './providers.types';
+import type {ProviderApp, ProviderProfile, ProviderProfileInput, SwitchProviderInput} from './providers.types';
 
 export interface ProvidersService {
   health(): Promise<boolean>;
   getConfig(): Promise<unknown>;
+  list(): Promise<ProviderProfile[]>;
+  add(input: ProviderProfileInput): Promise<ProviderProfile>;
+  update(input: ProviderProfileInput): Promise<ProviderProfile>;
+  activate(app: ProviderApp, id: string): Promise<ProviderProfile>;
   switchProvider(input: SwitchProviderInput): Promise<string[]>;
   removeFromLive(app: string, id: string): Promise<boolean>;
 }

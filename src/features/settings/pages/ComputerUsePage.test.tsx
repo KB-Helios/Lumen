@@ -1,4 +1,4 @@
-import {render, screen, waitFor} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {AppProviders} from '../../../app/AppProviders';
@@ -10,6 +10,22 @@ import {ComputerUsePage} from './ComputerUsePage';
 
 afterEach(() => {Reflect.deleteProperty(window, '__TAURI_INTERNALS__'); useSettingsStore.getState().reset(); localStorage.clear();});
 describe('Computer Use settings controls', () => {
+  it('does not clear a newer credential input or show stale feedback after provider changes', async () => {
+    const user = userEvent.setup();
+    Reflect.defineProperty(window, '__TAURI_INTERNALS__', {configurable: true, value: {}});
+    vi.spyOn(TauriComputerUseService.prototype, 'health').mockResolvedValue(unavailableComputerUseHealth());
+    let finish!: () => void;
+    vi.spyOn(nativeAiService, 'saveCredential').mockImplementationOnce(() => new Promise<void>((resolve) => {finish = resolve;}));
+    render(<AppProviders><ComputerUsePage /></AppProviders>);
+    await user.type(screen.getByLabelText('Gemini API key'), 'old-key');
+    await user.click(screen.getByRole('button', {name: 'Save Gemini key'}));
+    await user.click(screen.getByRole('button', {name: /Computer Use provider/}));
+    await user.click(screen.getByRole('option', {name: 'OpenAI'}));
+    await user.type(screen.getByLabelText('OpenAI API key'), 'new-key');
+    await act(async () => finish());
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('new-key');
+    expect(screen.queryByText('Gemini API key saved in Windows Credential Manager.')).not.toBeInTheDocument();
+  });
   it('grants desktop control and cloud observations in separate confirmations', async () => {
     const user = userEvent.setup();
     render(<AppProviders><ComputerUsePage /></AppProviders>);

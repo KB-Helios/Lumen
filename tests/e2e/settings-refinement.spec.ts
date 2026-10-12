@@ -1,4 +1,25 @@
-import {expect, test, type Locator} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
+const settingsNames = ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Providers', 'Computer Use', 'Activity', 'Privacy', 'Diagnostics'];
+
+async function configurePresentation(page: Page, theme: string) {
+  await page.emulateMedia({forcedColors: theme === 'forced-colors' ? 'active' : 'none'});
+  await page.addInitScript((presentation) => localStorage.setItem('appearance', JSON.stringify({
+    mode: presentation === 'light' ? 'light' : 'dark',
+    transparency: presentation === 'opaque' ? 'disabled' : 'native',
+    effects: presentation === 'reduced-effects' || presentation === 'opaque' ? 'reduced' : 'full',
+    motion: presentation === 'reduced-motion' ? 'reduced' : 'full', density: 'comfortable', preview: 'automatic',
+  })), theme);
+}
+
+async function assignResizedHost(page: Page, scale: number) {
+  // Replace only the DEV browser host's default geometry cap with the assigned viewport.
+  // This exercises unchanged production descendants at Rust's actual resized webview bounds.
+  await page.locator('[data-browser-window-mode]').evaluate((element) => {
+    (element as HTMLElement).style.width = '100%';
+    (element as HTMLElement).style.height = '100%';
+  });
+  await page.evaluate((textScale) => { document.documentElement.style.fontSize = `${16 * textScale / 100}px`; }, scale);
+}
 
 async function expectControlsContained(content: Locator, context: string) {
   const outside = await content.evaluate((element) => {
@@ -24,6 +45,71 @@ async function expectControlsContained(content: Locator, context: string) {
   expect(outside, context).toEqual([]);
 }
 
+for (const viewport of [{width: 800, height: 600}, {width: 720, height: 560}, {width: 960, height: 720}, {width: 520, height: 340}]) {
+  for (const theme of ['dark', 'light', 'opaque', 'reduced-effects', 'reduced-motion', 'forced-colors']) {
+    test(`all onboarding scenes remain reachable at ${viewport.width}x${viewport.height} in ${theme}`, async ({page}) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize(viewport);
+      await configurePresentation(page, theme);
+      for (const scale of [100, 125, 150, 175, 200]) {
+        await page.goto('/?onboarding=1');
+        await expect(page.getByRole('heading', {name: 'Everything, within reach'})).toBeVisible();
+        await assignResizedHost(page, scale);
+        for (const [heading, action] of [['Everything, within reach', 'Begin'], ['Choose one place to start', 'Continue'], ['Make search a reflex', 'Continue'], ['Choose how answers run', 'Start using Lumen']]) {
+          await expect(page.getByRole('heading', {name: heading})).toBeVisible();
+          const scene = page.getByTestId('onboarding-scene').locator('..');
+          await expect.poll(() => scene.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+          await expectControlsContained(scene, `${heading} ${theme} ${scale}% ${viewport.width}x${viewport.height}`);
+          if (heading === 'Choose one place to start') await page.getByRole('button', {name: 'Choose folder'}).click();
+          const button = page.getByRole('button', {name: action, exact: true});
+          await button.focus();
+          await expect(button).toBeFocused();
+          await expect(button).toBeInViewport();
+          if (heading !== 'Choose how answers run') await page.keyboard.press('Enter');
+        }
+      }
+    });
+  }
+}
+
+// Browser layout evidence at Rust's settings default/minimum, plus the requested constrained presentation.
+for (const viewport of [{width: 880, height: 600}, {width: 760, height: 520}, {width: 1080, height: 760}, {width: 520, height: 340}]) {
+  for (const theme of ['dark', 'light', 'opaque', 'reduced-effects', 'reduced-motion', 'forced-colors']) {
+    test(`all settings remain reachable at ${viewport.width}x${viewport.height} in ${theme}`, async ({page}) => {
+      test.setTimeout(180_000);
+      await page.setViewportSize(viewport);
+      await configurePresentation(page, theme);
+      for (const scale of [100, 125, 150, 175, 200]) {
+        await page.goto('/?onboarded=1&service=memory');
+        await expect(page.getByRole('searchbox', {name: 'Search files'})).toBeVisible();
+        await page.keyboard.press('Control+,');
+        await expect(page.getByRole('main', {name: 'Settings content'})).toBeVisible();
+        await assignResizedHost(page, scale);
+        if (theme === 'reduced-effects') await expect(page.getByRole('application', {name: 'Lumen'})).toHaveAttribute('data-effects', 'reduced');
+        const content = page.getByRole('main', {name: 'Settings content'});
+        for (const label of settingsNames) {
+          const tab = page.getByRole('tab', {name: label, exact: true});
+          await tab.focus();
+          await page.keyboard.press('Enter');
+          await expect(page.getByRole('heading', {name: label, exact: true})).toBeVisible();
+          await expect(tab).toBeFocused();
+          await expect.poll(() => content.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+          await expectControlsContained(content, `${label} ${theme} ${scale}% ${viewport.width}x${viewport.height}`);
+          const action = content.locator('button:not([disabled]), input:not([disabled]):not([type="range"]):not([type="checkbox"]), [role="switch"]:not([disabled]):not([aria-disabled="true"])').last();
+          if (await action.count()) {
+            await action.focus();
+            await expect(action).toBeFocused();
+            // React Aria's switch input is deliberately clipped; check the visible label that owns its focus ring.
+            const target = await action.getAttribute('role') === 'switch' ? action.locator('xpath=ancestor::label') : action;
+            await expect(target).toBeInViewport();
+          }
+        }
+        await expect(page.getByRole('button', {name: 'Close settings'})).toBeInViewport();
+      }
+    });
+  }
+}
+
 test('settings navigation wraps enlarged labels without horizontal overflow', async ({page}) => {
   await page.setViewportSize({width: 880, height: 600});
   await page.goto('/?gallery=1&scenario=settings-general&capture=1&scale=200');
@@ -41,7 +127,7 @@ test('settings controls stay within their content viewport at large text sizes',
   await page.goto('/?gallery=1&scenario=settings-general&capture=1&scale=200');
 
   const content = page.getByRole('main', {name: 'Settings content'});
-  for (const name of ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Computer Use', 'Activity', 'Privacy', 'Diagnostics']) {
+  for (const name of ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Providers', 'Computer Use', 'Activity', 'Privacy', 'Diagnostics']) {
     const tab = page.getByRole('tab', {name, exact: true});
     await tab.focus();
     await page.keyboard.press('Enter');
@@ -59,7 +145,7 @@ test('settings retain scroll viewports and contained controls across the constra
     const nav = page.getByRole('navigation', {name: 'Settings'});
     await expect.poll(() => content.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(72);
     await expect.poll(() => nav.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
-    for (const name of ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Computer Use', 'Activity', 'Privacy', 'Diagnostics']) {
+    for (const name of ['General', 'Appearance', 'Indexed roots', 'Search', 'Local AI', 'AgentGateway', 'Providers', 'Computer Use', 'Activity', 'Privacy', 'Diagnostics']) {
       await page.getByRole('tab', {name, exact: true}).focus();
       await page.keyboard.press('Enter');
       await expect(page.getByRole('tabpanel', {name, exact: true})).toBeVisible();

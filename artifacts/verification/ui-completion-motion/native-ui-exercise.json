@@ -1,0 +1,96 @@
+{
+  "phase": "exercise",
+  "at": "2026-10-11T14:20:53.868Z",
+  "identifier": "com.bridgehammer.lumen.nativefixture7a5f49f0f23f4942899f6e3235a7833e",
+  "rows": [
+    {
+      "app": "claude",
+      "id": "claude-mv3wv09w",
+      "save": true,
+      "edit": true,
+      "blankKeyRetained": true,
+      "activate": true,
+      "ownedConfigReadback": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "codex",
+      "id": "codex-mv3wv1as",
+      "save": true,
+      "edit": true,
+      "blankKeyRetained": true,
+      "activate": true,
+      "ownedConfigReadback": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "gemini",
+      "id": "gemini-mv3wv2ix",
+      "save": true,
+      "edit": true,
+      "blankKeyRetained": true,
+      "activate": true,
+      "ownedConfigReadback": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "opencode",
+      "id": "opencode-mv3wv3o8",
+      "save": true,
+      "edit": true,
+      "blankKeyRetained": true,
+      "activate": true,
+      "ownedConfigReadback": true,
+      "unrelatedFieldPreserved": true
+    },
+    {
+      "app": "openclaw",
+      "id": "openclaw-mv3wv4pj",
+      "save": true,
+      "edit": true,
+      "blankKeyRetained": true,
+      "activate": true,
+      "ownedConfigReadback": true,
+      "unrelatedFieldPreserved": true
+    }
+  ],
+  "reactMetrics": "Not measured (production diagnostics disabled)",
+  "presentationTiming": "Not measured; CDP/rAF cannot prove compositor presentation",
+  "errors": [],
+  "nativeShow": {
+    "mode": "collapsed",
+    "source": "command",
+    "visible": true
+  },
+  "nativeRoute": {
+    "keyboard": "Ctrl+,",
+    "settingsDOMVisible": true
+  },
+  "runtime": {
+    "url": "http://tauri.localhost/",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.5,
+    "viewport": {
+      "width": 880,
+      "height": 600
+    },
+    "screen": {
+      "width": 1707,
+      "height": 1067
+    }
+  },
+  "failure": {
+    "realNativeError": "Provider metadata is invalid",
+    "dialogRetained": true,
+    "retryAvailable": true,
+    "retrySucceeded": true
+  },
+  "geometry": {
+    "viewport": {
+      "width": 880,
+      "height": 600
+    },
+    "horizontalOverflow": false
+  },
+  "status": "pass"
+}

@@ -18,6 +18,8 @@ The application resolves color mode, transparency, effects, contrast, and motion
 
 Appearance data is validated with Zod before entering the Zustand store or being written. Native Store failures leave the user's optimistic edit visible and expose a structured recoverable error.
 
+System/Full/Reduced is the single authoritative motion preference: System follows the live OS media query, Full requests full motion, and Reduced requests immediate geometry with at most 80 ms opacity. Settings no longer persists a second synchronization switch. Glass intensity is a separate decorative setting, normalized as `glassIntensity / 72`; 72 preserves the existing material. It changes specular, luminosity and noise layers only, never foreground content opacity. Opaque, reduced-effects and forced-colors policies override these decorations.
+
 ## Material and primitives
 
 `LumenSurface` is the material boundary. It composes a semantic tint, a subtle inner edge, low-opacity procedural noise, and one elevation shadow while keeping its three decorative nodes out of the accessibility tree. `mica`, `raised`, `inset`, and `flat` describe hierarchy rather than individual screens. Insets and flat surfaces use borders without additional elevation.
@@ -27,6 +29,8 @@ The launcher consumes the same graphite/off-white surface, text, and border role
 `LumenButton`, `LumenIconButton`, and `LumenText` carry shared focus, keyboard, type, and density rules. Icon-only buttons require an accessible name. Focus remains a visible semantic outline in every theme, including Windows forced-colors mode.
 
 Control targets use stable 32/36/44px minimum heights and pixel gutters so enlarged text expands content without inflating all chrome. Form-control font and color resets live in Tailwind's base layer, allowing semantic text and typography utilities to override them. CSS timing variables in `global.css` mirror the TypeScript motion tokens. Content typography continues to use rem units.
+
+Each animated property has one owner: Motion for structural regions, native mini/WAAPI for the result capsule and bounded row entrances, CSS for controls and React Aria overlays, GSAP for the activity wrapper's brief entrance, and Lottie for its inner active-work SVG. Structural radius changes snap; blur, shadows and textures never animate. There is no shader, WebGPU, Canvas/WebGL background, new animation framework or added dependency in this refinement.
 
 ## Responsive content
 

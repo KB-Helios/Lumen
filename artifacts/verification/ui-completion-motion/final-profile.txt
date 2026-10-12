@@ -1,0 +1,44 @@
+$ node scripts/performance-profile.mjs
+C:\Users\kevin\.codex\worktrees\d61a\Lumen\artifacts\performance\profile-summary.json
+{
+  "warmLauncherP95Ms": 4.5,
+  "inputResponseP95Ms": 0.09999999403953552,
+  "inputToNextFrameP95Ms": 3.2999999970197678,
+  "selectionToPaintP95Ms": 7.300000011920929,
+  "hoverToPaintP95Ms": 5.0999999940395355,
+  "hoverFrameIntervalP95Ms": 5.0999999940395355,
+  "hoverNominalFrameIntervalP95Ms": 4.333999999999833,
+  "hoverReadySamples": 80,
+  "hoverSynchronousDispatchMaxMs": 0.6000000089406967,
+  "hoverBrowserLongTasksOver50Ms": [],
+  "ordinaryReactCommitP95Ms": 20,
+  "ordinaryReactCommitSamples": 146,
+  "ordinaryBrowserLongTasksOver50Ms": [
+    61,
+    69,
+    62,
+    57
+  ],
+  "repeatedBrowserLongTasksOver50Ms": [],
+  "activeAnimationsAfterSettle": 0,
+  "activeActivityIndicatorsAfterSettle": 0,
+  "selectionAlignmentErrorPx": 0,
+  "settledSelectionMeasurements": 0,
+  "hiddenSelectionMeasurements": 0,
+  "hiddenAnimations": 0,
+  "hiddenActivityIndicators": 0,
+  "idleCpuPercent": 0.2148406374501992,
+  "jsHeapMegabytes": 31.82668685913086,
+  "observedRefreshEstimateHz": 238,
+  "medianFrameIntervalMs": 4.200000000000728,
+  "p95FrameIntervalMs": 12.5,
+  "rapidBurstInputSamples": 30,
+  "rapidBurstFinalValue": "rapid-burst-30",
+  "rapidBurstSynchronousDurationMs": 0.5999999940395355,
+  "rapidBurstBrowserLongTasksOver50Ms": [],
+  "rapidSelectionSamples": 30,
+  "rapidSelectionSelectedRows": 1,
+  "rapidSelectionSynchronousDurationMs": 1.4000000059604645,
+  "rapidSelectionBrowserLongTasksOver50Ms": []
+}
+error: script "profile" exited with code 1

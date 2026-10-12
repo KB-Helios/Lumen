@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 
 import {LumenUiIcon} from '../../design-system/icons/LumenUiIcon';
 import type {RuntimeMode} from '../../services/answer/answer.types';
@@ -46,19 +46,42 @@ export function AnswerPanel({
   onStop,
 }: AnswerPanelProps) {
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState('');
+  const copyRevision = useRef(0);
+  const copyPending = useRef(false);
   const canStop = answer.phase === 'waiting' || answer.phase === 'streaming';
   const canRetry = answer.phase === 'error' || answer.phase === 'cancelled' || answer.phase === 'completed';
   const hasAnswer = answer.text.length > 0;
   const runtimeDetail = [answer.provider, answer.model, answer.route].filter(Boolean).join(' · ');
 
   const copyAnswer = async () => {
-    await navigator.clipboard.writeText(answer.text);
-    setCopied(true);
+    if (copyPending.current) return;
+    copyPending.current = true;
+    const revision = ++copyRevision.current;
+    setCopying(true);
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(answer.text);
+      if (revision === copyRevision.current) setCopied(true);
+    } catch (error) {
+      if (revision === copyRevision.current) setCopyError(error instanceof Error ? error.message : 'The answer could not be copied.');
+    } finally {
+      if (revision === copyRevision.current) {
+        copyPending.current = false;
+        setCopying(false);
+      }
+    }
   };
 
   useEffect(() => {
     setCopied(false);
-  }, [answer.text]);
+    setCopying(false);
+    setCopyError('');
+    copyPending.current = false;
+    copyRevision.current += 1;
+    return () => {copyRevision.current += 1;};
+  }, [answer.text, answer.phase]);
 
   return (
     <section aria-label="AI answer" className="lumen-answer-panel @container/answer min-w-0 border-b border-[color:var(--einui-command-divider)]">
@@ -75,10 +98,11 @@ export function AnswerPanel({
             <button aria-label="Retry answer" className={quietButtonClass} type="button" onClick={onRetry}><LumenUiIcon name="retry" size="small" /><span className="hidden @min-[560px]/answer:inline">Retry</span></button>
           ) : null}
           {hasAnswer ? (
-            <button aria-label={copied ? 'Answer copied' : 'Copy answer'} className={quietButtonClass} type="button" onClick={() => void copyAnswer()}><LumenUiIcon name={copied ? 'approval' : 'copy'} size="small" /><span className="hidden @min-[560px]/answer:inline">{copied ? 'Copied' : 'Copy'}</span></button>
+            <button aria-label={copying ? 'Copying answer' : copied ? 'Answer copied' : 'Copy answer'} disabled={copying} className={quietButtonClass} type="button" onClick={() => void copyAnswer()}><LumenUiIcon name={copied ? 'approval' : 'copy'} size="small" /><span className="hidden @min-[560px]/answer:inline">{copying ? 'Copying…' : copied ? 'Copied' : 'Copy'}</span></button>
           ) : null}
         </div>
       </header>
+      {copyError ? <p role="status" className="font-sans text-xs text-text-secondary">{copyError}</p> : null}
       <div
         aria-live="polite"
         className="lumen-answer-text overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-[color:var(--einui-command-text)]"

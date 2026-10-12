@@ -8,6 +8,86 @@ const viewports = [
 ] as const;
 const scales = [100, 125, 150, 175, 200] as const;
 
+const nativeLauncherBounds = [
+  {mode: 'collapsed', width: 700, height: 66},
+  {mode: 'collapsed', width: 620, height: 66},
+  {mode: 'collapsed', width: 760, height: 66},
+  {mode: 'expanded', width: 800, height: 540},
+  {mode: 'expanded', width: 720, height: 320},
+  {mode: 'expanded', width: 960, height: 600},
+  {mode: 'expanded', width: 520, height: 340},
+] as const;
+
+for (const theme of ['dark', 'light', 'opaque', 'reduced-effects', 'reduced-motion', 'forced-colors']) {
+  test(`launcher renderer stays reachable at Rust bounds across all text scales in ${theme}`, async ({page}) => {
+    test.setTimeout(180_000);
+    await page.emulateMedia({forcedColors: theme === 'forced-colors' ? 'active' : 'none'});
+    await page.addInitScript((presentation) => localStorage.setItem('appearance', JSON.stringify({
+      mode: presentation === 'light' ? 'light' : 'dark',
+      transparency: presentation === 'opaque' ? 'disabled' : 'native',
+      effects: presentation === 'reduced-effects' || presentation === 'opaque' ? 'reduced' : 'full',
+      motion: presentation === 'reduced-motion' ? 'reduced' : 'full',
+      density: 'comfortable', preview: 'automatic',
+    })), theme);
+    for (const bounds of nativeLauncherBounds) {
+      await page.setViewportSize({width: bounds.width, height: bounds.height});
+      for (const scale of scales) {
+        await page.goto('/?onboarded=1&service=memory');
+        const search = page.getByRole('searchbox', {name: 'Search files'});
+        await expect(search).toBeVisible();
+        if (bounds.mode === 'expanded') {
+          await search.fill('report');
+          await expect(page.getByRole('row').first()).toBeVisible();
+        }
+        // The DEV host normally caps the browser preview at Rust's default size.
+        // Assign the resized host bounds as a native webview would; product descendants are unchanged.
+        await page.locator('[data-browser-window-mode]').evaluate((element) => {
+          (element as HTMLElement).style.width = '100%';
+          (element as HTMLElement).style.height = '100%';
+        });
+        await page.evaluate((textScale) => { document.documentElement.style.fontSize = `${16 * textScale / 100}px`; }, scale);
+        const context = `${bounds.mode} ${bounds.width}x${bounds.height} ${theme} ${scale}%`;
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), {message: context}).toBeLessThanOrEqual(1);
+        await search.focus();
+        await expect(search).toBeFocused();
+        await expect(search).toBeInViewport();
+        const intent = page.getByRole('button', {name: 'Switch to Computer Use'});
+        await intent.focus();
+        await expect(intent).toBeFocused();
+        await expect(intent).toBeInViewport();
+        if (bounds.mode === 'expanded') {
+          await search.focus();
+          await page.keyboard.press('ArrowDown');
+          const selected = page.locator('[data-result-id][data-selected="true"]');
+          await expect(selected).toHaveCount(1);
+          await expect(selected, context).toBeInViewport();
+          const actions = page.getByRole('button', {name: 'Show file details'});
+          await actions.focus();
+          await expect(actions).toBeFocused();
+          await expect(actions).toBeInViewport();
+        }
+      }
+    }
+  });
+  test(`gallery renderer remains bounded at Rust default minimum and maximum in ${theme}`, async ({page}) => {
+    test.setTimeout(90_000);
+    await page.emulateMedia({forcedColors: theme === 'forced-colors' ? 'active' : 'none'});
+    for (const bounds of [{width: 1120, height: 760}, {width: 880, height: 640}, {width: 1440, height: 960}]) {
+      await page.setViewportSize(bounds);
+      for (const scale of scales) {
+        await page.goto(`/?gallery=1&scenario=providers-populated&theme=${theme}&scale=${scale}`);
+        await expect(page.getByRole('region', {name: 'Lumen visual state gallery'})).toBeVisible();
+        await expect(page.getByRole('heading', {name: 'Providers', exact: true})).toBeVisible();
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+        const selector = page.getByRole('combobox', {name: 'Gallery scenario'});
+        await selector.focus();
+        await expect(selector).toBeFocused();
+        await expect(selector).toBeInViewport();
+      }
+    }
+  });
+}
+
 for (const viewport of viewports) {
   test(`${viewport.name} remains bounded across the text-scale matrix`, async ({page}) => {
     await page.setViewportSize({width: viewport.width, height: viewport.height});

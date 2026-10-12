@@ -1,4 +1,4 @@
-import {render, waitFor} from '@testing-library/react';
+import {act, render, waitFor} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 const animation = vi.hoisted(() => ({
@@ -56,6 +56,26 @@ afterEach(() => {
 });
 
 describe('ActivityIndicator', () => {
+  it('destroys hidden work and only resumes when both visibility gates allow it', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const {container, rerender, unmount} = render(
+      <ActivityIndicator active visible reducedMotion={false} tone="success" />,
+    );
+    await waitFor(() => expect(animation.loadAnimation).toHaveBeenCalledOnce());
+    visibility.mockReturnValue('hidden');
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(animation.destroy).toHaveBeenCalledOnce();
+    expect(container.querySelector('[data-activity-running]')).toBeNull();
+    rerender(<ActivityIndicator active visible={false} reducedMotion={false} tone="success" />);
+    visibility.mockReturnValue('visible');
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(animation.loadAnimation).toHaveBeenCalledOnce();
+    rerender(<ActivityIndicator active visible reducedMotion={false} tone="success" />);
+    await waitFor(() => expect(animation.loadAnimation).toHaveBeenCalledTimes(2));
+    unmount();
+    expect(animation.destroy).toHaveBeenCalledTimes(2);
+    expect(animation.revert).toHaveBeenCalledTimes(2);
+  });
   it('owns one local SVG animation and destroys it when activity settles', async () => {
     const {container, rerender} = render(
       <ActivityIndicator active reducedMotion={false} tone="success" />,
@@ -72,7 +92,7 @@ describe('ActivityIndicator', () => {
         loop: true,
         renderer: 'svg',
       }));
-      expect(animation.setSubframe).toHaveBeenCalledWith(false);
+      expect(animation.setSubframe).toHaveBeenCalledWith(true);
     });
 
     rerender(<ActivityIndicator active={false} reducedMotion={false} tone="success" />);

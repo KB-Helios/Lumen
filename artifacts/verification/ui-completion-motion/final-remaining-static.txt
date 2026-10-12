@@ -1,0 +1,9 @@
+$ node scripts/run-e2e.mjs "tests/e2e/performance.spec.ts" -g "the static palette keeps one answer region and exposes diagnostics instrumentation"
+
+Running 1 test using 1 worker
+
+(node:4652) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\e2e\performance.spec.ts:273:1 › the static palette keeps one answer region and exposes diagnostics instrumentation (9.0s)
+
+  1 passed (11.0s)

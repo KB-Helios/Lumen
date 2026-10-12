@@ -1,7 +1,9 @@
 import type {ReactNode} from 'react';
-import {Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
+import {memo, Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
+import {AnimatePresence, motion} from 'motion/react';
 
 import {useLumenMotion} from '../../design-system/MotionProvider';
+import {motionTokens} from '../../design-system/motion';
 import type {SearchService} from '../../services/search/search-service';
 import {useAppearanceStore} from '../../state/appearance.store';
 import type {
@@ -36,7 +38,7 @@ export interface ExpandedWorkspaceProps {
   onSelectionChange(fileId: string | null): void;
 }
 
-function SelectionBoundResults({
+const SelectionBoundResults = memo(function SelectionBoundResults({
   openingId,
   reducedMotion,
   results,
@@ -59,15 +61,14 @@ function SelectionBoundResults({
   const selectedId = results.some((item) => item.id === requestedSelectedId)
     ? requestedSelectedId
     : results.find((item) => (item.availability ?? 'available') === 'available')?.id ?? null;
-  const generation = useRef(0);
+  const generation = useRef(results.length > 0 ? 1 : 0);
   const previousResults = useRef(results);
   if (previousResults.current !== results) {
     previousResults.current = results;
-    generation.current += 1;
+    if (results.length > 0) generation.current += 1;
   }
   return (
     <ResultGrid
-      key={`${results[0]?.id ?? 'empty'}-${results.length}`}
       animateRows={generation.current > 1}
       emptyLabel={emptyState}
       maxHeight={338}
@@ -79,7 +80,7 @@ function SelectionBoundResults({
       onSelectionChange={onSelectionChange}
     />
   );
-}
+});
 
 function useSettledSelection(delayMs = 48) {
   const [selectedId, setSelectedId] = useState(
@@ -102,7 +103,7 @@ function useSettledSelection(delayMs = 48) {
   return selectedId;
 }
 
-function SelectionBoundPreview({
+const SelectionBoundPreview = memo(function SelectionBoundPreview({
   reducedMotion,
   selectedId: selectedIdOverride,
   service,
@@ -116,9 +117,9 @@ function SelectionBoundPreview({
     ? settledSelectedId
     : selectedIdOverride;
   return <LazyPreviewPane fileId={fileId} reducedMotion={reducedMotion} service={service} />;
-}
+});
 
-function SelectionBoundActions({
+const SelectionBoundActions = memo(function SelectionBoundActions({
   isOpening,
   results,
   selectedId: selectedIdOverride,
@@ -135,41 +136,24 @@ function SelectionBoundActions({
   onOpenContainingFolder(): void;
   onPin(): void;
 }) {
-  const resultLabelRef = useRef<HTMLSpanElement>(null);
-  const storedSelectedId = useSelectionStore.getState().selectedId;
+  const storedSelectedId = useSelectionStore((state) => state.selectedId);
   const selectedId = selectedIdOverride === undefined
     ? storedSelectedId
     : selectedIdOverride;
   const result = results.find((item) => item.id === selectedId) ??
     results.find((item) => (item.availability ?? 'available') === 'available') ??
     null;
-  useLayoutEffect(() => {
-    if (selectedIdOverride !== undefined) return;
-    const updateLabel = (fileId: string | null) => {
-      const selectedResult = results.find((item) => item.id === fileId) ?? null;
-      if (resultLabelRef.current) {
-        resultLabelRef.current.textContent = selectedResult?.name ?? 'Choose a result for actions';
-        resultLabelRef.current.title = selectedResult?.path ?? '';
-      }
-    };
-    updateLabel(useSelectionStore.getState().selectedId);
-    return useSelectionStore.subscribe(
-      (state) => state.selectedId,
-      updateLabel,
-    );
-  }, [results, selectedIdOverride]);
   return (
     <ContextActions
       isOpening={isOpening}
       result={result}
-      resultLabelRef={resultLabelRef}
       onDetails={onDetails}
       onOpen={onOpen}
       onOpenContainingFolder={onOpenContainingFolder}
       onPin={onPin}
     />
   );
-}
+});
 
 function SelectionAnnouncement({
   announcement,
@@ -280,7 +264,17 @@ export function ExpandedWorkspace({
     >
       <FilterChips filters={activeFilters} onClear={onClearFilters} onRemove={onRemoveFilter} />
       <div className="lumen-workspace-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-        {answerPanel}
+        <AnimatePresence>
+          {answerPanel ? <motion.div
+            key="answer"
+            className="shrink-0"
+            data-answer-motion
+            initial={{opacity: 0, transform: `translateY(${reducedMotion ? 0 : 6}px)`}}
+            animate={{opacity: 1, transform: 'translateY(0px)'}}
+            exit={{opacity: 0, transition: {duration: reducedMotion ? motionTokens.reduced.opacityDuration : motionTokens.duration.launcherClose}}}
+            transition={{duration: reducedMotion ? motionTokens.reduced.opacityDuration : motionTokens.duration.launcherOpen, ease: motionTokens.easing.standard}}
+          >{answerPanel}</motion.div> : null}
+        </AnimatePresence>
         <div ref={contentRef} data-workspace-content className={showInlinePreview
           ? 'grid min-h-[94px] min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(280px,38%)] overflow-hidden'
           : 'grid min-h-[94px] min-w-0 flex-1 grid-cols-1 overflow-hidden'}>
@@ -290,7 +284,7 @@ export function ExpandedWorkspace({
               <span className="font-sans text-[0.6875rem] text-[color:var(--einui-command-muted-text)]">{countLabel}</span>
             </header>
             <SelectionBoundResults
-              emptyState={emptyLabel(lifecycle, error)}
+              emptyState={results.length === 0 ? emptyLabel(lifecycle, error) : 'No files found'}
               openingId={openingId}
               reducedMotion={reducedMotion}
               results={results}

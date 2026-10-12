@@ -12,6 +12,7 @@ import {LumenSelect, LumenSwitch} from '../components/SettingsControls';
 import {SettingsCallout, SettingsPage} from '../components/SettingsPage';
 import {ShortcutRecorder} from '../components/ShortcutRecorder';
 import {useSettingsStore} from '../settings.store';
+import {useNativeOperationsStore} from '../native-operations.store';
 
 const defaultWindowService = createWindowService();
 const defaultRuntimeService = createRuntimeSettingsService();
@@ -27,19 +28,33 @@ export function GeneralPage({
   const updateGeneral = useSettingsStore((state) => state.updateGeneral);
   const [shortcutError, setShortcutError] = useState('');
   const [runtimeError, setRuntimeError] = useState('');
+  const busy = useNativeOperationsStore((state) => state.general !== null);
 
   const updateShortcut = async (shortcut: string) => {
-    const previousShortcut = general.shortcut;
+    const operations = useNativeOperationsStore.getState();
+    const owner = operations.claim('general');
+    if (!owner) return;
+    const initial = useSettingsStore.getState().general;
+    const previousShortcut = initial.shortcut;
     setShortcutError('');
     try {
       await windowService.setShortcut(shortcut);
-      if (!await updateGeneral({shortcut})) {
-        await windowService.setShortcut(previousShortcut);
-        await updateGeneral({shortcut: previousShortcut});
+      if (!operations.owns('general', owner) || initial !== useSettingsStore.getState().general) return;
+      const saving = updateGeneral({shortcut});
+      const applied = useSettingsStore.getState().general;
+      if (!await saving) {
+        if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
+          await windowService.setShortcut(previousShortcut);
+          if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
+            await updateGeneral({shortcut: previousShortcut});
+          }
+        }
         throw new Error('The shortcut was registered but could not be saved.');
       }
-    } catch {
-      setShortcutError('Windows could not register that shortcut. Your previous shortcut remains active.');
+    } catch (error) {
+      setShortcutError(error instanceof Error ? error.message : 'Windows could not register that shortcut.');
+    } finally {
+      operations.release('general', owner);
     }
   };
 
@@ -49,16 +64,29 @@ export function GeneralPage({
     rollback: () => Promise<void>,
     previous: Partial<typeof general>,
   ) => {
+    const operations = useNativeOperationsStore.getState();
+    const owner = operations.claim('general');
+    if (!owner) return;
+    const initial = useSettingsStore.getState().general;
     setRuntimeError('');
     try {
       await apply();
-      if (!await updateGeneral(patch)) {
-        await rollback();
-        await updateGeneral(previous);
+      if (!operations.owns('general', owner) || initial !== useSettingsStore.getState().general) return;
+      const saving = updateGeneral(patch);
+      const applied = useSettingsStore.getState().general;
+      if (!await saving) {
+        if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
+          await rollback();
+          if (operations.owns('general', owner) && applied === useSettingsStore.getState().general) {
+            await updateGeneral(previous);
+          }
+        }
         throw new Error('The setting was applied but could not be saved.');
       }
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Windows rejected the setting.');
+    } finally {
+      operations.release('general', owner);
     }
   };
 
@@ -68,6 +96,7 @@ export function GeneralPage({
       <SettingSection title="Startup" description="Choose when Lumen is ready without adding visual noise.">
         <SettingRow label="Launch at startup" description="Start Lumen quietly when you sign in to Windows.">
           <LumenSwitch
+            isDisabled={busy}
             aria-label="Launch at startup"
             isSelected={general.launchAtStartup}
             onChange={(launchAtStartup) => void applyRuntimeSetting(
@@ -85,10 +114,11 @@ export function GeneralPage({
           description="Press the chord once to summon Lumen on the active monitor."
           error={shortcutError}
         >
-          <ShortcutRecorder value={general.shortcut} onChange={updateShortcut} onInvalid={setShortcutError} />
+          <ShortcutRecorder isDisabled={busy} value={general.shortcut} onChange={updateShortcut} onInvalid={setShortcutError} />
         </SettingRow>
         <SettingRow label="Open on" description="Follow your pointer and active application, or stay on the primary display.">
           <LumenSelect
+            isDisabled={busy}
             aria-label="Monitor behavior"
             options={[
               {id: 'active', label: 'Active monitor'},
@@ -105,6 +135,7 @@ export function GeneralPage({
         </SettingRow>
         <SettingRow label="Search history" description="Keep recent queries locally for quick recall.">
           <LumenSwitch
+            isDisabled={busy}
             aria-label="Search history"
             isSelected={general.historyEnabled}
             onChange={(historyEnabled) => void applyRuntimeSetting(
@@ -117,6 +148,7 @@ export function GeneralPage({
         </SettingRow>
         <SettingRow label="When the launcher closes" description="Hiding keeps the warm interface ready for the next shortcut.">
           <LumenSelect
+            isDisabled={busy}
             aria-label="Launcher close behavior"
             options={[
               {id: 'hide', label: 'Hide and stay ready'},

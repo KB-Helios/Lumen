@@ -1,5 +1,19 @@
 # Accessibility validation report
 
+## UI refinement update, 2026-10-11
+
+Task 5's installed-Edge run passed 107/107 cases with one worker and no retries. The production-component matrix covers all eleven settings pages, four onboarding steps, launcher/preview/gallery and provider dialogs across dark/light/opaque/reduced-effects/reduced-motion/forced-colors contexts, 100/125/150/175/200% text scales, Rust default/minimum/maximum logical sizes and a 520 × 340 stress viewport. Checks include accessible controls, <=1 px horizontal overflow, reachable actions, focus restoration, stable answer streaming, IME input identity and keyboard selection through 10,000 virtualized results. Gallery and service states are explicitly simulated DEV fixtures; this browser result does not prove native dialog, Windows text-scaling or screen-reader speech behavior.
+
+One System/Full/Reduced preference drives motion. Reduced CSS removes cosmetic spatial movement while preserving virtualizer/slider transforms and <=80 ms opacity. Glass intensity affects decorative layers only; opaque, reduced-effects and forced-colors overrides preserve foreground text. Async completion, confirmations, credentials, copy and provisioning expose pending/error/retry feedback and preserve newer operations.
+
+Final source `f0e6b6e` passes 704 unit/component tests and typecheck/lint/build. The later root full Edge run records 130 pass/1 performance fail/2 did not run; both skipped cases pass separately, which does not make the full run pass. Whole-source review corrected two destructive confirmation callers to await success, with scoped re-review approved. All 86 gallery captures and six recordings are regenerated and inspected; services remain simulated browser fixtures.
+
+An actual identifier-isolated WebView2 fixture verifies five-target provider Add/Edit/blank-key retention/activation/reopen/removal/failure+retry using owned synthetic homes and real Windows credentials. Three rapid native Enter/Escape reversals retain the input DOM/caret and collapsed geometry. Normal installed-package startup/uninstall smoke is a separate passing gate. These do not establish live authentication, full native assistive-technology coverage, physical IME candidate behavior or speech.
+
+The current branch has no observed manual Narrator speech pass; physical IME and compositor presentation remain unverified. The historical smoke below is an earlier host/source snapshot and cannot establish current screen-reader acceptance. Final metrics still fail required performance acceptance, so publication requires a draft. Exact browser/native/manual boundaries and cleanup are recorded in the [dated UI completion report](2026-10-11-ui-completion-motion.md) and [native fixture summary](../../artifacts/verification/ui-completion-motion/native-ui-acceptance-summary.json).
+
+## Historical phase-one snapshot
+
 **Date:** 2026-07-31  
 **Environment:** Windows 11 build 26200, Microsoft Edge/WebView2 150.0.4078.105, English Lumen UI  
 **Result:** Phase-one automated and native smoke checks passed, with the manual limits listed below.

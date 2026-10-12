@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {WindowsAgentControls} from '../../windows-ai/WindowsAiControls';
 import {ImprovementGatewayControls} from '../../improvement/ImprovementControls';
 import {useImprovementStore} from '../../improvement/improvement.store';
@@ -55,6 +55,16 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
   const [credential, setCredential] = useState('');
   const [credentialProvider, setCredentialProvider] = useState<ProviderId>('openai');
   const [nativeMessage, setNativeMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const runNative = async (operation: () => Promise<void>) => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    try {await operation();}
+    catch (error) {setNativeMessage(error instanceof Error ? error.message : 'The native operation could not be completed.');}
+    finally {pending.current = false; setBusy(false);}
+  };
   const refresh = useCallback(async () => {
     if (!native) return;
     const [gateway, worker, providerRegistry, liveMcp] = await Promise.all([
@@ -78,10 +88,9 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
     } else if (native) {
       await refresh();
     }
+    return saved;
   }, [native, refresh, setCloudAnswerConsent]);
-  const grantCloudConsent = useCallback(() => {
-    void changeCloudConsent(true);
-  }, [changeCloudConsent]);
+  const grantCloudConsent = useCallback(() => changeCloudConsent(true), [changeCloudConsent]);
   const revokeCloudConsent = useCallback(async () => {
     if (runtimeMode === 'cloud') {
       const runtimeSaved = await useSettingsStore.getState().updateAi({runtimeMode: 'local'});
@@ -157,7 +166,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
 
   return (
     <SettingsPage>
-      <GatewayStatusPanel state={health?.state ?? gatewayState} onRestart={() => void restartGateway()} />
+      <GatewayStatusPanel isDisabled={busy} state={health?.state ?? gatewayState} onRestart={() => void runNative(restartGateway)} />
       <SettingsCallout>
         {health
           ? `AgentGateway ${health.version} · interactive 60 req/min and 100k tokens/hour · enrichment 10 req/min and 500k tokens/day.`
@@ -166,7 +175,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
       {nativeMessage || actionMessage ? <SettingsCallout>{nativeMessage || actionMessage}</SettingsCallout> : null}
       <SettingSection title="Virtual model routes" description="Stable aliases keep callers unchanged while providers change underneath.">
         {native ? registry ? (
-          <ProviderRegistryList registry={registry} cloudConsent={cloudConsent} improvementCloudConsent={improvementCloudConsent} onSet={setNativeRoute} onTest={testNativeRoute} />
+          <ProviderRegistryList registry={registry} cloudConsent={cloudConsent} improvementCloudConsent={improvementCloudConsent} onSet={(update) => runNative(() => setNativeRoute(update))} onTest={(alias) => runNative(() => testNativeRoute(alias))} />
         ) : <div className="p-[16px]"><LumenText tone="tertiary" variant="meta">Loading provider registry…</LumenText></div>
           : <ProviderRouteList routes={routes} onChange={setRouteProvider} onTest={(id) => void testProvider(id)} />}
       </SettingSection>
@@ -174,6 +183,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
         <SettingSection title="Provider credential" description="The value is written directly to Windows Credential Manager and never returned to React.">
           <div className="grid min-h-[64px] min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-[12px] border-b border-border-subtle p-[16px] last:border-b-0 @min-[36rem]/settings:grid-cols-[minmax(0,.55fr)_minmax(0,1fr)_auto]">
             <LumenSelect<ProviderId>
+              isDisabled={busy}
               aria-label="Credential provider"
               options={registry.providers.filter((provider) => provider.cloud).map((provider) => ({id: provider.id, label: provider.label}))}
               value={credentialProvider}
@@ -181,8 +191,8 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
             />
             <LumenTextField aria-label="Provider API key" type="password" placeholder="API key" value={credential} onChange={setCredential} />
             <div className="flex min-w-0 flex-wrap items-center gap-[8px]">
-              <LumenButton size="small" variant="primary" onPress={() => void saveCredential()}>Save</LumenButton>
-              <LumenButton size="small" variant="quiet" onPress={() => void deleteCredential()}>Delete</LumenButton>
+              <LumenButton isDisabled={busy} size="small" variant="primary" onPress={() => void runNative(saveCredential)}>Save</LumenButton>
+              <LumenButton isDisabled={busy} size="small" variant="quiet" onPress={() => void runNative(deleteCredential)}>Delete</LumenButton>
             </div>
           </div>
         </SettingSection>
@@ -197,7 +207,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
           {cloudConsent ? (
             <div className="col-span-full flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:col-auto">
               <StatusBadge tone="success">Cloud consent granted</StatusBadge>
-              <LumenButton size="small" variant="quiet" onPress={() => void revokeCloudConsent()}>Revoke</LumenButton>
+              <LumenButton isDisabled={busy} size="small" variant="quiet" onPress={() => void runNative(revokeCloudConsent)}>Revoke</LumenButton>
             </div>
           ) : (
             <ConfirmationDialog
@@ -205,9 +215,14 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
               confirmVariant="primary"
               description="Cloud answers may send the current search query and relevant local index excerpts, including filenames, to the configured provider. Local mode remains on this PC."
               title="Allow cloud provider requests?"
-              onConfirm={grantCloudConsent}
+              onConfirm={async () => {
+                if (pending.current) return false;
+                let saved = false;
+                await runNative(async () => {saved = await grantCloudConsent();});
+                return saved;
+              }}
             >
-              <LumenButton aria-label="Review cloud consent" className="col-span-full justify-self-start @min-[36rem]/settings:col-auto" size="small">Review consent</LumenButton>
+              <LumenButton isDisabled={busy} aria-label="Review cloud consent" className="col-span-full justify-self-start @min-[36rem]/settings:col-auto" size="small">Review consent</LumenButton>
             </ConfirmationDialog>
           )}
         </div>
@@ -227,7 +242,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
             ))}
           </SettingSection>
           <SettingSection title="Tool permissions" description="Permissions are enforced by the native executor for every invocation.">
-            <ToolPermissionList permissions={mcpRegistry.permissions} onChange={(id, access) => void setNativePermission(id, access)} />
+            <ToolPermissionList permissions={mcpRegistry.permissions} onChange={(id, access) => void runNative(() => setNativePermission(id, access))} />
           </SettingSection>
         </>
       ) : null}
@@ -241,7 +256,7 @@ export function AgentGatewayPage({nativeRuntime}: {nativeRuntime?: boolean} = {}
             </div>
             <div className="col-span-full flex min-w-0 flex-wrap items-center gap-[8px] @min-[36rem]/settings:col-auto">
               <StatusBadge tone={enrichment?.state === 'ready' ? 'success' : 'warning'}>{enrichment?.state ?? 'Checking'}</StatusBadge>
-              <LumenButton size="small" variant="quiet" onPress={() => void (enrichment?.paused ? nativeAiService.resumeEnrichment() : nativeAiService.pauseEnrichment()).then(refresh)}>{enrichment?.paused ? 'Resume' : 'Pause'}</LumenButton>
+              <LumenButton isDisabled={busy || !enrichment} size="small" variant="quiet" onPress={() => void runNative(async () => {await (enrichment?.paused ? nativeAiService.resumeEnrichment() : nativeAiService.pauseEnrichment()); await refresh(); setNativeMessage(enrichment?.paused ? 'Enrichment resumed.' : 'Enrichment paused.');})}>{enrichment?.paused ? 'Resume' : 'Pause'}</LumenButton>
             </div>
           </div>
         </SettingSection>

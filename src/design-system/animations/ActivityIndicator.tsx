@@ -4,7 +4,7 @@ import {gsap} from 'gsap';
 import {CustomEase} from 'gsap/CustomEase';
 import type {AnimationItem} from 'lottie-web/build/player/lottie_svg';
 
-import {useMediaPreference} from '../../app/AppProviders';
+import {useDocumentVisible, useMediaPreference} from '../../app/AppProviders';
 import activityAnimation from './activity-indicator.json';
 
 gsap.registerPlugin(CustomEase);
@@ -12,6 +12,7 @@ const lumenStandardEase = CustomEase.create('lumen-standard', '0.2,0.8,0.2,1');
 
 export interface ActivityIndicatorProps {
   active: boolean;
+  visible?: boolean;
   reducedMotion: boolean;
   tone: 'success' | 'warning';
 }
@@ -33,6 +34,7 @@ function ThreeDotMark({forcedColorsOnly = false}: {forcedColorsOnly?: boolean}) 
 
 export function ActivityIndicator({
   active,
+  visible = true,
   reducedMotion,
   tone,
 }: ActivityIndicatorProps) {
@@ -40,12 +42,13 @@ export function ActivityIndicator({
   const hostRef = useRef<HTMLSpanElement>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const forcedColors = useMediaPreference('(forced-colors: active)');
-  const animationRunning = active && !reducedMotion && !loadFailed && !forcedColors;
+  const documentVisible = useDocumentVisible();
+  const animationRunning = active && visible && documentVisible && !reducedMotion && !loadFailed && !forcedColors;
   const color = active ? 'text-accent' : tone === 'warning' ? 'text-warning' : 'text-success';
 
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
-    if (!wrapper || reducedMotion || forcedColors) return;
+    if (!wrapper || !animationRunning) return;
     const context = gsap.context(() => {
       gsap.fromTo(
         wrapper,
@@ -61,7 +64,7 @@ export function ActivityIndicator({
       );
     }, wrapper);
     return () => context.revert();
-  }, [active, reducedMotion, forcedColors]);
+  }, [animationRunning]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -83,7 +86,7 @@ export function ActivityIndicator({
               progressiveLoad: false,
             },
           });
-          instance.setSubframe(false);
+          instance.setSubframe(true);
         } catch {
           instance?.destroy();
           instance = undefined;

@@ -51,7 +51,7 @@ export const vendorPresets: VendorPreset[] = [
     vendor: 'codex',
     app: 'codex',
     name: 'OpenAI Codex',
-    baseUrl: 'https://api.openai.com',
+    baseUrl: 'https://api.openai.com/v1',
     apiKeyField: 'OPENAI_API_KEY',
     defaultModel: 'gpt-5',
     requiresOAuth: true,

@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useLayoutEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 
 import {LumenSurface} from '../../design-system/primitives/LumenSurface';
 import {LumenText} from '../../design-system/primitives/LumenText';
@@ -20,21 +20,26 @@ import type {RootSelectionService} from '../onboarding/root-selection-service';
 import {SettingsShell} from '../settings/SettingsShell';
 import {LocalAiPage} from '../settings/pages/LocalAiPage';
 import {SearchPage} from '../settings/pages/SearchPage';
+import {ProvidersPage} from '../settings/pages/ProvidersPage';
+import {SettingsCallout} from '../settings/components/SettingsPage';
+import type {SettingsPageId} from '../settings/settings.schema';
 import {useSettingsStore} from '../settings/settings.store';
 import {useWindowsAiStore} from '../windows-ai/windows-ai.store';
 import {WindowsLocalAiControls} from '../windows-ai/WindowsAiControls';
 import {unsupportedWindowsAiSnapshot} from '../../services/windows-ai/unavailable-windows-ai-service';
+import {unavailableComputerUseHealth} from '../../services/computer-use/computer-use.types';
 import {GallerySearchService, galleryResults} from './fixtures';
 import {ScenarioControls} from './ScenarioControls';
 import {galleryScenarios, getGalleryScenario} from './scenarios';
-import type {GalleryAnswerState, GalleryLauncherState, GalleryScenario, GalleryScenarioId} from './gallery.types';
+import type {GalleryAnswerState, GalleryComputerUseState, GalleryLauncherState, GalleryProviderState, GalleryScenario, GalleryScenarioId} from './gallery.types';
+import {galleryAiService, galleryAuthApi, galleryProfile, galleryProvidersService, galleryProvisioningService, galleryUsageApi} from './workflow-fixtures';
 
 const galleryWindowService = new BrowserWindowService();
 const standaloneGalleryWindowService = new BrowserWindowService();
 
-const galleryRootService: RootSelectionService = {async chooseRoot() { return null; }};
+const galleryRootService: RootSelectionService = {async chooseRoot() { return 'C:\\Simulated\\Lumen'; }};
 const textScales = [100, 125, 150, 175, 200] as const;
-const themes = ['dark', 'light', 'opaque', 'high-contrast', 'reduced-motion'] as const;
+const themes = ['dark', 'light', 'opaque', 'high-contrast', 'reduced-effects', 'reduced-motion'] as const;
 
 function navigate(parameters: URLSearchParams) {
   window.location.search = parameters.toString();
@@ -51,6 +56,7 @@ function galleryAnswer(state: GalleryAnswerState | undefined, constrained = fals
     citations: [],
   };
   if (state === 'failed') return {phase: 'error', text: '', citations: [], error: 'The answer route is unavailable.'};
+  if (state === 'cancelled') return {phase: 'cancelled', text: 'Simulated partial answer retained after cancellation.', citations: []};
   return {
     phase: 'completed',
     text: 'The quarterly report highlights stable local search, explicit AI submission, and preserved privacy boundaries.',
@@ -115,7 +121,7 @@ function GalleryLauncher({state}: {state: GalleryLauncherState}) {
           <ExpandedWorkspace
             activeFilters={[]}
             announcement={noRootError?.message ?? `${results.length} deterministic results`}
-            answerPanel={answer ? <AnswerPanel answer={answer} mode="local" onModeChange={() => undefined} onOpenCitation={() => undefined} onRetry={() => undefined} onStop={() => setAnswer((current) => current ? {...current, phase: 'cancelled'} : current)} /> : undefined}
+            answerPanel={answer ? <AnswerPanel answer={answer} mode="local" onModeChange={() => undefined} onOpenCitation={() => undefined} onRetry={() => setAnswer(galleryAnswer('streaming', state.constrained))} onStop={() => setAnswer((current) => current ? {...current, phase: 'cancelled'} : current)} /> : undefined}
             error={noRootError}
             lifecycle={lifecycle}
             openingId={null}
@@ -136,8 +142,16 @@ function GalleryLauncher({state}: {state: GalleryLauncherState}) {
   );
 }
 
-function GalleryComputerUse() {
-  const [state, setState] = useState<ComputerUseState>(approvalState);
+function GalleryComputerUse({initial}: {initial: GalleryComputerUseState}) {
+  const [state, setState] = useState<ComputerUseState>(() => initial === 'approval' ? approvalState : {
+    ...approvalState, approval: undefined,
+    health: initial === 'unavailable' ? unavailableComputerUseHealth('Simulated native executor unavailable.') : approvalState.health,
+    phase: initial === 'denied' || initial === 'cancelled' ? 'stopped' : initial === 'unavailable' ? 'idle' : 'error',
+    refusal: initial === 'unavailable' ? 'Simulated native executor unavailable.' : undefined,
+    error: initial === 'target-lost' ? 'Simulated selected window was lost; select a fresh target.' : initial === 'error' ? 'Simulated executor error; the session stopped.' : undefined,
+    reasoning: undefined,
+    activity: [{id: 1, label: `Simulated session ${initial}`, tone: 'neutral'}],
+  });
   const controller = useMemo<ComputerUseController>(() => ({
     ...state,
     async refreshHealth() {},
@@ -187,7 +201,7 @@ function GalleryPanel({scenario, children}: {scenario: GalleryScenario; children
   );
 }
 
-function GallerySettingsShell({page}: {page: 'general' | 'agent-gateway'}) {
+function GallerySettingsShell({page}: {page: SettingsPageId}) {
   useLayoutEffect(() => {
     useSettingsStore.setState({activePage: page, hydrated: true, persistenceStatus: 'ready'});
   }, [page]);
@@ -200,7 +214,7 @@ function GalleryOnboarding({step}: {step: number}) {
       completed: false,
       currentIndex: step,
       hydrated: true,
-      root: '',
+      root: step > 1 ? 'C:\\Simulated\\Lumen' : '',
       shortcut: 'Alt + Space',
       started: step > 0,
     });
@@ -220,11 +234,42 @@ function ScenarioSurface({scenario}: {scenario: GalleryScenario}) {
     case 'local-ai': return <GalleryPanel scenario={scenario}><LocalAiPage model={{hardware: surface.hardware, state: surface.model, progress: surface.progress}} /></GalleryPanel>;
     case 'gateway': return <GalleryPanel scenario={scenario}><GatewayStatusPanel state={surface.state} onRestart={() => undefined} /></GalleryPanel>;
     case 'settings-page': return <GalleryPanel scenario={scenario}><SearchPage /></GalleryPanel>;
-    case 'settings-shell': return <GallerySettingsShell page={surface.page === 'agent-gateway' ? 'agent-gateway' : 'general'} />;
+    case 'settings-shell': return <GallerySettingsShell page={surface.page} />;
     case 'onboarding': return <GalleryOnboarding step={surface.step} />;
-    case 'computer-use': return <GalleryComputerUse />;
+    case 'computer-use': return <GalleryComputerUse initial={surface.state} />;
+    case 'providers': return <GalleryProviders initial={surface.state} />;
+    case 'local-runtime': return <GalleryPanel scenario={scenario}><GalleryLocalRuntime initial={surface.state} /></GalleryPanel>;
     case 'windows-ai': return <GalleryPanel scenario={scenario}><GalleryWindowsAi state={surface.state} /></GalleryPanel>;
   }
+}
+
+function GalleryProviders({initial}: {initial: GalleryProviderState}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const service = useMemo(() => galleryProvidersService(initial), [initial]);
+  useLayoutEffect(() => {
+    useSettingsStore.setState({activePage: 'providers', hydrated: true, persistenceStatus: 'ready'});
+  }, []);
+  useEffect(() => {
+    const label = initial === 'add' ? 'Add provider' : initial === 'edit' ? `Edit ${galleryProfile.id}` : initial === 'remove' ? `Remove ${galleryProfile.id} from live` : null;
+    if (!label || !ref.current) return;
+    const open = () => {
+      const trigger = Array.from(ref.current!.querySelectorAll<HTMLButtonElement>('button')).find((button) => (button.getAttribute('aria-label') ?? button.textContent) === label && !button.disabled);
+      if (!trigger) return;
+      observer.disconnect();
+      trigger.focus();
+      trigger.click();
+    };
+    const observer = new MutationObserver(open);
+    observer.observe(ref.current, {subtree: true, childList: true, attributes: true});
+    open();
+    return () => observer.disconnect();
+  }, [initial]);
+  return <div ref={ref} className="h-[min(100%,600px)] w-[min(100%,880px)] min-h-0 min-w-0"><SettingsShell onClose={() => undefined} pages={{providers: <><SettingsCallout>Simulated development fixture. No credentials or tool configuration are accessed.</SettingsCallout><ProvidersPage providersService={service} nativeRuntime={initial !== 'unavailable'} authApi={galleryAuthApi} usageApi={galleryUsageApi} /></>}} /></div>;
+}
+
+function GalleryLocalRuntime({initial}: {initial: 'provisioning' | 'error' | 'cancelled'}) {
+  const service = useMemo(() => galleryProvisioningService(initial), [initial]);
+  return <><SettingsCallout>Simulated development fixture. No download or native runtime request runs.</SettingsCallout><LocalAiPage nativeRuntime aiService={galleryAiService} provisioningService={service} /></>;
 }
 
 function GalleryWindowsAi({state}: {state: 'ready' | 'unavailable' | 'preparing' | 'failed'}) {

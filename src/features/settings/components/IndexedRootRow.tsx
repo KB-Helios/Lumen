@@ -25,19 +25,21 @@ function validateExclusion(pattern: string) {
 }
 
 export interface IndexedRootRowProps {
+  isDisabled?: boolean;
   cloudEnrichment: boolean;
   root: IndexedRoot;
   onCloudEnrichmentChange(value: boolean): void;
   onChange(root: IndexedRoot): void;
-  onRemove(): void;
+  onRemove(): void | boolean | Promise<void | boolean>;
 }
 
-export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichmentChange, onRemove}: IndexedRootRowProps) {
+export function IndexedRootRow({isDisabled, cloudEnrichment, root, onChange, onCloudEnrichmentChange, onRemove}: IndexedRootRowProps) {
   const [pattern, setPattern] = useState('');
   const [error, setError] = useState('');
   const status = rootStatus[root.status];
 
   const addExclusion = () => {
+    if (isDisabled) return;
     const nextError = validateExclusion(pattern);
     setError(nextError);
     if (nextError) {
@@ -53,7 +55,7 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
   const togglePaused = () => onChange({
     ...root,
     paused: !root.paused,
-    status: root.paused ? 'ready' : 'paused',
+    status: root.paused ? 'indexing' : 'paused',
   });
 
   return (
@@ -66,6 +68,7 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
         </div>
         <div className="col-span-full flex items-center gap-[4px] @min-[32rem]/settings:col-auto">
           <LumenIconButton
+            isDisabled={isDisabled}
             aria-label={`${root.paused ? 'Resume' : 'Pause'} ${root.path}`}
             size="small"
             variant="quiet"
@@ -79,7 +82,7 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
             title="Remove indexed root"
             onConfirm={onRemove}
           >
-            <LumenIconButton aria-label={`Remove ${root.path}`} size="small" variant="quiet">
+            <LumenIconButton isDisabled={isDisabled} aria-label={`Remove ${root.path}`} size="small" variant="quiet">
               <LumenUiIcon name="delete" size="small" />
             </LumenIconButton>
           </ConfirmationDialog>
@@ -88,16 +91,19 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
       <div className="flex min-w-0 flex-wrap items-center gap-[12px]">
         <LumenText className="w-full" tone="tertiary" variant="meta">Root policy</LumenText>
         <LumenSwitch
+          isDisabled={isDisabled}
           aria-label={`Allow cloud enrichment for ${root.path}`}
           isSelected={cloudEnrichment}
           onChange={onCloudEnrichmentChange}
         />
         <LumenSwitch
+          isDisabled={isDisabled}
           aria-label={`Include hidden directories for ${root.path}`}
           isSelected={root.includeHidden}
           onChange={(includeHidden) => onChange({...root, includeHidden})}
         />
         <LumenSelect
+          isDisabled={isDisabled}
           aria-label={`File size limit for ${root.path}`}
           options={[
             {id: '64', label: '64 MB'},
@@ -125,7 +131,7 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
               }
             }}
           />
-          <LumenButton aria-label={`Add exclusion for ${root.path}`} className="justify-self-start" size="small" onPress={addExclusion}>Add</LumenButton>
+          <LumenButton isDisabled={isDisabled} aria-label={`Add exclusion for ${root.path}`} className="justify-self-start" size="small" onPress={addExclusion}>Add</LumenButton>
         </div>
         {error ? <LumenText className="text-danger" role="alert" variant="meta">{error}</LumenText> : null}
         {root.exclusions.length ? (
@@ -134,6 +140,7 @@ export function IndexedRootRow({cloudEnrichment, root, onChange, onCloudEnrichme
               <span key={exclusion} className="inline-flex min-h-[32px] min-w-0 max-w-full items-center gap-[4px] rounded-pill bg-surface-inset px-[10px] font-sans text-xs text-text-secondary">
                 <span className="min-w-0 [overflow-wrap:anywhere]">{exclusion}</span>
                 <LumenIconButton
+                  isDisabled={isDisabled}
                   aria-label={`Remove exclusion ${exclusion}`}
                   size="small"
                   variant="quiet"

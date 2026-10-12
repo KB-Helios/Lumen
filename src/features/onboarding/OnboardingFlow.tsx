@@ -3,6 +3,7 @@ import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
 
 import {useLumenMotion} from '../../design-system/MotionProvider';
+import {motionTokens} from '../../design-system/motion';
 import {LumenUiIcon} from '../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../design-system/primitives/LumenButton';
 import {LumenSurface} from '../../design-system/primitives/LumenSurface';
@@ -103,6 +104,7 @@ export function OnboardingFlow({
   const directionRef = useRef<'forward' | 'backward'>('forward');
   const [completionError, setCompletionError] = useState('');
   const [completing, setCompleting] = useState(false);
+  const completionPending = useRef(false);
   const step = onboardingSteps[currentIndex] ?? 'welcome';
 
   useEffect(() => {
@@ -118,6 +120,8 @@ export function OnboardingFlow({
   }, [currentIndex]);
 
   const finish = async () => {
+    if (completionPending.current) return;
+    completionPending.current = true;
     setCompleting(true);
     setCompletionError('');
     try {
@@ -125,12 +129,13 @@ export function OnboardingFlow({
       if (await onComplete?.() === false) {
         throw new Error('Lumen could not start the initial index. Check the selected folder and try again.');
       }
-      if (complete()) {
+      if (await complete()) {
         void requestWindowShow(windowService, 'collapsed');
       }
     } catch (error) {
       setCompletionError(error instanceof Error ? error.message : 'Lumen could not finish setup.');
     } finally {
+      completionPending.current = false;
       setCompleting(false);
     }
   };
@@ -149,6 +154,7 @@ export function OnboardingFlow({
   };
 
   const goBack = () => {
+    if (completionPending.current) return;
     directionRef.current = 'backward';
     back();
   };
@@ -197,18 +203,18 @@ export function OnboardingFlow({
             custom={directionRef.current}
             exit="exit"
             initial="enter"
-            transition={{duration: pageDuration}}
+            transition={{duration: pageDuration, ease: motionTokens.easing.standard}}
             variants={{
               enter: (direction: 'forward' | 'backward') => (
                 reducedMotion
-                  ? {opacity: 0}
-                  : {opacity: 0, x: direction === 'forward' ? 18 : -18}
+                  ? {opacity: 0, transform: 'translateX(0px)'}
+                  : {opacity: 0, transform: `translateX(${direction === 'forward' ? 18 : -18}px)`}
               ),
-              center: {opacity: 1, x: 0},
+              center: {opacity: 1, transform: 'translateX(0px)'},
               exit: (direction: 'forward' | 'backward') => (
                 reducedMotion
-                  ? {opacity: 0}
-                  : {opacity: 0, x: direction === 'forward' ? -14 : 14}
+                  ? {opacity: 0, transform: 'translateX(0px)'}
+                  : {opacity: 0, transform: `translateX(${direction === 'forward' ? -14 : 14}px)`}
               ),
             }}
           >

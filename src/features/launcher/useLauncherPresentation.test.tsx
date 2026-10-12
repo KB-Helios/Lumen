@@ -90,6 +90,26 @@ afterEach(() => {
 });
 
 describe('useLauncherPresentation', () => {
+  it('waits for the actual exit and ignores a completion from an interrupted exit', async () => {
+    vi.useFakeTimers();
+    const windowService = new DeferredWindowService();
+    const {result, rerender} = renderHook(
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
+      {initialProps: {hasContent: true}},
+    );
+    await act(async () => { windowService.resolveShow('expanded'); });
+    rerender({hasContent: false});
+    const obsoleteExit = result.current.onWorkspaceExitComplete;
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    expect(windowService.calls).toEqual(['expanded']);
+    rerender({hasContent: true});
+    await act(async () => { windowService.resolveShow('expanded', 1); });
+    act(() => obsoleteExit());
+    expect(windowService.calls).toEqual(['expanded']);
+    rerender({hasContent: false});
+    await act(async () => result.current.onWorkspaceExitComplete());
+    expect(windowService.calls).toEqual(['expanded', 'collapsed']);
+  });
   it('restores collapsed native bounds when a current Settings request fails', async () => {
     const windowService = new DeferredWindowService();
     const request = requestWindowShow(windowService, 'settings');
@@ -128,7 +148,7 @@ describe('useLauncherPresentation', () => {
     const windowService = new DeferredWindowService();
     const launcher = renderHook(() => {
       useNativeLauncherLifecycle(windowService);
-      return useLauncherPresentation({hasContent: true, reducedMotion: false, windowService});
+      return useLauncherPresentation({hasContent: true, windowService});
     });
 
     await act(async () => {
@@ -151,7 +171,7 @@ describe('useLauncherPresentation', () => {
     const windowService = new DeferredWindowService();
     const hideOperation = windowService.deferHide();
     const launcher = renderHook(
-      () => useLauncherPresentation({hasContent: true, reducedMotion: false, windowService}),
+      () => useLauncherPresentation({hasContent: true, windowService}),
     );
 
     await act(async () => {
@@ -176,7 +196,7 @@ describe('useLauncherPresentation', () => {
     useQueryStore.getState().setDraft('retained report');
     const launcher = renderHook(() => {
       useNativeLauncherLifecycle(windowService);
-      return useLauncherPresentation({hasContent: true, reducedMotion: false, windowService});
+      return useLauncherPresentation({hasContent: true, windowService});
     });
 
     await act(async () => {
@@ -200,7 +220,7 @@ describe('useLauncherPresentation', () => {
   it('lets a newer launcher generation recover after a stale Settings rejection', async () => {
     const windowService = new DeferredWindowService();
     const launcher = renderHook(
-      () => useLauncherPresentation({hasContent: true, reducedMotion: false, windowService}),
+      () => useLauncherPresentation({hasContent: true, windowService}),
     );
 
     await act(async () => {
@@ -226,7 +246,7 @@ describe('useLauncherPresentation', () => {
   it('waits for native expanded bounds before showing the workspace', async () => {
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: false}},
     );
 
@@ -248,7 +268,7 @@ describe('useLauncherPresentation', () => {
   it('reconciles native expansion after the development strict-mode remount', async () => {
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: false}, wrapper: StrictMode},
     );
 
@@ -265,7 +285,7 @@ describe('useLauncherPresentation', () => {
   it('hands an unresolved native expansion to a new collapsed hook instance', async () => {
     const windowService = new DeferredWindowService();
     const first = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: false}},
     );
 
@@ -274,7 +294,7 @@ describe('useLauncherPresentation', () => {
     first.unmount();
 
     const second = renderHook(
-      () => useLauncherPresentation({hasContent: false, reducedMotion: false, windowService}),
+      () => useLauncherPresentation({hasContent: false, windowService}),
     );
     await act(async () => {
       windowService.resolveShow('expanded');
@@ -293,7 +313,7 @@ describe('useLauncherPresentation', () => {
   it('reconciles an unresolved strict-mode expansion after remount changes intent to collapsed', async () => {
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}, wrapper: StrictMode},
     );
 
@@ -317,7 +337,7 @@ describe('useLauncherPresentation', () => {
     vi.useFakeTimers();
     const windowService = new DeferredWindowService();
     const first = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -326,7 +346,7 @@ describe('useLauncherPresentation', () => {
       await Promise.resolve();
     });
     first.rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(120));
+    await act(async () => first.result.current.onWorkspaceExitComplete());
     first.unmount();
     act(() => windowService.rejectShow('collapsed', new Error('Detached collapse failed')));
     await act(async () => { await Promise.resolve(); });
@@ -336,7 +356,7 @@ describe('useLauncherPresentation', () => {
     expect(useLauncherStore.getState().mode).toBe('collapsed');
 
     const second = renderHook(
-      () => useLauncherPresentation({hasContent: false, reducedMotion: false, windowService}),
+      () => useLauncherPresentation({hasContent: false, windowService}),
     );
     expect(windowService.calls).toEqual(['expanded', 'collapsed', 'collapsed']);
 
@@ -351,7 +371,7 @@ describe('useLauncherPresentation', () => {
     vi.useFakeTimers();
     const windowService = new DeferredWindowService();
     const first = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -360,11 +380,11 @@ describe('useLauncherPresentation', () => {
       await Promise.resolve();
     });
     first.rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(120));
+    await act(async () => first.result.current.onWorkspaceExitComplete());
     first.unmount();
 
     const second = renderHook(
-      () => useLauncherPresentation({hasContent: false, reducedMotion: false, windowService}),
+      () => useLauncherPresentation({hasContent: false, windowService}),
     );
     act(() => windowService.rejectShow('collapsed', new Error('Stale collapse failed')));
     await act(async () => { await Promise.resolve(); });
@@ -387,7 +407,7 @@ describe('useLauncherPresentation', () => {
     const windowService = new DeferredWindowService();
     const hideOperation = windowService.deferHide();
     const first = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -396,11 +416,11 @@ describe('useLauncherPresentation', () => {
       await Promise.resolve();
     });
     first.rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(120));
+    await act(async () => first.result.current.onWorkspaceExitComplete());
     first.unmount();
 
     const second = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: false}},
     );
     act(() => windowService.rejectShow('collapsed', new Error('Detached collapse failed')));
@@ -434,7 +454,7 @@ describe('useLauncherPresentation', () => {
     const windowService = new DeferredWindowService();
     const hideOperation = windowService.deferHide();
     const first = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -443,11 +463,11 @@ describe('useLauncherPresentation', () => {
       await Promise.resolve();
     });
     first.rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(120));
+    await act(async () => first.result.current.onWorkspaceExitComplete());
     first.unmount();
 
     const second = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: false}},
     );
     act(() => windowService.rejectShow('collapsed', new Error('Detached collapse failed')));
@@ -485,7 +505,7 @@ describe('useLauncherPresentation', () => {
     const windowService = new DeferredWindowService();
     const hideOperation = windowService.deferHide();
     const first = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -494,11 +514,11 @@ describe('useLauncherPresentation', () => {
       await Promise.resolve();
     });
     first.rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(120));
+    await act(async () => first.result.current.onWorkspaceExitComplete());
     first.unmount();
 
     const stale = renderHook(
-      () => useLauncherPresentation({hasContent: false, reducedMotion: false, windowService}),
+      () => useLauncherPresentation({hasContent: false, windowService}),
     );
     act(() => windowService.rejectShow('collapsed', new Error('Detached collapse failed')));
     await act(async () => { await Promise.resolve(); });
@@ -508,7 +528,7 @@ describe('useLauncherPresentation', () => {
 
     stale.unmount();
     const current = renderHook(
-      () => useLauncherPresentation({hasContent: true, reducedMotion: false, windowService}),
+      () => useLauncherPresentation({hasContent: true, windowService}),
     );
     expect(windowService.calls).toEqual(['expanded', 'collapsed', 'collapsed']);
 
@@ -536,7 +556,7 @@ describe('useLauncherPresentation', () => {
     vi.useFakeTimers();
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -553,16 +573,16 @@ describe('useLauncherPresentation', () => {
     await act(async () => vi.advanceTimersByTimeAsync(119));
     expect(windowService.calls).toEqual(['expanded']);
 
-    await act(async () => vi.advanceTimersByTimeAsync(1));
+    await act(async () => result.current.onWorkspaceExitComplete());
     expect(windowService.calls).toEqual(['expanded', 'collapsed']);
     expect(useLauncherStore.getState().mode).toBe('collapsed');
   });
 
-  it('uses no close delay when reduced motion is enabled', async () => {
+  it('accepts immediate exit completion without a timer', async () => {
     vi.useFakeTimers();
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: true, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -573,7 +593,7 @@ describe('useLauncherPresentation', () => {
     expect(result.current.expanded).toBe(true);
 
     rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(0));
+    await act(async () => result.current.onWorkspaceExitComplete());
 
     expect(result.current.expanded).toBe(false);
     expect(windowService.calls).toEqual(['expanded', 'collapsed']);
@@ -583,7 +603,7 @@ describe('useLauncherPresentation', () => {
     vi.useFakeTimers();
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -608,7 +628,7 @@ describe('useLauncherPresentation', () => {
   it('reconciles a clear that arrives while native expansion is pending back to collapsed bounds', async () => {
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: false}},
     );
 
@@ -635,7 +655,7 @@ describe('useLauncherPresentation', () => {
     vi.useFakeTimers();
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -644,7 +664,7 @@ describe('useLauncherPresentation', () => {
       await Promise.resolve();
     });
     rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(120));
+    await act(async () => result.current.onWorkspaceExitComplete());
     rerender({hasContent: true});
     expect(windowService.calls).toEqual(['expanded', 'collapsed']);
 
@@ -666,7 +686,7 @@ describe('useLauncherPresentation', () => {
     vi.useFakeTimers();
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: true}},
     );
 
@@ -675,7 +695,7 @@ describe('useLauncherPresentation', () => {
       await Promise.resolve();
     });
     rerender({hasContent: false});
-    await act(async () => vi.advanceTimersByTimeAsync(120));
+    await act(async () => result.current.onWorkspaceExitComplete());
     act(() => windowService.rejectShow('collapsed', new Error('Native collapse unavailable')));
 
     await act(async () => {
@@ -695,7 +715,7 @@ describe('useLauncherPresentation', () => {
   it('reports failed native presentation without retaining an expanded workspace', async () => {
     const windowService = new DeferredWindowService();
     const {result, rerender} = renderHook(
-      ({hasContent}) => useLauncherPresentation({hasContent, reducedMotion: false, windowService}),
+      ({hasContent}) => useLauncherPresentation({hasContent, windowService}),
       {initialProps: {hasContent: false}},
     );
 

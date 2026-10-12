@@ -113,6 +113,31 @@ test('keeps 10,000 results virtualized and selection responsive', async ({page})
   await expect(page.locator('[data-result-id][data-selected="true"]')).toHaveCount(1);
 });
 
+test('a rapid 10,000-result selection burst mounts its latest target and preserves query focus', async ({page}) => {
+  await page.goto('/?service=memory');
+  const search = page.getByRole('searchbox', {name: 'Search files'});
+  await search.fill('large-set');
+  await expect(page.getByRole('grid', {name: 'Search results'})).toHaveAttribute('aria-rowcount', '10000');
+  await expect(page.locator('[data-result-id]').first()).toBeVisible();
+  const duration = await search.evaluate((element) => {
+    const started = performance.now();
+    for (let index = 0; index < 30; index += 1) element.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true, cancelable: true}));
+    return performance.now() - started;
+  });
+  expect(duration).toBeLessThan(16);
+  const selected = page.locator('[data-result-id][data-selected="true"]');
+  await expect(selected).toHaveCount(1);
+  await expect(selected).toBeInViewport();
+  await expect(selected).toHaveAttribute('data-result-id', 'large-30');
+  await expect(search).toBeFocused();
+  expect(await page.locator('[data-result-id]').count()).toBeLessThan(40);
+  const capsule = page.locator('[data-selection-capsule]');
+  await expect.poll(async () => {
+    const [row, highlight] = await Promise.all([selected.boundingBox(), capsule.boundingBox()]);
+    return Math.abs((row?.y ?? Infinity) - (highlight?.y ?? 0));
+  }).toBeLessThanOrEqual(1);
+});
+
 test('renders light, dark, opaque, high-contrast, and reduced-motion states', async ({page}, testInfo) => {
   await page.goto('/?service=memory');
   const application = page.getByRole('application', {name: 'Lumen'});

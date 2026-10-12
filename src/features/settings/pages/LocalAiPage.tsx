@@ -62,11 +62,15 @@ function formatDiskSize(bytes: number) {
 export function LocalAiPage({
   model,
   provisioningService = defaultProvisioningService,
+  aiService = nativeAiService,
+  nativeRuntime,
 }: {
   model?: Pick<LocalAiViewModel, 'hardware' | 'state'> & Partial<LocalAiViewModel>;
   provisioningService?: ProvisioningService;
+  aiService?: Pick<typeof nativeAiService, 'localRuntimeHealth' | 'setLocalRuntimeMode'>;
+  nativeRuntime?: boolean;
 }) {
-  const native = isNativeRuntime();
+  const native = nativeRuntime ?? isNativeRuntime();
   const storedHardware = useGatewayStore((state) => state.hardwareState);
   const storedModel = useGatewayStore((state) => state.modelState);
   const storedProgress = useGatewayStore((state) => state.modelProgress);
@@ -83,6 +87,8 @@ export function LocalAiPage({
   const mounted = useRef(false);
   const runtimeRevision = useRef(0);
   const healthRevision = useRef(0);
+  const provisioningRevision = useRef(0);
+  const provisioningAction = useRef<'start' | 'cancel' | null>(null);
   useEffect(() => {
     mounted.current = true;
     const unsubscribe = useSettingsStore.subscribe((state) => state.ai, (next, previous) => {
@@ -95,6 +101,8 @@ export function LocalAiPage({
       mounted.current = false;
       runtimeRevision.current += 1;
       healthRevision.current += 1;
+      provisioningRevision.current += 1;
+      provisioningAction.current = null;
       unsubscribe();
     };
   }, [model, native]);
@@ -102,7 +110,7 @@ export function LocalAiPage({
     if (!native || model) return;
     const revision = ++healthRevision.current;
     try {
-      const health = await nativeAiService.localRuntimeHealth();
+      const health = await aiService.localRuntimeHealth();
       if (!mounted.current || revision !== healthRevision.current) return;
       setNativeHealth(health);
       setNativeError('');
@@ -110,7 +118,7 @@ export function LocalAiPage({
       if (!mounted.current || revision !== healthRevision.current) return;
       setNativeError(error instanceof Error ? error.message : String(error));
     }
-  }, [model, native]);
+  }, [aiService, model, native]);
   useEffect(() => {
     void refreshNative();
     return () => { healthRevision.current += 1; };
@@ -120,7 +128,7 @@ export function LocalAiPage({
     const revision = ++runtimeRevision.current;
     const application = useSettingsStore.getState().beginLocalRuntimeApplication(runtimeMode, keepWarm);
     try {
-      await nativeAiService.setLocalRuntimeMode(runtimeMode, keepWarm);
+      await aiService.setLocalRuntimeMode(runtimeMode, keepWarm);
       if (!mounted.current || revision !== runtimeRevision.current) return;
       useSettingsStore.getState().finishLocalRuntimeApplication(application, null);
       await refreshNative();
@@ -132,14 +140,16 @@ export function LocalAiPage({
   };
   useEffect(() => {
     if (!native || model) return;
+    const revision = ++provisioningRevision.current;
+    provisioningAction.current = null;
     let current = true;
     let unlisten: (() => void) | undefined;
     void provisioningService.status()
       .then((status) => {
-        if (current) setProvisioning(status);
+        if (current && revision === provisioningRevision.current) setProvisioning(status);
       })
       .catch((error) => {
-        if (current) setProvisioningError(error instanceof Error ? error.message : String(error));
+        if (current && revision === provisioningRevision.current) setProvisioningError(error instanceof Error ? error.message : String(error));
       });
     void provisioningService.subscribe((status) => {
       if (current) setProvisioning(status);
@@ -149,6 +159,8 @@ export function LocalAiPage({
     }).catch(() => undefined);
     return () => {
       current = false;
+      provisioningRevision.current += 1;
+      provisioningAction.current = null;
       unlisten?.();
     };
   }, [model, native, provisioningService]);
@@ -172,21 +184,35 @@ export function LocalAiPage({
   const hardware = hardwareCopy[view.hardware];
   const state = modelCopy[view.state];
   const startProvisioning = () => {
-    if (!provisioning) return;
+    if (!provisioning || provisioningAction.current || (!provisioning.canDownload && !provisioning.canUpdate)) return;
+    const revision = ++provisioningRevision.current;
+    provisioningAction.current = 'start';
     setProvisioningError('');
     setProvisioning({...provisioning, state: 'working', canDownload: false, canUpdate: false, canCancel: true});
     void provisioningService.start('local-core')
       .then((status) => {
+        if (!mounted.current || revision !== provisioningRevision.current) return;
         setProvisioning(status);
         return refreshNative();
       })
-      .catch((error) => setProvisioningError(error instanceof Error ? error.message : String(error)));
+      .catch((error) => {
+        if (mounted.current && revision === provisioningRevision.current) setProvisioningError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => { if (revision === provisioningRevision.current) provisioningAction.current = null; });
   };
   const cancelProvisioning = () => {
+    if (!provisioning?.canCancel || provisioningAction.current === 'cancel') return;
+    const revision = ++provisioningRevision.current;
+    provisioningAction.current = 'cancel';
+    setProvisioningError('');
     void provisioningService.cancel()
-      .then(setProvisioning)
-      .catch((error) => setProvisioningError(error instanceof Error ? error.message : String(error)));
+      .then((status) => { if (mounted.current && revision === provisioningRevision.current) setProvisioning(status); })
+      .catch((error) => { if (mounted.current && revision === provisioningRevision.current) setProvisioningError(error instanceof Error ? error.message : String(error)); })
+      .finally(() => { if (revision === provisioningRevision.current) provisioningAction.current = null; });
   };
+
+  const provisioningFeedback = provisioningError ||
+    (provisioning?.state === 'failed' || provisioning?.state === 'cancelled' ? provisioning.detail : '');
 
   return (
     <SettingsPage>
@@ -205,8 +231,9 @@ export function LocalAiPage({
           ? 'The local runtime settings could not be applied. Wait for current preparation to finish, then retry.'
           : nativeHealth
           ? `${nativeHealth.profile} · ${nativeHealth.accelerator}. ${nativeHealth.detail ?? 'The loopback provider is ready.'}`
-          : nativeError || provisioningError || provisioning?.detail || 'Exact filename and content search remain independent of local inference.'}
+          : nativeError || (!provisioningFeedback && provisioning?.detail) || 'Exact filename and content search remain independent of local inference.'}
       </SettingsCallout>
+      {provisioningFeedback ? <SettingsCallout tone={provisioningError || provisioning?.state === 'failed' ? 'error' : 'info'}>{provisioningFeedback}</SettingsCallout> : null}
       <SettingSection title="Model and provider">
         <SettingRow
           label={view.modelName}

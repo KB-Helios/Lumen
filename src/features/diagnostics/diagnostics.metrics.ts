@@ -27,6 +27,7 @@ export function captureLog(message: string) {
   trim(logs);
 }
 
+// Historical name: the endpoint is the next actual rAF callback, before presentation.
 export function measureAfterPaint(name: TimingSample['name'], startedAt: number) {
   let cancelled = false;
   const finish = () => {
@@ -75,7 +76,7 @@ export function readDiagnosticMetrics() {
     browserLongTasks: browserLongTasks.slice(),
     logs: logs.slice(),
     reactCommits: reactCommits.slice(),
-    reactCommitMs: reactCommits[reactCommits.length - 1] ?? 0,
+    reactCommitMs: reactCommits[reactCommits.length - 1] ?? null,
   };
 }
 

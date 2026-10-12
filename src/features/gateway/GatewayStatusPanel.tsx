@@ -11,7 +11,7 @@ const stateCopy: Record<GatewayState, {label: string; description: string; tone:
   unavailable: {label: 'Unavailable', description: 'AI routes are unavailable; local search is unaffected.', tone: 'warning'},
 };
 
-export function GatewayStatusPanel({state, onRestart}: {state: GatewayState; onRestart(): void}) {
+export function GatewayStatusPanel({isDisabled, state, onRestart}: {isDisabled?: boolean; state: GatewayState; onRestart(): void}) {
   const copy = stateCopy[state];
   const stateIcon: LumenUiIconName = copy.tone === 'success' ? 'success' : copy.tone === 'warning' ? 'error' : 'refresh';
   return (
@@ -24,7 +24,7 @@ export function GatewayStatusPanel({state, onRestart}: {state: GatewayState; onR
         </div>
         <LumenText tone="tertiary" variant="meta">{copy.description}</LumenText>
       </div>
-      <LumenButton aria-label="Restart AgentGateway" className="col-span-full justify-self-start @min-[34rem]/settings:col-auto" size="small" onPress={onRestart}>Restart</LumenButton>
+      <LumenButton isDisabled={isDisabled} aria-label="Restart AgentGateway" className="col-span-full justify-self-start @min-[34rem]/settings:col-auto" size="small" onPress={onRestart}>Restart</LumenButton>
     </section>
   );
 }

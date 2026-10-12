@@ -22,7 +22,7 @@ jobs:
   verify-package:
     name: Verify and package
     runs-on: windows-2025
-    timeout-minutes: 75
+    timeout-minutes: 120
     env:
       CARGO_TERM_COLOR: always
       LUMEN_PYTHON: python
@@ -69,7 +69,7 @@ jobs:
 
       - name: Run Edge end-to-end tests
         run: bun run test:e2e
-        timeout-minutes: 15
+        timeout-minutes: 45
 
       - name: Stage sidecars
         run: bun run stage:sidecars

@@ -21,6 +21,30 @@ async function captureScreenshot(page, options) {
 }
 
 async function waitForScenario(page, scenario) {
+  const onboardingTitle = {
+    'onboarding-welcome': 'Everything, within reach',
+    'onboarding-root': 'Choose one place to start',
+    'onboarding-shortcut': 'Make search a reflex',
+    'onboarding-choices': 'Choose how answers run',
+  }[scenario.id];
+  if (onboardingTitle) {
+    await page.waitForFunction((title) => {
+      const scenes = document.querySelectorAll('[data-testid="onboarding-scene"]');
+      return scenes.length === 1
+        && scenes[0].querySelector('h1')?.textContent === title
+        && globalThis.getComputedStyle(scenes[0]).opacity === '1';
+    }, onboardingTitle, {timeout: 5000});
+  }
+  if (['providers-add', 'providers-edit', 'providers-remove'].includes(scenario.id)) await page.getByRole('dialog').waitFor();
+  if (scenario.id === 'providers-populated') {
+    const edit = page.getByRole('button', {name: /^Edit simulated-long/});
+    await edit.waitFor();
+    // Include the entire saved-profile row in the existing panel viewport.
+    await edit.locator('..').locator('..').scrollIntoViewIfNeeded();
+  }
+  if (scenario.id === 'providers-error') await page.getByRole('alert').waitFor();
+  if (scenario.id === 'local-runtime-provisioning') await page.getByRole('button', {name: 'Cancel local core download'}).waitFor();
+  if (['local-runtime-error', 'local-runtime-cancelled'].includes(scenario.id)) await page.getByRole('button', {name: 'Download local core'}).waitFor();
   const grid = page.getByRole('grid', {name: 'Search results'});
   if (await grid.count() > 0) {
     const count = Number(await grid.getAttribute('aria-rowcount'));

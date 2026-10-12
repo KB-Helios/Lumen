@@ -27,6 +27,32 @@ test('the dedicated profile preserves strict 240 Hz results beside its observed-
   assert.match(performanceProfile, /environmentEligibility/);
 });
 
+test('next-frame input and ordinary commits cannot be reported as assumed zero measurements', () => {
+  for (const source of [performanceSpec, performanceProfile]) {
+    assert.match(source, /input-next-frame/);
+    assert.match(source, /ordinaryReactCommits/);
+    assert.match(source, /ordinaryReactCommits\.length/);
+  }
+  assert.match(performanceProfile, /strict120Hz/);
+  assert.match(performanceProfile, /frameIntervalMs: refresh\.intervals/);
+});
+
+test('timed samples are complete before the separate trace study starts', () => {
+  assert.ok(performanceProfile.indexOf('await context.tracing.start') > performanceProfile.indexOf('await writeFile(summaryPath'));
+  assert.match(performanceProfile, /timedPhaseTracing: false/);
+  assert.match(performanceProfile, /SystemInfo\.getInfo/);
+  assert.match(performanceProfile, /LUMEN_PROFILE_OUTPUT_DIR/);
+});
+
+test('selection alignment and hidden settling retain measured zero-activity gates', () => {
+  assert.match(performanceProfile, /selectionAlignmentErrorPx/);
+  assert.match(performanceProfile, /hiddenAnimations/);
+  assert.match(performanceProfile, /hiddenActivityIndicators/);
+  assert.match(performanceProfile, /selectionAlignmentErrorPx <= 1/);
+  assert.match(performanceProfile, /hiddenAnimations === 0/);
+  assert.match(performanceProfile, /hiddenActivityIndicators === 0/);
+});
+
 test('hover uses paired frame intervals and an independent synchronous dispatch guard in both runners', () => {
   const e2eHover = performanceSpec.split("test('hover, idle work")[1] ?? '';
   const profileHover = performanceProfile.split('const hoverSamples = []')[1] ?? '';

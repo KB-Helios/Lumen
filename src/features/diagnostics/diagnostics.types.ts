@@ -1,5 +1,5 @@
 export interface TimingSample {
-  name: 'launcher-visible' | 'input-response' | 'selection-paint' | 'other';
+  name: 'launcher-visible' | 'input-response' | 'input-next-frame' | 'selection-paint' | 'other';
   durationMs: number;
   timestamp: number;
 }
@@ -10,9 +10,9 @@ export interface DiagnosticsSnapshot {
   tauriVersion: string;
   monitor: string;
   dpiScale: number;
-  refreshRateHz: number;
+  refreshRateHz: number | null;
   activeAnimations: number;
-  reactCommitMs: number;
+  reactCommitMs: number | null;
   reactCommits: number[];
   browserLongTasks: number[];
   timings: TimingSample[];
