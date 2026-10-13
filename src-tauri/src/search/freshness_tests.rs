@@ -341,6 +341,91 @@ fn enrichment_results_recheck_generation_roots_consent_pause_and_stop() {
 }
 
 #[test]
+fn task_2a_review_activity_resume_reaches_lifecycle_sync_and_dispatch_without_ipc() {
+    use crate::{
+        activity::{ActivityPolicy, ActivityRuntime, ObservedActivity},
+        gateway::EnrichmentSupervisor,
+        local_http_tests as http,
+    };
+    use std::{
+        net::TcpListener,
+        sync::{Arc, Mutex},
+    };
+    let (fixture, runtime, mut roots) = manual_setup("autonomous-activity-resume");
+    fixture.file("scan.png", b"synthetic-image");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    let observed = Arc::new(Mutex::new(ObservedActivity {
+        fullscreen: true,
+        ..Default::default()
+    }));
+    let source = observed.clone();
+    let activity = ActivityRuntime::with_observer(
+        &fixture.root().join("missing-owned-settings.json"),
+        Arc::new(move || source.lock().unwrap().clone()),
+    );
+    let queue = EnrichmentSupervisor::new(
+        PathBuf::from("unused"),
+        PathBuf::from("unused"),
+        fixture.root().join("owned-queue"),
+    )
+    .unwrap();
+    assert!(!crate::search::enrichment::observe_background_activity(
+        &runtime, &queue, &activity
+    ));
+    assert!(queue.is_paused());
+    assert!(!runtime.observe_lifecycle_activity(&activity, &queue));
+    assert!(!runtime.work.content_enabled.load(Ordering::SeqCst));
+    // No provider was dispatched: this isolates activity gates from legitimate unknown-usage holds.
+    observed.lock().unwrap().fullscreen = false;
+    tauri::async_runtime::block_on(async {
+        tokio::time::sleep(Duration::from_secs(
+            ActivityPolicy::default().resume_delay_seconds,
+        ))
+        .await;
+        let server = http::server_at(
+            TcpListener::bind(("127.0.0.1", queue.health().control_port)).unwrap(),
+            http::json(r#"{"accepted":true}"#),
+            Duration::ZERO,
+        );
+        assert!(runtime.observe_lifecycle_activity(&activity, &queue));
+        assert!(runtime.work.content_enabled.load(Ordering::SeqCst));
+        let queue_ready = runtime.sync_enrichment_queue(&queue).await;
+        let request = server.join().unwrap();
+        assert!(
+            queue_ready,
+            "Normal lifecycle must clear stale activity pause before queue sync"
+        );
+        assert!(!queue.is_paused());
+        let body = request
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        let submitted: serde_json::Value = serde_json::from_slice(&request[body..]).unwrap();
+        assert_eq!(submitted["idempotencyKey"], job.idempotency_key);
+        assert!(runtime.enrichment_dispatch_is_admitted(&job).unwrap());
+        assert!(crate::search::enrichment::observe_background_activity(
+            &runtime, &queue, &activity
+        ));
+        assert!(runtime.enrichment_is_current(runtime.current_generation()));
+        queue.pause();
+        assert!(
+            runtime.observe_lifecycle_activity(&activity, &queue),
+            "Cloud queue user pause does not disable local content work"
+        );
+        assert!(
+            queue.is_paused(),
+            "Native observation must preserve explicit queue pause"
+        );
+        assert!(!runtime.sync_enrichment_queue(&queue).await);
+    });
+}
+
+#[test]
 fn admitted_enrichment_result_is_searchable_without_waiting_for_reindexing() {
     let (fixture, runtime, mut roots) = manual_setup("enrichment-admitted-result");
     fixture.file("scan.png", b"synthetic-image");

@@ -784,33 +784,21 @@ impl IndexRuntime {
         let runtime = self.clone();
         tauri::async_runtime::spawn(async move {
             while !runtime.work.stop.load(Ordering::SeqCst) {
-                let enabled = app.state::<ActivityRuntime>().snapshot().background_policy
-                    == BackgroundPolicy::Normal;
-                runtime.set_content_enabled(enabled);
+                let enabled = runtime.observe_lifecycle_activity(
+                    app.state::<ActivityRuntime>().inner(),
+                    app.state::<crate::gateway::EnrichmentSupervisor>().inner(),
+                );
                 if enabled && runtime.work.configured.load(Ordering::SeqCst) {
                     let model =
                         embedding::active_model_key(app.state::<ProviderRegistry>().inner());
                     if runtime.queue_embedding_jobs(&model).is_ok() {
                         schedule_embedding_worker(app.clone(), runtime.clone());
                     }
-                    let mut queue_ready = true;
-                    if let Ok(jobs) = runtime.pending_enrichment() {
-                        for job in jobs {
-                            // Earlier submissions may await HTTP; revalidate each remaining job's
-                            // current grant and queued hash immediately before its own dispatch.
-                            if runtime
-                                .enrichment_dispatch_is_admitted(&job)
-                                .unwrap_or(false)
-                                && !app
-                                    .state::<crate::gateway::EnrichmentSupervisor>()
-                                    .sync_jobs(std::slice::from_ref(&job))
-                                    .await
-                            {
-                                queue_ready = false;
-                                break;
-                            }
-                        }
-                    }
+                    let queue_ready = runtime
+                        .sync_enrichment_queue(
+                            app.state::<crate::gateway::EnrichmentSupervisor>().inner(),
+                        )
+                        .await;
                     if queue_ready
                         && let Err(error) = super::enrichment::process_one(&app, &runtime).await
                     {
@@ -820,6 +808,30 @@ impl IndexRuntime {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         });
+    }
+
+    fn observe_lifecycle_activity(
+        &self,
+        activity: &ActivityRuntime,
+        queue: &crate::gateway::EnrichmentSupervisor,
+    ) -> bool {
+        super::enrichment::observe_background_activity(self, queue, activity);
+        // Explicit cloud-queue pause still permits local content/embedding work.
+        self.work.content_enabled.load(Ordering::SeqCst)
+    }
+
+    async fn sync_enrichment_queue(&self, queue: &crate::gateway::EnrichmentSupervisor) -> bool {
+        if let Ok(jobs) = self.pending_enrichment() {
+            for job in jobs {
+                // Earlier submissions may await HTTP; revalidate each job's current grant and hash.
+                if self.enrichment_dispatch_is_admitted(&job).unwrap_or(false)
+                    && !queue.sync_jobs(std::slice::from_ref(&job)).await
+                {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     fn begin_embedding_worker(&self) -> bool {
