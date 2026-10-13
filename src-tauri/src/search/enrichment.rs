@@ -225,12 +225,25 @@ struct Accepted {
     accepted: bool,
 }
 
+pub(super) fn observe_background_activity(
+    index: &IndexRuntime,
+    queue: &EnrichmentSupervisor,
+    activity: &crate::activity::ActivityRuntime,
+) -> bool {
+    let enabled =
+        activity.snapshot().background_policy == crate::activity::BackgroundPolicy::Normal;
+    index.set_content_enabled(enabled);
+    queue.set_activity_paused(!enabled);
+    enabled && !queue.is_paused()
+}
+
 pub(super) async fn process_one(
     app: &tauri::AppHandle,
     index: &IndexRuntime,
 ) -> Result<(), String> {
     let queue = app.state::<EnrichmentSupervisor>();
-    if queue.is_paused() {
+    let activity = app.state::<crate::activity::ActivityRuntime>();
+    if !observe_background_activity(index, queue.inner(), activity.inner()) {
         return Ok(());
     }
     let jobs = index.pending_enrichment().map_err(|e| e.message)?;
@@ -309,35 +322,62 @@ pub(super) async fn process_one(
                     }
         })
         .ok_or("Enrichment route is unavailable.")?;
-    let provider = execute_provider(gateway.inner(), &route, &path, &bytes, audio, || {
-        !queue.is_paused()
+    let admitted = || {
+        observe_background_activity(index, queue.inner(), activity.inner())
             && index.enrichment_is_current(generation)
             && registry.routes().contains(&route)
-            && index
-                .enrichment_dispatch_is_admitted(&lease.job)
-                .unwrap_or(false)
+    };
+    let provider = execute_provider(gateway.inner(), &route, &path, &bytes, audio, || {
+        index
+            .enrichment_dispatch_is_admitted(&lease.job)
+            .unwrap_or(false)
+            && admitted()
     });
-    tokio::pin!(provider);
+    consume_lease(
+        index,
+        queue.inner(),
+        &lease,
+        generation,
+        &route,
+        provider,
+        admitted,
+    )
+    .await
+}
+
+pub(super) async fn consume_lease(
+    index: &IndexRuntime,
+    queue: &EnrichmentSupervisor,
+    lease: &EnrichmentLease,
+    generation: u64,
+    route: &AppliedRoute,
+    provider: impl std::future::Future<Output = Result<String, String>>,
+    admitted: impl Fn() -> bool,
+) -> Result<(), String> {
+    let finish = |status: &str| serde_json::json!({"idempotencyKey":lease.job.idempotency_key,"generation":lease.generation,"status":status});
     let mut heartbeat = tokio::time::interval(Duration::from_secs(10));
     heartbeat.tick().await;
     let mut cancellation = tokio::time::interval(Duration::from_millis(200));
-    let result = loop {
-        tokio::select! {
-            result = &mut provider => break result,
-            _ = heartbeat.tick() => {
-                let response: Accepted = queue.enrichment_request("heartbeat", &serde_json::json!({"idempotencyKey":lease.job.idempotency_key,"generation":lease.generation})).await?;
-                if !response.accepted { return Err("Enrichment lease expired.".into()); }
-            },
-            _ = cancellation.tick() => {
-                if queue.is_paused() || !index.enrichment_is_current(generation) || !registry.routes().contains(&route) {
-                    queue.enrichment_request::<Accepted>("finish", &finish("deferred")).await?;
-                    return Ok(());
+    let result = {
+        tokio::pin!(provider);
+        loop {
+            tokio::select! {
+                result = &mut provider => break result,
+                _ = heartbeat.tick() => {
+                    let response: Accepted = queue.enrichment_request("heartbeat", &serde_json::json!({"idempotencyKey":lease.job.idempotency_key,"generation":lease.generation})).await?;
+                    if !response.accepted { return Err("Enrichment lease expired.".into()); }
+                },
+                _ = cancellation.tick() => {
+                    if !admitted() {
+                        break Err("Enrichment dispatch was cancelled.".into());
+                    }
                 }
             }
         }
     };
+    let current = admitted();
     let status = match result {
-        Ok(text) if !queue.is_paused() && registry.routes().contains(&route) => {
+        Ok(text) if current => {
             if index
                 .commit_enrichment(
                     generation,
@@ -360,13 +400,7 @@ pub(super) async fn process_one(
         {
             "deferred"
         }
-        Err(_)
-            if queue.is_paused()
-                || !index.enrichment_is_current(generation)
-                || !registry.routes().contains(&route) =>
-        {
-            "deferred"
-        }
+        Err(_) if !current => "deferred",
         Err(_) => {
             if lease.attempts >= 3 {
                 index

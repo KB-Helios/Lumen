@@ -131,6 +131,173 @@ fn enrichment_admission_refuses_changed_bytes_before_watcher_metadata_update() {
 }
 
 #[test]
+fn task_2a_review_native_activity_cancels_pending_provider_and_neutrally_releases_lease() {
+    use crate::{
+        activity::{ActivityRuntime, BackgroundPolicy, ObservedActivity},
+        gateway::{EnrichmentSupervisor, registry::ProviderRegistry},
+        local_http_tests as http,
+    };
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::{Arc, Mutex, atomic::AtomicBool},
+    };
+    struct Dropped(Arc<AtomicBool>);
+    impl Drop for Dropped {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    for restriction in ["fullscreen", "game", "battery"] {
+        let (fixture, runtime, mut roots) = manual_setup("autonomous-activity-cancellation");
+        fixture.file("scan.png", b"synthetic-image");
+        roots[0].cloud_enrichment = true;
+        runtime.configure_roots(roots, true).unwrap();
+        runtime.reconcile_inventory(false).unwrap();
+        runtime.extract_pending().unwrap();
+        let lease = crate::search::enrichment::EnrichmentLease {
+            job: runtime.pending_enrichment().unwrap().remove(0),
+            generation: 1,
+            attempts: 1,
+        };
+        let generation = runtime.current_generation();
+        let settings = fixture.file("owned-settings.json", serde_json::json!({"management":{"activity":{"userGames":[{"identityHash":"a".repeat(64)}]}}}).to_string().as_bytes());
+        let observed = Arc::new(Mutex::new(ObservedActivity::default()));
+        let source = observed.clone();
+        let activity = ActivityRuntime::with_observer(
+            &settings,
+            Arc::new(move || source.lock().unwrap().clone()),
+        );
+        assert_eq!(
+            activity.snapshot().background_policy,
+            BackgroundPolicy::Normal
+        );
+        let queue = EnrichmentSupervisor::new(
+            PathBuf::from("unused"),
+            PathBuf::from("unused"),
+            fixture.root().join("owned-queue"),
+        )
+        .unwrap();
+        let queue_server = http::server_at(
+            TcpListener::bind(("127.0.0.1", queue.health().control_port)).unwrap(),
+            http::json(r#"{"accepted":true}"#),
+            Duration::ZERO,
+        );
+        let registry = ProviderRegistry::in_memory();
+        let route = registry
+            .routes()
+            .into_iter()
+            .find(|route| route.alias == "lumen.vision.cloud")
+            .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let (entered, ready) = tokio::sync::oneshot::channel();
+        let (release, wait) = std::sync::mpsc::sync_channel(1);
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0; 4096];
+            assert!(stream.read(&mut request).unwrap() > 0);
+            entered.send(()).unwrap();
+            let _ = wait.recv_timeout(Duration::from_secs(5));
+            let _ = stream.write_all(&http::json(r#"{"text":"restrictedactivityquasar"}"#));
+        });
+        let completed = Arc::new(AtomicBool::new(false));
+        let dropped = Arc::new(AtomicBool::new(false));
+        let guard = Dropped(dropped.clone());
+        tauri::async_runtime::block_on(async {
+            let provider = async {
+                let _guard = guard;
+                let client = crate::local_http::client(Duration::from_secs(60))
+                    .map_err(|error| error.message("fixture"))
+                    .unwrap();
+                let response: serde_json::Value = crate::local_http::json(
+                    client
+                        .post(endpoint)
+                        .json(&serde_json::json!({"source":"owned-synthetic"})),
+                )
+                .await
+                .map_err(|error| error.message("fixture"))?;
+                completed.store(true, Ordering::SeqCst);
+                Ok(response["text"].as_str().unwrap().to_owned())
+            };
+            let consume = crate::search::enrichment::consume_lease(
+                &runtime,
+                &queue,
+                &lease,
+                generation,
+                &route,
+                provider,
+                || {
+                    crate::search::enrichment::observe_background_activity(
+                        &runtime, &queue, &activity,
+                    ) && runtime.enrichment_is_current(generation)
+                },
+            );
+            let transition = async {
+                tokio::time::timeout(Duration::from_secs(5), ready)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                {
+                    let mut changed = observed.lock().unwrap();
+                    match restriction {
+                        "fullscreen" => changed.fullscreen = true,
+                        "game" => changed.identity_hash = Some("a".repeat(64)),
+                        "battery" => changed.on_battery = true,
+                        _ => unreachable!(),
+                    }
+                }
+                assert_eq!(
+                    activity.snapshot().background_policy,
+                    BackgroundPolicy::Paused
+                );
+                tokio::time::sleep(Duration::from_millis(600)).await;
+                release.send(()).unwrap();
+            };
+            let (result, ()) = tokio::join!(consume, transition);
+            result.unwrap();
+        });
+        server.join().unwrap();
+        let request = queue_server.join().unwrap();
+        let body = request
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        let finish: serde_json::Value = serde_json::from_slice(&request[body..]).unwrap();
+        assert!(
+            !completed.load(Ordering::SeqCst),
+            "{restriction}: pending provider must be cancelled before response"
+        );
+        assert!(dropped.load(Ordering::SeqCst));
+        assert!(
+            !runtime.work.content_enabled.load(Ordering::SeqCst),
+            "{restriction}: extraction flag must pause without activity IPC"
+        );
+        assert!(queue.is_paused());
+        assert_eq!(finish["status"], "deferred");
+        assert_eq!(finish["generation"], 1);
+        assert_eq!(finish["idempotencyKey"], lease.job.idempotency_key);
+        assert!(
+            runtime
+                .database
+                .search("restrictedactivityquasar", 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            runtime
+                .database
+                .enrichment_job_is_queued(&lease.job)
+                .unwrap()
+        );
+    }
+}
+
+#[test]
 fn enrichment_results_recheck_generation_roots_consent_pause_and_stop() {
     for invalidation in ["generation", "root", "consent", "pause", "stop", "bytes"] {
         let (fixture, runtime, mut roots) = manual_setup("enrichment-result-admission");
