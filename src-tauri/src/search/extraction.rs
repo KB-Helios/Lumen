@@ -29,7 +29,11 @@ fn failure(path: &Path, error: impl std::fmt::Display) -> ExtractionError {
     }
 }
 
-fn chunks_from_text(text: &str, extraction_kind: &str, page: Option<u32>) -> Vec<IndexedChunk> {
+pub(super) fn chunks_from_text(
+    text: &str,
+    extraction_kind: &str,
+    page: Option<u32>,
+) -> Vec<IndexedChunk> {
     let mut chunks = Vec::new();
     let mut start = 0;
     while start < text.len() {

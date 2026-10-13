@@ -116,6 +116,113 @@ fn manual_setup(label: &str) -> (SearchFixture, IndexRuntime, Vec<IndexRootReque
     (fixture, runtime, roots)
 }
 
+#[test]
+fn enrichment_admission_refuses_changed_bytes_before_watcher_metadata_update() {
+    let (fixture, runtime, mut roots) = manual_setup("enrichment-byte-admission");
+    let path = fixture.file("photo.png", b"synthetic-image-original");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    assert!(runtime.enrichment_dispatch_is_admitted(&job).unwrap());
+    std::fs::write(path, b"synthetic-image-replaced").unwrap();
+    assert!(!runtime.enrichment_dispatch_is_admitted(&job).unwrap());
+}
+
+#[test]
+fn enrichment_results_recheck_generation_roots_consent_pause_and_stop() {
+    for invalidation in ["generation", "root", "consent", "pause", "stop", "bytes"] {
+        let (fixture, runtime, mut roots) = manual_setup("enrichment-result-admission");
+        let path = fixture.file("scan.png", b"synthetic-image");
+        roots[0].cloud_enrichment = true;
+        runtime.configure_roots(roots.clone(), true).unwrap();
+        runtime.reconcile_inventory(false).unwrap();
+        runtime.extract_pending().unwrap();
+        let job = runtime.pending_enrichment().unwrap().remove(0);
+        let generation = runtime.current_generation();
+        assert!(runtime.enrichment_source(&job).unwrap().is_some());
+        match invalidation {
+            "generation" => {
+                runtime.generation.fetch_add(1, Ordering::SeqCst);
+            }
+            "root" => {
+                runtime.configure_roots(Vec::new(), true).unwrap();
+            }
+            "consent" => {
+                roots[0].cloud_enrichment = false;
+                runtime.configure_roots(roots, true).unwrap();
+            }
+            "pause" => runtime.set_content_enabled(false),
+            "stop" => runtime.work.stop.store(true, Ordering::SeqCst),
+            _ => std::fs::write(&path, b"synthetic-edited").unwrap(),
+        }
+        assert!(
+            !runtime
+                .commit_enrichment(generation, &job, "forbiddenquasar", "fixture", "fixture")
+                .unwrap(),
+            "{invalidation}"
+        );
+        assert!(
+            runtime
+                .database
+                .search("forbiddenquasar", 10)
+                .unwrap()
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn admitted_enrichment_result_is_searchable_without_waiting_for_reindexing() {
+    let (fixture, runtime, mut roots) = manual_setup("enrichment-admitted-result");
+    fixture.file("scan.png", b"synthetic-image");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    assert!(
+        runtime
+            .commit_enrichment(
+                runtime.current_generation(),
+                &job,
+                "searchablequasar",
+                "fixture",
+                "fixture"
+            )
+            .unwrap()
+    );
+    assert_eq!(
+        runtime
+            .database
+            .search("searchablequasar", 10)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn exhausted_enrichment_is_visible_as_degraded_and_preserves_file_metadata() {
+    let (fixture, runtime, mut roots) = manual_setup("enrichment-failed-status");
+    fixture.file("scan.png", b"synthetic-image");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    runtime
+        .fail_enrichment(runtime.current_generation(), &job)
+        .unwrap();
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "degraded");
+    assert_eq!(status.skipped_items, 1);
+    assert_eq!(status.queued_enrichment, 0);
+    assert_eq!(status.indexed_items, 1);
+    assert!(status.message.contains("cloud enrichment is unavailable"));
+}
+
 fn reopened_worker_preserves_unadmitted_policy(empty_policy: bool) {
     let (fixture, runtime, roots) = manual_setup("unadmitted-reopen");
     let path = fixture.file("saved.txt", b"savedquasar");

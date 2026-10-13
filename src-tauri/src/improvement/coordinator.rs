@@ -493,6 +493,7 @@ impl ImprovementRuntime {
         });
         GatewayBroker::new(
             app.state::<GatewaySupervisor>().endpoint(true),
+            app.state::<GatewaySupervisor>().enrichment_budget(),
             alias,
             self.store.clone(),
             cloud,
@@ -596,7 +597,10 @@ impl ImprovementRuntime {
                 self.advance(app, &lease).await?;
                 let evidence_digest = digest(serde_json::to_string(&evidence).map_err(|_| "Invalid evidence.")?.as_bytes());
                 let input = json!({"activeVersion":base,"evidenceDigest":evidence_digest,"configDigest":config,"failures":evidence,"developmentCases":evaluation::development_cases()});
-                let result = self.docker.run(input, cancel.clone(), probe).await?;
+                let quota_probe = probe.clone();
+                let result = self.docker.run(input, cancel.clone(), probe).await;
+                if quota_probe.budget_deferred() { return Err(crate::gateway::enrichment_budget::DEFERRED.into()); }
+                let result = result?;
                 if !self.store.phase_budget_valid(&lease.idempotency_key, "generation")? { return Err("improvement_budget_exceeded".into()); }
                 let manifest: CandidateManifest = serde_json::from_value(result.manifest).map_err(|_| "Prime returned an invalid candidate manifest.")?;
                 let active = self.active.lock().map_err(|_| "Improvement state is busy.")?;
@@ -610,7 +614,9 @@ impl ImprovementRuntime {
             self.phase(id, "evaluation", channel);
             self.store.mark(&candidate.id, CandidateStatus::Evaluating)?;
             let broker = match evaluation_broker { Some(broker) => broker, None => self.broker(app, &config, cancel.clone(), &lease.idempotency_key, "evaluation")? };
+            let quota_probe = broker.clone();
             let mut report = evaluation::evaluate(&candidate, &base, broker, cancel.clone()).await;
+            if quota_probe.budget_deferred() { return Err(crate::gateway::enrichment_budget::DEFERRED.into()); }
             if !self.store.phase_budget_valid(&lease.idempotency_key, "evaluation")? { report.budget_exceeded = true; report.complete = false; }
             // Fresh fence before publishing; never hold an admission lock during model work.
             self.advance(app, &lease).await?;
@@ -630,11 +636,15 @@ impl ImprovementRuntime {
             .as_ref()
             .err()
             .is_some_and(|error| error == super::docker::CLEANUP_UNCERTAIN);
+        let budget_deferred = result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error == crate::gateway::enrichment_budget::DEFERRED);
         let status = if result.is_ok() {
             "completed"
         } else if cleanup_uncertain {
             "failed"
-        } else if paused {
+        } else if paused || budget_deferred {
             "queued"
         } else if cancel.is_cancelled() {
             "cancelled"
@@ -646,7 +656,7 @@ impl ImprovementRuntime {
         {
             let _ = self.store.finish_interrupted_evaluation(
                 candidate_id,
-                paused && !cleanup_uncertain,
+                (paused || budget_deferred) && !cleanup_uncertain,
                 cancel.is_cancelled() && !cleanup_uncertain,
             );
         }

@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use serde::Serialize;
+use serde::{Serialize, de::DeserializeOwned};
 use tauri::State;
 
 use crate::{local_http, search::EnrichmentJobRecord};
@@ -66,6 +66,7 @@ pub struct EnrichmentSupervisor {
     bearer: String,
     user_paused: AtomicBool,
     activity_paused: AtomicBool,
+    ready: AtomicBool,
     process: Mutex<Option<EnrichmentProcesses>>,
     detail: Mutex<Option<String>>,
 }
@@ -78,7 +79,32 @@ fn free_port() -> Result<u16, String> {
         .map_err(|error| error.to_string())
 }
 
+fn owned_command(binary: &std::path::Path) -> Command {
+    let mut command = Command::new(binary);
+    command.env_clear();
+    for name in ["SystemRoot", "WINDIR", "TEMP", "TMP"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    command
+}
+
 impl EnrichmentSupervisor {
+    fn engine_config(&self, engine_db: &std::path::Path) -> serde_json::Value {
+        serde_json::json!({
+            "guard":{"host":"127.0.0.1","port":self.engine_port},
+            "api_peer":{"host":"127.0.0.1","port":self.engine_port + 1},
+            "metrics":{"host":"127.0.0.1","port":self.engine_port + 10},
+            "topology":{"datacenter_label":1,"datacenters":{"default":{
+                "datacenter_label":1,"is_leader":true,
+                "public_url":format!("http://127.0.0.1:{}",self.engine_port),
+                "peer_url":format!("http://127.0.0.1:{}",self.engine_port + 1)
+            }}},
+            "file_system":{"path":engine_db},"telemetry":{"enabled":false}
+        })
+    }
+
     pub fn new(
         binary: PathBuf,
         engine_binary: PathBuf,
@@ -99,6 +125,7 @@ impl EnrichmentSupervisor {
             ),
             user_paused: AtomicBool::new(false),
             activity_paused: AtomicBool::new(false),
+            ready: AtomicBool::new(false),
             process: Mutex::new(None),
             detail: Mutex::new(None),
         })
@@ -127,6 +154,7 @@ impl EnrichmentSupervisor {
             return Ok(());
         }
         *process = None;
+        self.ready.store(false, Ordering::SeqCst);
         if !self.binary.is_file() {
             let message = "Rivet enrichment worker is not staged".to_owned();
             *self
@@ -143,17 +171,19 @@ impl EnrichmentSupervisor {
         let engine_error_log = engine_log.try_clone().map_err(|error| error.to_string())?;
         let engine_db = self.runtime_directory.join("rivet-engine-db");
         fs::create_dir_all(&engine_db).map_err(|error| error.to_string())?;
-        let mut engine_command = Command::new(&self.engine_binary);
+        let engine_config = self.runtime_directory.join("rivet-engine.json");
+        fs::write(
+            &engine_config,
+            serde_json::to_vec(&self.engine_config(&engine_db))
+                .map_err(|_| "Rivet configuration could not be serialized")?,
+        )
+        .map_err(|_| "Rivet configuration could not be saved")?;
+        let mut engine_command = owned_command(&self.engine_binary);
         engine_command
             .arg("start")
+            .arg("--config")
+            .arg(&engine_config)
             .current_dir(&self.runtime_directory)
-            .env("RIVET__GUARD__HOST", "127.0.0.1")
-            .env("RIVET__GUARD__PORT", self.engine_port.to_string())
-            .env("RIVET__API_PEER__HOST", "127.0.0.1")
-            .env("RIVET__API_PEER__PORT", (self.engine_port + 1).to_string())
-            .env("RIVET__METRICS__HOST", "127.0.0.1")
-            .env("RIVET__METRICS__PORT", (self.engine_port + 10).to_string())
-            .env("RIVET__FILE_SYSTEM__PATH", &engine_db)
             .stdin(Stdio::null())
             .stdout(Stdio::from(engine_log))
             .stderr(Stdio::from(engine_error_log));
@@ -196,7 +226,7 @@ impl EnrichmentSupervisor {
             std::thread::sleep(Duration::from_millis(100));
         }
 
-        let mut command = Command::new(&self.binary);
+        let mut command = owned_command(&self.binary);
         let log_path = self.runtime_directory.join("rivet-worker.log");
         let log = fs::File::create(&log_path).map_err(|error| error.to_string())?;
         let error_log = log.try_clone().map_err(|error| error.to_string())?;
@@ -272,6 +302,7 @@ impl EnrichmentSupervisor {
             )
             .await;
             if let Err(error) = response {
+                self.ready.store(false, Ordering::SeqCst);
                 *self
                     .detail
                     .lock()
@@ -279,6 +310,7 @@ impl EnrichmentSupervisor {
                     Some(error.message("Rivet queue sync"));
                 return false;
             }
+            self.ready.store(true, Ordering::SeqCst);
         }
         true
     }
@@ -286,9 +318,58 @@ impl EnrichmentSupervisor {
     pub async fn queue_status(&self) -> Result<serde_json::Value, String> {
         let client = local_http::client(Duration::from_secs(5))
             .map_err(|error| error.message("Enrichment queue"))?;
-        local_http::json(client.get(self.endpoint("/jobs")).bearer_auth(&self.bearer))
+        let result = local_http::json(client.get(self.endpoint("/jobs")).bearer_auth(&self.bearer))
             .await
-            .map_err(|error| error.message("Enrichment queue"))
+            .map_err(|error| error.message("Enrichment queue"));
+        self.ready.store(result.is_ok(), Ordering::SeqCst);
+        result
+    }
+
+    async fn verify_readiness(&self) {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct WorkerReady {
+            status: String,
+        }
+        let ready = async {
+            let client = local_http::client(Duration::from_secs(5)).ok()?;
+            let response: WorkerReady = local_http::json(
+                client
+                    .get(self.endpoint("/health"))
+                    .bearer_auth(&self.bearer),
+            )
+            .await
+            .ok()?;
+            Some(response.status == "ready")
+        }
+        .await
+            == Some(true);
+        self.ready.store(ready, Ordering::SeqCst);
+    }
+
+    pub(crate) async fn enrichment_request<T: DeserializeOwned>(
+        &self,
+        operation: &str,
+        body: &serde_json::Value,
+    ) -> Result<T, String> {
+        let path = match operation {
+            "lease" => "/jobs/lease",
+            "heartbeat" => "/jobs/heartbeat",
+            "finish" => "/jobs/finish",
+            "retain" => "/jobs/retain",
+            "failed" => "/jobs/failed",
+            _ => return Err("Invalid enrichment queue operation.".into()),
+        };
+        let client = local_http::client(Duration::from_secs(5))
+            .map_err(|e| e.message("Enrichment queue"))?;
+        local_http::json(
+            client
+                .post(self.endpoint(path))
+                .bearer_auth(&self.bearer)
+                .json(body),
+        )
+        .await
+        .map_err(|e| e.message("Enrichment queue"))
     }
 
     pub(crate) async fn improvement_request(
@@ -339,7 +420,7 @@ impl EnrichmentSupervisor {
         self.activity_paused.store(paused, Ordering::Relaxed);
     }
 
-    fn is_paused(&self) -> bool {
+    pub(crate) fn is_paused(&self) -> bool {
         self.user_paused.load(Ordering::Relaxed) || self.activity_paused.load(Ordering::Relaxed)
     }
 
@@ -363,7 +444,11 @@ impl EnrichmentSupervisor {
             }
         }
         EnrichmentHealth {
-            state: if running { "ready" } else { "unavailable" },
+            state: if running && self.ready.load(Ordering::SeqCst) {
+                "ready"
+            } else {
+                "unavailable"
+            },
             paused: self.is_paused(),
             control_port: self.control_port,
             actor_port: self.actor_port,
@@ -377,8 +462,11 @@ impl EnrichmentSupervisor {
 }
 
 #[tauri::command]
-pub fn enrichment_health(state: State<'_, EnrichmentSupervisor>) -> EnrichmentHealth {
-    state.inner().health()
+pub async fn enrichment_health(
+    state: State<'_, EnrichmentSupervisor>,
+) -> Result<EnrichmentHealth, String> {
+    state.inner().verify_readiness().await;
+    Ok(state.inner().health())
 }
 
 #[tauri::command]
@@ -408,6 +496,18 @@ mod tests {
     use super::*;
     use crate::local_http_tests as http;
     use std::{thread, time::Duration};
+
+    #[test]
+    fn enrichment_process_environment_has_no_inherited_credentials_or_configuration() {
+        let command = owned_command(std::path::Path::new("fixed-sidecar.exe"));
+        for (name, _) in command.get_envs() {
+            assert!(matches!(
+                name.to_str().unwrap(),
+                "SystemRoot" | "WINDIR" | "TEMP" | "TMP"
+            ));
+        }
+        assert_eq!(command.get_program(), "fixed-sidecar.exe");
+    }
 
     fn local_fixture(
         base: &str,
@@ -778,5 +878,43 @@ mod tests {
         });
         drop(supervisor);
         let _ = fs::remove_dir_all(root);
+    }
+    #[test]
+    fn enrichment_engine_config_matches_selected_loopback_ports_and_owned_database() {
+        let fixture = crate::search::test_support::SearchFixture::new("rivet-topology-config");
+        let mut supervisor = EnrichmentSupervisor::new(
+            PathBuf::from("unused"),
+            PathBuf::from("unused"),
+            fixture.root().to_owned(),
+        )
+        .unwrap();
+        supervisor.engine_port = 26422;
+        let database = fixture.root().join("owned-db");
+        let config: serde_json::Value = serde_json::from_slice(
+            &serde_json::to_vec(&supervisor.engine_config(&database)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(config["guard"]["host"], "127.0.0.1");
+        assert_eq!(config["guard"]["port"], 26422);
+        assert_eq!(config["api_peer"]["port"], 26423);
+        assert_eq!(config["file_system"]["path"], database.to_str().unwrap());
+        assert_eq!(config["telemetry"]["enabled"], false);
+        assert_eq!(config["topology"]["datacenter_label"], 1);
+        assert_eq!(
+            config["topology"]["datacenters"]["default"]["datacenter_label"],
+            1
+        );
+        assert_eq!(
+            config["topology"]["datacenters"]["default"]["is_leader"],
+            true
+        );
+        assert_eq!(
+            config["topology"]["datacenters"]["default"]["public_url"],
+            "http://127.0.0.1:26422"
+        );
+        assert_eq!(
+            config["topology"]["datacenters"]["default"]["peer_url"],
+            "http://127.0.0.1:26423"
+        );
     }
 }

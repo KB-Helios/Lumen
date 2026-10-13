@@ -3,77 +3,51 @@ import rivetWasmPath from '@rivetkit/rivetkit-wasm/rivetkit_wasm_bg.wasm' with {
 import {actor, setup} from 'rivetkit';
 import {createClient} from 'rivetkit/client';
 import {db} from 'rivetkit/db';
+import {enrichmentJobSchema, enrichmentLeaseSchema, enrichmentFinishSchema, enrichmentQueueSql} from './enrichment-queue';
 import {improvementAdvanceSchema, improvementFinishSchema, improvementJobSchema, improvementLeaseSchema, improvementQueueSql} from './improvement-queue';
-
-interface EnrichmentJob {
-  idempotencyKey: string;
-  fileId: string;
-  contentHash: string;
-  kind: 'ocr' | 'transcription' | 'embedding';
-  route: string;
-}
 
 const enrichmentQueue = actor({
   db: db({
     onMigrate: async (database) => {
-      await database.execute(`
-        CREATE TABLE IF NOT EXISTS jobs (
-          idempotency_key TEXT PRIMARY KEY,
-          file_id TEXT NOT NULL,
-          content_hash TEXT NOT NULL,
-          kind TEXT NOT NULL,
-          route TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'queued',
-          attempts INTEGER NOT NULL DEFAULT 0,
-          updated_at INTEGER NOT NULL
-        )
-      `);
+      await database.execute(enrichmentQueueSql.migrate);
+      const columns = await database.execute<{name: string}>('PRAGMA table_info(jobs)');
+      for (const name of ['generation', 'lease_until', 'not_before']) {
+        if (!columns.some(column => column.name === name)) await database.execute(`ALTER TABLE jobs ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
+      }
       await database.execute(improvementQueueSql.migrate);
     },
   }),
   actions: {
-    enqueue: async (context, job: EnrichmentJob) => {
-      await context.db.execute(
-        `INSERT OR IGNORE INTO jobs
-         (idempotency_key, file_id, content_hash, kind, route, status, attempts, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'queued', 0, ?)`,
-        job.idempotencyKey,
-        job.fileId,
-        job.contentHash,
-        job.kind,
-        job.route,
-        Date.now(),
-      );
-      return {accepted: true, idempotencyKey: job.idempotencyKey};
+    enqueue: async (context, input: unknown) => {
+      const job = enrichmentJobSchema.parse(input);
+      await context.db.execute(enrichmentQueueSql.enqueue, job.idempotencyKey, job.fileId, job.contentHash, job.kind, job.route, Date.now());
+      return {accepted: true};
     },
     lease: async (context) => {
-      const rows = await context.db.execute<EnrichmentJob & {status: string; attempts: number}>(
-        `SELECT idempotency_key AS idempotencyKey, file_id AS fileId,
-                content_hash AS contentHash, kind, route, status, attempts
-         FROM jobs WHERE status = 'queued' ORDER BY updated_at LIMIT 1`,
-      );
-      const job = rows[0];
-      if (!job) return null;
-      await context.db.execute(
-        `UPDATE jobs SET status = 'running', attempts = attempts + 1, updated_at = ?
-         WHERE idempotency_key = ? AND status = 'queued'`,
-        Date.now(),
-        job.idempotencyKey,
-      );
-      return job;
+      const now = Date.now();
+      await context.db.execute(enrichmentQueueSql.resumeExpired, now, now);
+      const rows = await context.db.execute(enrichmentQueueSql.lease, now, now, now);
+      return rows[0] ?? null;
     },
-    complete: async (context, idempotencyKey: string) => {
-      await context.db.execute(
-        `UPDATE jobs SET status = 'completed', updated_at = ? WHERE idempotency_key = ?`,
-        Date.now(),
-        idempotencyKey,
-      );
+    heartbeat: async (context, input: unknown) => {
+      const lease = enrichmentLeaseSchema.parse(input); const now = Date.now();
+      const rows = await context.db.execute(enrichmentQueueSql.heartbeat, now, now, lease.idempotencyKey, lease.generation, now);
+      return {accepted: rows.length === 1};
     },
+    finish: async (context, input: unknown) => {
+      const lease = enrichmentFinishSchema.parse(input); const now = Date.now();
+      const rows = await context.db.execute(enrichmentQueueSql.finish, lease.status, now, now, lease.idempotencyKey, lease.generation, now);
+      return {accepted: rows.length === 1};
+    },
+    retain: async (context, input: unknown) => {
+      const keys = enrichmentLeaseSchema.shape.idempotencyKey.array().max(250000).parse(input);
+      await context.db.execute(enrichmentQueueSql.retain, JSON.stringify(keys));
+      return {accepted: true};
+    },
+    failed: async (context) => context.db.execute(enrichmentQueueSql.failed),
     resumeInterrupted: async (context) => {
-      await context.db.execute(
-        `UPDATE jobs SET status = 'queued', updated_at = ? WHERE status = 'running'`,
-        Date.now(),
-      );
+      const now = Date.now();
+      await context.db.execute(enrichmentQueueSql.resumeExpired, now, now);
     },
     status: async (context) => context.db.execute<{status: string; count: number}>(
       'SELECT status, count(*) AS count FROM jobs GROUP BY status ORDER BY status',
@@ -132,7 +106,7 @@ export const registry = setup({
   noWelcome: true,
   logging: {level: 'warn'},
 });
-registry.start();
+await registry.start();
 
 const client = createClient<typeof registry>(`http://127.0.0.1:${actorPort}`);
 const queue = client.enrichmentQueue.getOrCreate(['lumen']);
@@ -147,6 +121,7 @@ Bun.serve({
     const path = new URL(request.url).pathname;
     try {
       if (request.method === 'GET' && path === '/health') {
+        await queue.status();
         return Response.json({status: 'ready'});
       }
       if (path === '/improvements' && request.method === 'POST') return Response.json(await queue.enqueueImprovement(await request.json()));
@@ -159,7 +134,7 @@ Bun.serve({
         return Response.json(await queue.status());
       }
       if (request.method === 'POST' && path === '/jobs') {
-        return Response.json(await queue.enqueue(await request.json() as EnrichmentJob));
+        return Response.json(await queue.enqueue(await request.json()));
       }
       if (request.method === 'POST' && path === '/jobs/lease') {
         return Response.json(await queue.lease());
@@ -168,11 +143,10 @@ Bun.serve({
         await queue.resumeInterrupted();
         return Response.json({resumed: true});
       }
-      if (request.method === 'POST' && path.startsWith('/jobs/') && path.endsWith('/complete')) {
-        const id = decodeURIComponent(path.slice('/jobs/'.length, -'/complete'.length));
-        await queue.complete(id);
-        return Response.json({completed: true});
-      }
+      if (request.method === 'POST' && path === '/jobs/heartbeat') return Response.json(await queue.heartbeat(await request.json()));
+      if (request.method === 'POST' && path === '/jobs/finish') return Response.json(await queue.finish(await request.json()));
+      if (request.method === 'POST' && path === '/jobs/retain') return Response.json(await queue.retain(await request.json()));
+      if (request.method === 'POST' && path === '/jobs/failed') return Response.json(await queue.failed());
       return Response.json({error: 'not_found'}, {status: 404});
     } catch {
       return Response.json({error: 'worker_failed'}, {status: 500});

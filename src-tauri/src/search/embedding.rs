@@ -82,6 +82,9 @@ async fn request_embeddings(
         return Err("The embedding batch is outside Lumen's limits.".to_owned());
     }
     let (base_url, bearer) = gateway.endpoint(true);
+    let mut reservation = gateway.enrichment_budget().reserve(Some(
+        inputs.iter().map(|input| input.len() as u64).sum::<u64>() + 1024,
+    ))?;
     let response = crate::local_http::client(std::time::Duration::from_secs(20))
         .map_err(|_| "The embedding client is unavailable.".to_owned())?
         .post(format!("{base_url}/v1/embeddings"))
@@ -97,7 +100,10 @@ async fn request_embeddings(
     let bytes = crate::local_http::body(response)
         .await
         .map_err(|_| "The local embedding response is invalid.".to_owned())?;
-    let response = serde_json::from_slice::<EmbeddingResponse>(&bytes)
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "The local embedding response is invalid.".to_owned())?;
+    reservation.settle(crate::gateway::enrichment_budget::usage_tokens(&value))?;
+    let response = serde_json::from_value::<EmbeddingResponse>(value)
         .map_err(|_| "The local embedding response is invalid.".to_owned())?;
     validate_embeddings(response, inputs.len())
 }
@@ -203,9 +209,40 @@ mod tests {
     }
 
     #[test]
+    fn shared_enrichment_budget_defers_embedding_before_http() {
+        let fixture = crate::search::test_support::SearchFixture::new("shared-embedding-budget");
+        let gateway = GatewaySupervisor::new(PathBuf::from("unused"), fixture.root(), &[]).unwrap();
+        let (base, _) = gateway.endpoint(true);
+        let listener = TcpListener::bind(base.strip_prefix("http://").unwrap()).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let mut multimodal = gateway.enrichment_budget().reserve(None).unwrap();
+        multimodal.settle(Some(500000)).unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(request_embeddings(&gateway, &["fixture".into()]))
+                .unwrap_err(),
+            crate::gateway::enrichment_budget::DEFERRED
+        );
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+
+    #[test]
+    fn local_http_embedding_accepts_metered_vectors_and_defers_missing_usage() {
+        assert_eq!(local_request(http::json(r#"{"data":[{"index":0,"embedding":[1.0]}],"usage":{"prompt_tokens":1,"total_tokens":1}}"#)).unwrap(), vec![vec![1.0]]);
+        assert_eq!(
+            local_request(http::json(r#"{"data":[{"index":0,"embedding":[1.0]}]}"#)).unwrap_err(),
+            crate::gateway::enrichment_budget::DEFERRED
+        );
+    }
+
+    #[test]
     fn local_http_embedding_refuses_redirects() {
         let (target, server) = http::server(
-            http::json(r#"{"data":[{"index":0,"embedding":[1.0]}]}"#),
+            http::json(
+                r#"{"data":[{"index":0,"embedding":[1.0]}],"usage":{"prompt_tokens":1,"total_tokens":1}}"#,
+            ),
             Duration::ZERO,
         );
         let result = local_request(format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {target}/stolen\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").into_bytes());
@@ -221,7 +258,7 @@ mod tests {
     fn local_http_embedding_bounds_chunked_and_declared_bodies() {
         // A valid vector response with oversized harmless whitespace exposes unbounded decoding.
         let body = format!(
-            r#"{{"data":[{{"index":0,"embedding":[1.0]}}]}}{}"#,
+            r#"{{"data":[{{"index":0,"embedding":[1.0]}}],"usage":{{"prompt_tokens":1,"total_tokens":1}}}}{}"#,
             " ".repeat(http::LIMIT)
         );
         let mut bounded = Vec::new();
@@ -243,7 +280,7 @@ mod tests {
         let gateway = GatewaySupervisor::new(PathBuf::from("unused"), fixture.root(), &[]).unwrap();
         let (base, _) = gateway.endpoint(true);
         let listener = TcpListener::bind(base.strip_prefix("http://").unwrap()).unwrap();
-        let body = r#"{"data":[{"index":0,"embedding":[1.0]}]}"#;
+        let body = r#"{"data":[{"index":0,"embedding":[1.0]}],"usage":{"prompt_tokens":1,"total_tokens":1}}"#;
         let server = http::server_parts(
             listener,
             format!(
@@ -272,7 +309,7 @@ mod tests {
             Ok("1")
         );
         assert_eq!(
-            local_request(http::json(r#"{"data":[{"index":0,"embedding":[1.0]}]}"#)).unwrap(),
+            local_request(http::json(r#"{"data":[{"index":0,"embedding":[1.0]}],"usage":{"prompt_tokens":1,"total_tokens":1}}"#)).unwrap(),
             vec![vec![1.0]]
         );
     }

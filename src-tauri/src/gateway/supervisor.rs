@@ -4,7 +4,7 @@ use std::{
     net::TcpListener,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 use serde::Serialize;
@@ -62,6 +62,7 @@ pub struct GatewaySupervisor {
     ports: GatewayPorts,
     bearer: String,
     state: Mutex<ProcessState>,
+    enrichment_budget: Arc<super::enrichment_budget::EnrichmentBudget>,
 }
 
 fn free_port() -> Result<u16, String> {
@@ -112,6 +113,9 @@ impl GatewaySupervisor {
         fs::write(&enrichment_config, render_enrichment_config(ports, routes))
             .map_err(|error| error.to_string())?;
         Ok(Self {
+            enrichment_budget: super::enrichment_budget::EnrichmentBudget::open(
+                &runtime_directory.join("enrichment-budget.sqlite"),
+            )?,
             binary,
             config_paths: [interactive_config, enrichment_config],
             log_paths: [interactive_log, enrichment_log],
@@ -338,6 +342,10 @@ impl GatewaySupervisor {
             self.ports.interactive
         };
         (format!("http://127.0.0.1:{port}"), self.bearer.clone())
+    }
+
+    pub(crate) fn enrichment_budget(&self) -> Arc<super::enrichment_budget::EnrichmentBudget> {
+        self.enrichment_budget.clone()
     }
 }
 

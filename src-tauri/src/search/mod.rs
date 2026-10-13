@@ -1,4 +1,5 @@
 mod embedding;
+mod enrichment;
 mod extraction;
 mod index;
 mod index_worker;

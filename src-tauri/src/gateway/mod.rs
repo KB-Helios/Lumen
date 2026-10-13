@@ -2,6 +2,7 @@ pub mod answer;
 mod config;
 pub mod credentials;
 pub mod enrichment;
+pub(crate) mod enrichment_budget;
 pub mod local_runtime;
 pub mod mcp;
 pub mod provisioning;

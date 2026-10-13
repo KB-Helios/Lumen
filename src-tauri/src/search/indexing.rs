@@ -389,7 +389,7 @@ impl IndexRuntime {
         Ok(admitted)
     }
 
-    fn enrichment_dispatch_is_admitted(
+    pub(super) fn enrichment_dispatch_is_admitted(
         &self,
         job: &super::EnrichmentJobRecord,
     ) -> Result<bool, SearchFailure> {
@@ -397,6 +397,13 @@ impl IndexRuntime {
             .synchronization
             .lock()
             .map_err(|e| search_failure("admit enrichment dispatch", e))?;
+        self.enrichment_admitted_locked(job)
+    }
+
+    fn enrichment_admitted_locked(
+        &self,
+        job: &super::EnrichmentJobRecord,
+    ) -> Result<bool, SearchFailure> {
         if !self.work.configured.load(Ordering::SeqCst)
             || self.work.stop.load(Ordering::SeqCst)
             || !self
@@ -420,10 +427,81 @@ impl IndexRuntime {
         else {
             return Ok(false);
         };
-        Ok(
-            traversal::policy_record(&root_path, &path, &Self::root_traversal_policy(root)?)?
-                .is_some(),
-        )
+        if traversal::policy_record(&root_path, &path, &Self::root_traversal_policy(root)?)?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        Ok(super::enrichment::read_source(&path, job).is_ok())
+    }
+
+    pub(crate) fn enrichment_source(
+        &self,
+        job: &super::EnrichmentJobRecord,
+    ) -> Result<Option<(PathBuf, Vec<u8>)>, SearchFailure> {
+        let _admission = self
+            .synchronization
+            .lock()
+            .map_err(|e| search_failure("admit enrichment source", e))?;
+        if !self.work.content_enabled.load(Ordering::SeqCst)
+            || !self.enrichment_admitted_locked(job)?
+        {
+            return Ok(None);
+        }
+        let Some((_, path)) = self
+            .database
+            .file_location(&job.file_id)
+            .map_err(|e| search_failure("locate enrichment source", e))?
+        else {
+            return Ok(None);
+        };
+        let bytes = super::enrichment::read_source(&path, job)
+            .map_err(|e| search_failure("read enrichment source", e))?;
+        if !self.enrichment_admitted_locked(job)? {
+            return Ok(None);
+        }
+        Ok(Some((path, bytes)))
+    }
+
+    pub(crate) fn commit_enrichment(
+        &self,
+        generation: u64,
+        job: &super::EnrichmentJobRecord,
+        text: &str,
+        provider: &str,
+        model: &str,
+    ) -> Result<bool, SearchFailure> {
+        self.with_current_generation(generation, || {
+            if !self.work.content_enabled.load(Ordering::SeqCst)
+                || !self.enrichment_admitted_locked(job)?
+            {
+                return Ok(false);
+            }
+            self.database
+                .complete_enrichment(job, text, provider, model)
+                .map_err(|e| search_failure("commit enrichment", e))
+        })
+        .map(|result| result == Some(true))
+    }
+
+    pub(crate) fn fail_enrichment(
+        &self,
+        generation: u64,
+        job: &super::EnrichmentJobRecord,
+    ) -> Result<(), SearchFailure> {
+        self.with_current_generation(generation, || {
+            self.database
+                .fail_enrichment(job)
+                .map_err(|e| search_failure("fail enrichment", e))
+        })?;
+        self.refresh_worker_status()
+    }
+
+    pub(crate) fn enrichment_is_current(&self, generation: u64) -> bool {
+        self.current_generation() == generation
+            && self.work.configured.load(Ordering::SeqCst)
+            && !self.work.stop.load(Ordering::SeqCst)
+            && self.work.content_enabled.load(Ordering::SeqCst)
     }
 
     pub(crate) fn queue_embedding_jobs(&self, model: &str) -> Result<u64, SearchFailure> {
@@ -715,6 +793,7 @@ impl IndexRuntime {
                     if runtime.queue_embedding_jobs(&model).is_ok() {
                         schedule_embedding_worker(app.clone(), runtime.clone());
                     }
+                    let mut queue_ready = true;
                     if let Ok(jobs) = runtime.pending_enrichment() {
                         for job in jobs {
                             // Earlier submissions may await HTTP; revalidate each remaining job's
@@ -727,9 +806,15 @@ impl IndexRuntime {
                                     .sync_jobs(std::slice::from_ref(&job))
                                     .await
                             {
+                                queue_ready = false;
                                 break;
                             }
                         }
+                    }
+                    if queue_ready
+                        && let Err(error) = super::enrichment::process_one(&app, &runtime).await
+                    {
+                        runtime.worker_failed(&error);
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1004,12 +1089,17 @@ impl IndexRuntime {
         let pending_items = pending.len() as u64;
         let retries = pending.values().filter(|item| item.attempts > 0).count() as u64;
         drop(pending);
+        let enrichment_failures = self
+            .database
+            .failed_enrichment_count()
+            .map_err(|e| search_failure("read enrichment failures", e))?;
         let failures = self
             .work
             .failed
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .len() as u64;
+            .len() as u64
+            + enrichment_failures;
         let indexing = self.work.inventory_running.load(Ordering::SeqCst)
             || self.work.reconcile.load(Ordering::SeqCst);
         let paused = !self.work.content_enabled.load(Ordering::SeqCst) && pending_items > 0;
@@ -1036,6 +1126,8 @@ impl IndexRuntime {
             skipped_items: retries + failures + u64::from(inventory_failed),
             message: if paused {
                 "Content indexing paused; filenames remain searchable"
+            } else if enrichment_failures > 0 {
+                "Some cloud enrichment is unavailable after bounded retries; file metadata remains searchable"
             } else if failures > 0 {
                 "Some files remain searchable by metadata after bounded extraction retries"
             } else if retries > 0 {
