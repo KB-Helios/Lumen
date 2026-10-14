@@ -61,7 +61,7 @@ async function waitForEndpoint(port, child) {
   throw new Error('Owned WebView2 CDP readiness timed out');
 }
 
-async function measure(page, output) {
+export async function measure(page, output) {
   const search = page.getByRole('searchbox', {name: 'Search files'});
   await search.waitFor({state: 'visible'});
   await search.fill('report');
@@ -73,13 +73,16 @@ async function measure(page, output) {
   const before = await status();
   if (before.fixture !== 'offline-ui-memory' || !before.foregroundUnchanged || !before.visible) throw new Error(`Native fixture visibility/foreground admission failed: ${JSON.stringify(before)}`);
   const display = await page.evaluate(() => ({width: window.innerWidth, height: window.innerHeight, screenWidth: window.screen.width, screenHeight: window.screen.height, devicePixelRatio: window.devicePixelRatio, visibility: document.visibilityState, userAgent: window.navigator.userAgent}));
-  const cadence = await page.evaluate(sampleFrameCadence);
   for (let index = 0; index < 10; index += 1) { await search.fill(`warm-input-${index}`); await page.waitForTimeout(8); }
   await search.fill(''); await page.waitForTimeout(50); await reset();
   for (let index = 1; index <= 30; index += 1) {
     await search.fill(`report-${index}`); await wait('input-response', index); await wait('input-next-frame', index); await page.waitForTimeout(40);
   }
   const input = await read();
+  await search.fill('report');
+  await page.getByRole('grid', {name: 'Search results'}).waitFor();
+  const cadence = await page.evaluate(sampleFrameCadence);
+  await reset();
   const queries = ['report', 'design', 'project', ''];
   const ordinary = {reactCommits: [], browserLongTasks: [], commitCounts: []};
   for (let index = 0; index < 24; index += 1) {
@@ -171,7 +174,7 @@ export async function main() {
         await writeFile(path.join(output, 'fixture.log'), log);
       }
     }
-  });
+  }, undefined, {reuseExistingServer: false});
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) await main();

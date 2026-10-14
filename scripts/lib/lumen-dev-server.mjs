@@ -1,4 +1,5 @@
-import {spawn} from 'node:child_process';
+import {execFileSync, spawn} from 'node:child_process';
+import {Buffer} from 'node:buffer';
 import {once} from 'node:events';
 import {fileURLToPath} from 'node:url';
 
@@ -14,10 +15,32 @@ async function isReady(url) {
   }
 }
 
-async function waitUntilReady(url, child) {
+function ownsListener(url, child, remainingMs) {
+  const port = new URL(url).port || '80';
+  const source = `$ProgressPreference='SilentlyContinue'; @(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess) | ConvertTo-Json`;
+  try {
+    const output = execFileSync('powershell.exe', ['-NoProfile', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], {encoding: 'utf8', windowsHide: true, timeout: Math.max(1, remainingMs)});
+    const owners = [JSON.parse(output)].flat();
+    return owners.length > 0 && owners.every((pid) => pid === child.pid);
+  } catch {
+    return false;
+  }
+}
+
+async function waitUntilReady(url, child, reuseExistingServer, hasStarted) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (await isReady(url)) return;
+    if (!reuseExistingServer && child.exitCode !== null) {
+      throw new Error(`Lumen development server exited with code ${child.exitCode}.`);
+    }
+    if (await isReady(url)) {
+      if (reuseExistingServer) return;
+      // HTTP readiness alone can come from a competing checkout before Vite binds.
+      if (hasStarted()) {
+        if (!ownsListener(url, child, deadline - Date.now()) || child.exitCode !== null || Date.now() >= deadline) throw new Error('Lumen development server listener is not owned by the spawned child within the startup deadline.');
+        return;
+      }
+    }
     if (child.exitCode !== null) {
       throw new Error(`Lumen development server exited with code ${child.exitCode}.`);
     }
@@ -33,8 +56,10 @@ async function stopDevelopmentServer(child) {
   await exited;
 }
 
-export async function withLumenDevServer(task, url = defaultUrl) {
+export async function withLumenDevServer(task, url = defaultUrl, {reuseExistingServer = true} = {}) {
+  if (!reuseExistingServer && process.platform !== 'win32') throw new Error('Owned Lumen server verification requires Windows.');
   if (await isReady(url)) {
+    if (!reuseExistingServer) throw new Error('Lumen development server is already ready; owned startup required.');
     return task(url);
   }
 
@@ -65,7 +90,7 @@ export async function withLumenDevServer(task, url = defaultUrl) {
   child.stderr.on('data', rememberOutput);
 
   try {
-    await waitUntilReady(url, child);
+    await waitUntilReady(url, child, reuseExistingServer, () => /VITE[^\n]*ready in/.test(serverOutput) && serverOutput.includes(`${url}/`));
     return await task(url);
   } catch (error) {
     if (serverOutput) process.stderr.write(serverOutput);
