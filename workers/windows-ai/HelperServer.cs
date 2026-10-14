@@ -8,7 +8,6 @@ internal sealed class HelperServer : IDisposable
 {
     private readonly WindowsHost host = new();
     private readonly WindowsModels models = new();
-    private readonly AionAdapter aion = new();
     private readonly PublicContentIndex index = new();
     private readonly AgentRegistry agents;
     private readonly RequestRegistry requests = new();
@@ -24,7 +23,7 @@ internal sealed class HelperServer : IDisposable
         idleTimer = new Timer(_ =>
         {
             if (!sessionGate.Wait(0)) return;
-            try { models.ReleaseIdle(); aion.ReleaseIdle(); } catch { }
+            try { models.ReleaseIdle(); } catch { }
             finally { sessionGate.Release(); }
         }, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
     }
@@ -93,14 +92,14 @@ internal sealed class HelperServer : IDisposable
     private async Task<object> Dispatch(Request request, CancellationToken cancellation)
     {
         var p = request.Payload;
-        if (request.Operation == "shutdown") { Protocol.ClosedObject(p, []); models.Dispose(); aion.Dispose(); return new OperationResult(true, "The helper shut down."); }
+        if (request.Operation == "shutdown") { Protocol.ClosedObject(p, []); models.Dispose(); return new OperationResult(true, "The helper shut down."); }
         var preferences = Preferences.Read(p);
         var token = Protocol.String(p, "accessToken", 4096, optional:true);
         switch (request.Operation)
         {
             case "status":
                 Protocol.ClosedObject(p, ["preferences", "accessToken"]);
-                if (!preferences.WindowsEnabled) { models.Dispose(); aion.Unload(); }
+                if (!preferences.WindowsEnabled) models.Dispose();
                 return Snapshot(preferences, token);
             case "prepare":
             {
@@ -111,8 +110,7 @@ internal sealed class HelperServer : IDisposable
                 var state = host.Feature(feature, preferences, token);
                 if (state.Availability is not ("ready" or "downloadable")) host.RequireReady(feature, preferences, token);
                 Progress(request.Id, "Preparing local model", null);
-                if (feature == "aion") await aion.Prepare(cancellation);
-                else if (feature == "appContentSearch") await index.Prepare(value => Progress(request.Id, "Preparing public content search", value), cancellation);
+                if (feature == "appContentSearch") await index.Prepare(value => Progress(request.Id, "Preparing public content search", value), cancellation);
                 else await models.Prepare(feature, value => Progress(request.Id, "Preparing local model", value), cancellation);
                 cancellation.ThrowIfCancellationRequested();
                 var refreshed = host.Feature(feature, preferences, token);
@@ -128,11 +126,6 @@ internal sealed class HelperServer : IDisposable
                 if (!new[] { "answer", "summarize", "rewrite", "write" }.Contains(task) || engine is not ("windows" or "aion")) throw new HelperFault("invalid_request");
                 preferences.Require(task == "answer" || preferences.TextToolsEnabled);
                 host.RequireReady(engine == "aion" ? "aion" : task is "summarize" or "rewrite" ? task : "languageModel", preferences, token);
-                if (engine == "aion")
-                {
-                    try { return await aion.Generate(task, text, value => Delta(request.Id, value), cancellation); }
-                    finally { if (!preferences.KeepWarm) aion.Unload(); }
-                }
                 return await models.Generate(task, text, preferences.KeepWarm, value => Delta(request.Id, value), cancellation);
             }
             case "image":
@@ -232,7 +225,7 @@ internal sealed class HelperServer : IDisposable
     {
         shutdown.Cancel(); idleTimer.Dispose(); requests.Dispose();
         sessionGate.Wait();
-        try { models.Dispose(); aion.Dispose(); host.Dispose(); shutdown.Dispose(); }
+        try { models.Dispose(); host.Dispose(); shutdown.Dispose(); }
         finally { sessionGate.Release(); }
     }
 }

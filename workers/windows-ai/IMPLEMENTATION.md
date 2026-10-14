@@ -1,5 +1,17 @@
 # Windows AI bridge
+# Stable Windows helper implementation
 
+The helper compiles against exactly Windows App SDK 2.5.1. Runtime binding uses the restored Runtime package's release constant `0x00020005`, empty version tag, minimum version `0x0002000500010000` (2.5.1.0), and family `Microsoft.WindowsAppRuntime.2_8wekyb3d8bbwe`. A packaged helper inspects its actual dependency graph; a successful identity no-op is never runtime evidence. No fallback to experimental or older releases occurs.
+
+Language-model access keeps its existing native token gate. OCR, image description and text tools still require Windows readiness and their independent operation/download consent. Runtime presence, package identity, hardware, model readiness and access remain separate prerequisites. No staging/status call downloads models, installs an execution provider, registers identity or changes certificate trust.
+
+Native Aion is explicitly unavailable with `aion_no_stable_contract`; its adapter and ARM64 package are removed. Unsupported AI speech and experimental language-model metadata are not compiled or shipped.
+
+Stable App Content Search remains `accessRequired/app_content_access_not_provisioned` after identity/runtime checks. Its Microsoft-issued feature-specific activation contract and grant have not been established. The language token is not reused. All index opens, queries, preparation, enumeration, synchronization and deletion are guarded before any SDK operation; status never probes the search SDK without search access. Existing indexes cannot be maintained until the search grant is implemented and validated.
+
+`bun run stage:windows-ai` restores locked architecture dependencies, publishes into a fresh owned directory with isolated MSBuild artifacts, verifies the real package graph, runs core checks and native protocol checks on matching hardware, and then replaces the staged directory. It refuses reparse links and outside paths, bounds file traversal, keeps the prior stage until verification succeeds, and does not reuse earlier publish DLLs. `bun scripts/stage-windows-ai.ts --arch=arm64 --build-only` verifies ARM64 compilation/package contents without replacing the x64 stage; ARM64 protocol/hardware acceptance requires an ARM64 host.
+
+Staged binaries remain local ignored outputs. Source-level/fresh helper checks do not establish signed identity, eligible hardware, model, access-token or production acceptance.
 This helper implements the approved Windows integrations behind Lumen's typed service boundary. It is a hidden, fixed-resource process owned by Rust's kill-on-close Job Object. JSON-line operations are bounded and serialized; cancellation reaches queued and active requests. Rust retains early cancellation IDs, rechecks authoritative preferences before dispatch, and kills a helper that does not finish cancellation within two seconds.
 
 The pinned Microsoft projections provide language generation, summarization, rewriting, writing, OCR and image descriptions. Passive status checks use actual readiness and execution-provider results. Only the explicit Prepare operation can call model preparation, and it requires the relevant feature permission plus download consent. Ordinary requests require ready models. Phi Silica access uses the configured native credential token. Images come from Rust's confined file reads, with an additional decoded-image dimension/pixel cap. Results never claim success without checking the SDK terminal status.

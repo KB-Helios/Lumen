@@ -1,0 +1,3 @@
+# Preserve the exact upstream Microsoft notice bytes across checkouts.
+licenses/Windows-App-SDK.txt -text
+licenses/Windows-ML.txt -text

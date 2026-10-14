@@ -16,16 +16,10 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <NuGetLockFilePath Condition="'$(RuntimeIdentifier)' != ''">packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
     <ApplicationManifest>../../packaging/windows/helper.manifest</ApplicationManifest>
-    <!-- AppContentIndexer is intentionally a consent-gated preview integration. -->
-    <NoWarn>$(NoWarn);CS8305</NoWarn>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
-    <DefineConstants>$(DefineConstants);AION_ARM64</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.4-experimental" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="[2.5.1]" />
     <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.3.1" />
-    <PackageReference Include="AionInstructPreview.Text.Framework" Version="1.0.0" Condition="'$(RuntimeIdentifier)' == 'win-arm64'" />
     <Compile Remove="Tests/**/*.cs" />
     <EmbeddedResource Include="../../src/services/windows-ai/catalogue.json" LogicalName="Lumen.WindowsAi.catalogue.json" />
   </ItemGroup>

@@ -16,6 +16,11 @@ if (args.Length == 2)
 
 var tests = new (string, Action)[]
 {
+    ("stable app content search cannot run without its feature-specific activation contract", () => {
+        try { AppContentAccess.Require(); throw new Exception(); }
+        catch (HelperFault fault) { Check(fault.Code == "app_content_access_not_provisioned"); Check(fault.SafeMessage.Contains("App Content Search")); }
+    }),
+    ("missing runtime errors name the stable runtime", () => Check(new HelperFault("runtime_required").SafeMessage.Contains("stable"))),
     ("request ids reject spaces and protocol delimiters", () => Check(!Protocol.IsRequestId("injected\nmessage"))),
     ("request ids reject empty and overlong values", () => Check(!Protocol.IsRequestId("") && !Protocol.IsRequestId(new string('a', 81)))),
     ("request ids permit the shared bounded ASCII alphabet", () => Check(Protocol.IsRequestId("native-aion:42._ready"))),
