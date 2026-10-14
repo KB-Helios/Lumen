@@ -6,6 +6,10 @@ mod improvement;
 mod local_http;
 #[cfg(test)]
 mod local_http_tests;
+#[cfg(all(debug_assertions, target_os = "windows"))]
+mod native_performance;
+#[cfg(any(test, all(debug_assertions, target_os = "windows")))]
+mod native_performance_root;
 mod privacy;
 pub mod provider_switcher;
 mod search;
@@ -45,6 +49,20 @@ fn smoke_checkpoint(phase: &str) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Explicit fixture selection must never fall through to ordinary startup.
+    if let Some(root) = std::env::var_os("LUMEN_NATIVE_PERFORMANCE_ROOT") {
+        #[cfg(all(debug_assertions, target_os = "windows"))]
+        {
+            native_performance::run(std::path::Path::new(&root))
+                .expect("Offline native performance fixture startup failed");
+            return;
+        }
+        #[cfg(not(all(debug_assertions, target_os = "windows")))]
+        {
+            let _ = root;
+            panic!("Native performance fixtures require a Windows debug build");
+        }
+    }
     smoke_checkpoint("run");
     let global_shortcut = tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, _shortcut, event| {

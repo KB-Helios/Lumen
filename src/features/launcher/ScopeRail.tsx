@@ -1,4 +1,4 @@
-import {memo, useEffect, useMemo, useState} from 'react';
+import {memo, useContext, useEffect, useMemo, useState} from 'react';
 import {Tab, TabList, TabPanel, Tabs} from 'react-aria-components';
 
 import {motion} from 'motion/react';
@@ -6,7 +6,7 @@ import {motion} from 'motion/react';
 import {useLumenMotion} from '../../design-system/MotionProvider';
 import {cn} from '../../lib/cn';
 import type {SearchScope} from '../../services/search/search.types';
-import {semanticSearchService} from '../../services/search/semantic-search-service';
+import {SemanticSearchContext} from './semantic-search-context';
 import {useSettingsStore} from '../settings/settings.store';
 import {useWindowsAiStore} from '../windows-ai/windows-ai.store';
 import {useScopeStore} from './scope.store';
@@ -24,6 +24,7 @@ export const searchScopes: ReadonlyArray<{id: SearchScope; label: string}> = [
 ];
 
 export const ScopeRail = memo(function ScopeRail() {
+  const semanticSearchService = useContext(SemanticSearchContext);
   const {layoutTransition} = useLumenMotion();
   const activeScope = useScopeStore((state) => state.activeScope);
   const setScope = useScopeStore((state) => state.setScope);
@@ -37,7 +38,7 @@ export const ScopeRail = memo(function ScopeRail() {
       .then((status) => { if (current) setRelatedAvailable(status.relatedAvailable); })
       .catch(() => { if (current) setRelatedAvailable(false); });
     return () => { current = false; };
-  }, []);
+  }, [semanticSearchService]);
   const enabledScopes = useMemo(
     () => searchScopes.filter((scope) =>
       (scope.id === 'app-content' ? appContentEnabled : enabledScopeIds.includes(scope.id)) &&

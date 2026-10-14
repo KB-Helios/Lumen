@@ -27,6 +27,10 @@ const unavailableStatus: SemanticSearchStatus = {
   reason: 'Semantic search status is available in the Windows app.',
 };
 
+export const unavailableSemanticSearchService: SemanticSearchService = {
+  async status() { return unavailableStatus; },
+};
+
 export const semanticSearchService: SemanticSearchService = {
   async status() {
     if (!isNativeRuntime()) return unavailableStatus;

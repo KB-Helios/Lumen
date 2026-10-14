@@ -442,6 +442,37 @@ pub fn show_from_app(
     show_window(&window, mode, source)
 }
 
+#[cfg(all(debug_assertions, target_os = "windows"))]
+pub(crate) fn show_for_performance_fixture(
+    window: &WebviewWindow,
+    mode: WindowMode,
+) -> Result<WindowStateEvent, String> {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{
+            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SetWindowPos,
+        },
+    };
+    let geometry = geometry_for(mode);
+    apply_geometry(window, geometry)?;
+    place_on_preferred_monitor(window, geometry, MonitorBehavior::default())?;
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    // ShowWindow's first call can honor STARTUPINFO instead of its no-activate flag.
+    unsafe {
+        SetWindowPos(
+            HWND(hwnd.0),
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW,
+        )
+    }
+    .map_err(|error| error.to_string())?;
+    Ok(WindowStateEvent::visible(mode, WindowStateSource::Command))
+}
+
 fn show_window(
     window: &WebviewWindow,
     mode: WindowMode,
