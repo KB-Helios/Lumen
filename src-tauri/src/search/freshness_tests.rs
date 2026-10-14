@@ -1876,3 +1876,164 @@ fn ancestor_replacement(replace_at_commit: bool) {
         );
     }
 }
+
+#[test]
+#[ignore = "explicit compiled enrichment integration gate after sidecar staging"]
+fn compiled_enrichment_consumer_indexes_scanned_pdf_image_audio_video_and_cancels_stop() {
+    use crate::search::enrichment::tests::{fixture_provider, scanned_pdf};
+    use crate::{
+        activity::ActivityRuntime,
+        gateway::{EnrichmentSupervisor, registry::ProviderRegistry},
+        search::enrichment::{EnrichmentLease, consume_lease, observe_background_activity},
+    };
+    use std::sync::Arc;
+    let (fixture, index, mut roots) = manual_setup("compiled-consumer");
+    roots[0].cloud_enrichment = true;
+    index.configure_roots(roots, true).unwrap();
+    let binaries = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+    let queue = EnrichmentSupervisor::new(
+        binaries.join("lumen-enrichment-x86_64-pc-windows-msvc.exe"),
+        binaries.join("lumen-rivet-engine-x86_64-pc-windows-msvc.exe"),
+        fixture.root().parent().unwrap().join("queue"),
+    )
+    .unwrap();
+    queue.start().unwrap();
+    let activity = ActivityRuntime::with_observer(
+        &fixture.file("private/owned-settings.json", b"{}"),
+        Arc::new(crate::activity::ObservedActivity::default),
+    );
+    let registry = ProviderRegistry::in_memory();
+    let budget = crate::gateway::enrichment_budget::EnrichmentBudget::open(
+        &fixture.root().parent().unwrap().join("budget.sqlite"),
+    )
+    .unwrap();
+    tauri::async_runtime::block_on(async {
+        let ready = std::time::Instant::now();
+        while queue.queue_status().await.is_err() {
+            assert!(ready.elapsed() < Duration::from_secs(20));
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        for (extension, audio) in [
+            ("pdf", false),
+            ("png", false),
+            ("wav", true),
+            ("mp4", true),
+            ("webm", true),
+        ] {
+            let bytes = if extension == "pdf" {
+                scanned_pdf()
+            } else {
+                b"owned-synthetic-source".to_vec()
+            };
+            fixture.file(&format!("scan.{extension}"), &bytes);
+            index.reconcile_inventory(false).unwrap();
+            index.extract_pending().unwrap();
+            let jobs = index.pending_enrichment().unwrap();
+            assert_eq!(
+                jobs.len(),
+                1,
+                "{extension}: native extraction must admit exactly this pending source"
+            );
+            assert!(queue.sync_jobs(&jobs).await);
+            let lease: EnrichmentLease = queue
+                .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(&lease.job).unwrap(),
+                serde_json::to_value(&jobs[0]).unwrap()
+            );
+            let generation = index.current_generation();
+            let (path, admitted_bytes) = index.enrichment_source(&lease.job).unwrap().unwrap();
+            assert_eq!(admitted_bytes, bytes);
+            let route = registry
+                .routes()
+                .into_iter()
+                .find(|route| route.alias == lease.job.route)
+                .unwrap();
+            let admitted = || {
+                observe_background_activity(&index, &queue, &activity)
+                    && index.enrichment_is_current(generation)
+            };
+            let provider = fixture_provider(&route, &path, &bytes, audio, &budget);
+            consume_lease(
+                &index, &queue, &lease, generation, &route, provider, admitted,
+            )
+            .await
+            .unwrap();
+            assert!(
+                index
+                    .database
+                    .search("compiledquasar", 10)
+                    .unwrap()
+                    .iter()
+                    .any(|hit| hit.stable_id == lease.job.file_id),
+                "{extension}: searchable native completion"
+            );
+            assert!(index.pending_enrichment().unwrap().is_empty());
+            assert!(
+                queue
+                    .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        fixture.file("cancel.png", b"owned-cancel-source");
+        index.reconcile_inventory(false).unwrap();
+        index.extract_pending().unwrap();
+        let jobs = index.pending_enrichment().unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert!(queue.sync_jobs(&jobs).await);
+        let lease: EnrichmentLease = queue
+            .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        let route = registry
+            .routes()
+            .into_iter()
+            .find(|route| route.alias == lease.job.route)
+            .unwrap();
+        let generation = index.current_generation();
+        let consume = consume_lease(
+            &index,
+            &queue,
+            &lease,
+            generation,
+            &route,
+            std::future::pending::<Result<String, String>>(),
+            || {
+                observe_background_activity(&index, &queue, &activity)
+                    && index.enrichment_is_current(generation)
+            },
+        );
+        let stop = async {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            index
+                .work
+                .stop
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+        };
+        let (result, ()) = tokio::join!(consume, stop);
+        result.unwrap();
+        assert!(index.database.enrichment_job_is_queued(&lease.job).unwrap());
+        let neutral: EnrichmentLease = queue
+            .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(neutral.attempts, 1);
+        assert_eq!(neutral.generation, lease.generation + 1);
+        assert!(
+            !index
+                .database
+                .search("compiledquasar", 10)
+                .unwrap()
+                .iter()
+                .any(|hit| hit.stable_id == lease.job.file_id)
+        );
+    });
+    drop(queue);
+}

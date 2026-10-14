@@ -74,6 +74,14 @@ jobs:
       - name: Stage sidecars
         run: bun run stage:sidecars
 
+      - name: Verify pinned Rivet SDK and staging integrity
+        run: bun test workers/rivet-wasm.test.ts scripts/stage-rivet-engine.test.ts workers/enrichment-queue.test.ts
+
+      - name: Verify compiled enrichment recovery
+        env:
+          LUMEN_COMPILED_ENRICHMENT_TEST: '1'
+        run: bun test workers/enrichment-runtime.test.ts
+
       - name: Check Rust formatting
         working-directory: src-tauri
         run: cargo fmt --all -- --check
@@ -85,6 +93,18 @@ jobs:
       - name: Run Rust tests
         working-directory: src-tauri
         run: cargo test --all-features
+
+      - name: Verify compiled native enrichment consumer
+        working-directory: src-tauri
+        run: cargo test --all-features -j 1 compiled_enrichment_consumer -- --ignored --test-threads=1
+
+      - name: Verify compiled native enrichment ownership and restart
+        working-directory: src-tauri
+        run: cargo test --all-features -j 1 rivet_worker_ -- --ignored --test-threads=1
+
+      - name: Verify compiled improvement queue crash recovery and fencing
+        working-directory: src-tauri
+        run: cargo test --all-features -j 1 improvement_worker_recovers_crash_and_fences_old_generation -- --ignored --test-threads=1
 
       - name: Verify native answers in Edge
         run: bun run test:answer-native

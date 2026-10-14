@@ -418,9 +418,47 @@ pub(super) async fn consume_lease(
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
-    fn scanned_pdf() -> Vec<u8> {
+    pub(crate) async fn fixture_provider(
+        route: &AppliedRoute,
+        path: &Path,
+        bytes: &[u8],
+        audio: bool,
+        budget: &std::sync::Arc<crate::gateway::enrichment_budget::EnrichmentBudget>,
+    ) -> Result<String, String> {
+        use crate::local_http_tests as http;
+        let reply = if audio {
+            http::json(
+                r#"{"text":"compiledquasar transcript","usage":{"input_tokens":40,"output_tokens":10,"total_tokens":50}}"#,
+            )
+        } else {
+            http::json(
+                r#"{"status":"completed","usage":{"input_tokens":40,"output_tokens":10,"total_tokens":50},"output":[{"type":"message","content":[{"type":"output_text","text":"compiledquasar OCR"}]}]}"#,
+            )
+        };
+        let (base, server) = http::server(reply, Duration::ZERO);
+        let client = local_http::client(Duration::from_secs(60))
+            .map_err(|error| error.message("fixture"))?;
+        let request = provider_request(
+            &client,
+            &base,
+            "synthetic-native-only-key",
+            route.upstream_model(),
+            path,
+            bytes,
+            audio,
+        )?;
+        let result = metered_request(request, budget, || true).await;
+        let request = server.join().unwrap();
+        assert!(
+            request
+                .windows(b"synthetic-native-only-key".len())
+                .any(|part| part == b"synthetic-native-only-key")
+        );
+        result_text(&result?, audio)
+    }
+    pub(crate) fn scanned_pdf() -> Vec<u8> {
         let objects = [
             b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
             b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),

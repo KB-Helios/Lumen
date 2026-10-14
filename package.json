@@ -44,7 +44,7 @@
     "react": "^19.1.0",
     "react-aria-components": "^1.19.0",
     "react-dom": "^19.1.0",
-    "rivetkit": "^2.3.10",
+    "rivetkit": "2.3.10",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3",
@@ -69,5 +69,8 @@
     "typescript-eslint": "^8.65.0",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
+  },
+  "patchedDependencies": {
+    "rivetkit@2.3.10": "patches/rivetkit@2.3.10.patch"
   }
 }

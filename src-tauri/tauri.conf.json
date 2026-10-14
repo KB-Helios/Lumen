@@ -48,9 +48,7 @@
     "targets": "nsis",
     "externalBin": ["binaries/agentgateway", "binaries/cliproxy-sidecar", "binaries/lumen-enrichment", "binaries/lumen-rivet-engine", "binaries/lumen-computer-use"],
     "resources": {
-      "binaries/libstdc++-6.dll": "libstdc++-6.dll",
-      "binaries/libgcc_s_seh-1.dll": "libgcc_s_seh-1.dll",
-      "binaries/libwinpthread-1.dll": "libwinpthread-1.dll",
+      "resources/rivet-engine/THIRD-PARTY-NOTICES.txt": "rivet-engine/THIRD-PARTY-NOTICES.txt",
       "binaries/vector.dll": "vector.dll",
       "binaries/windows-ai/": "windows-ai/",
       "binaries/computer-use-runtime/": "computer-use-runtime/",

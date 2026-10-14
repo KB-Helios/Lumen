@@ -5,7 +5,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -67,6 +67,7 @@ pub struct EnrichmentSupervisor {
     user_paused: AtomicBool,
     activity_paused: AtomicBool,
     ready: AtomicBool,
+    process_generation: AtomicU64,
     process: Mutex<Option<EnrichmentProcesses>>,
     detail: Mutex<Option<String>>,
 }
@@ -93,6 +94,7 @@ fn owned_command(binary: &std::path::Path) -> Command {
 impl EnrichmentSupervisor {
     fn engine_config(&self, engine_db: &std::path::Path) -> serde_json::Value {
         serde_json::json!({
+            "auth":{"admin_token":self.bearer},
             "guard":{"host":"127.0.0.1","port":self.engine_port},
             "api_peer":{"host":"127.0.0.1","port":self.engine_port + 1},
             "metrics":{"host":"127.0.0.1","port":self.engine_port + 10},
@@ -126,6 +128,7 @@ impl EnrichmentSupervisor {
             user_paused: AtomicBool::new(false),
             activity_paused: AtomicBool::new(false),
             ready: AtomicBool::new(false),
+            process_generation: AtomicU64::new(0),
             process: Mutex::new(None),
             detail: Mutex::new(None),
         })
@@ -153,7 +156,8 @@ impl EnrichmentSupervisor {
         {
             return Ok(());
         }
-        *process = None;
+        self.process_generation.fetch_add(1, Ordering::SeqCst);
+        let previous = process.take();
         self.ready.store(false, Ordering::SeqCst);
         if !self.binary.is_file() {
             let message = "Rivet enrichment worker is not staged".to_owned();
@@ -166,65 +170,25 @@ impl EnrichmentSupervisor {
         if !self.engine_binary.is_file() {
             return Err("Rivet engine sidecar is not staged".to_owned());
         }
-        let engine_log_path = self.runtime_directory.join("rivet-engine.log");
-        let engine_log = fs::File::create(&engine_log_path).map_err(|error| error.to_string())?;
-        let engine_error_log = engine_log.try_clone().map_err(|error| error.to_string())?;
-        let engine_db = self.runtime_directory.join("rivet-engine-db");
-        fs::create_dir_all(&engine_db).map_err(|error| error.to_string())?;
-        let engine_config = self.runtime_directory.join("rivet-engine.json");
-        fs::write(
-            &engine_config,
-            serde_json::to_vec(&self.engine_config(&engine_db))
-                .map_err(|_| "Rivet configuration could not be serialized")?,
-        )
-        .map_err(|_| "Rivet configuration could not be saved")?;
-        let mut engine_command = owned_command(&self.engine_binary);
-        engine_command
-            .arg("start")
-            .arg("--config")
-            .arg(&engine_config)
-            .current_dir(&self.runtime_directory)
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(engine_log))
-            .stderr(Stdio::from(engine_error_log));
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            engine_command.creation_flags(0x0800_0000);
-        }
-        let engine_child = engine_command
-            .spawn()
-            .map_err(|error| format!("Could not start the Rivet engine: {error}"))?;
-        #[cfg(windows)]
-        let engine_job = super::supervisor::assign_kill_on_close_job(&engine_child)?;
-        let mut engine = ManagedProcess {
-            child: engine_child,
-            #[cfg(windows)]
-            job: engine_job.0 as isize,
+        let mut engine = match previous {
+            Some(mut previous) => {
+                if previous
+                    .engine
+                    .child
+                    .try_wait()
+                    .map_err(|error| error.to_string())?
+                    .is_none()
+                {
+                    drop(previous.worker);
+                    previous.engine
+                } else {
+                    drop(previous);
+                    self.start_engine()?
+                }
+            }
+            _ => self.start_engine()?,
         };
-
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        while TcpStream::connect_timeout(
-            &format!("127.0.0.1:{}", self.engine_port)
-                .parse()
-                .map_err(|error| format!("Invalid Rivet engine address: {error}"))?,
-            Duration::from_millis(100),
-        )
-        .is_err()
-        {
-            if let Some(status) = engine.child.try_wait().map_err(|error| error.to_string())? {
-                return Err(format!(
-                    "Rivet 2.3.10 Windows engine exited before readiness ({status})"
-                ));
-            }
-            if std::time::Instant::now() >= deadline {
-                return Err(fs::read_to_string(&engine_log_path)
-                    .ok()
-                    .filter(|value| !value.trim().is_empty())
-                    .unwrap_or_else(|| "Rivet engine did not become ready".to_owned()));
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
+        self.wait_engine_listening(&mut engine)?;
 
         let mut command = owned_command(&self.binary);
         let log_path = self.runtime_directory.join("rivet-worker.log");
@@ -266,11 +230,153 @@ impl EnrichmentSupervisor {
         Ok(())
     }
 
-    pub fn restart(&self) -> Result<(), String> {
-        *self
-            .process
-            .lock()
-            .map_err(|_| "Worker state is poisoned")? = None;
+    fn start_engine(&self) -> Result<ManagedProcess, String> {
+        let engine_log_path = self.runtime_directory.join("rivet-engine.log");
+        let engine_log = fs::File::create(&engine_log_path).map_err(|error| error.to_string())?;
+        let engine_error_log = engine_log.try_clone().map_err(|error| error.to_string())?;
+        let engine_db = self.runtime_directory.join("rivet-engine-db");
+        fs::create_dir_all(&engine_db).map_err(|error| error.to_string())?;
+        let engine_config = self.runtime_directory.join("rivet-engine.json");
+        fs::write(
+            &engine_config,
+            serde_json::to_vec(&self.engine_config(&engine_db))
+                .map_err(|_| "Rivet configuration could not be serialized")?,
+        )
+        .map_err(|_| "Rivet configuration could not be saved")?;
+        let mut engine_command = owned_command(&self.engine_binary);
+        engine_command
+            .arg("start")
+            .arg("--except-services")
+            .arg("api_peer")
+            .env("RUST_LOG", "info")
+            .arg("--config")
+            .arg(&engine_config)
+            .current_dir(&self.runtime_directory)
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(engine_log))
+            .stderr(Stdio::from(engine_error_log));
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            engine_command.creation_flags(0x0800_0000);
+        }
+        let engine_child = engine_command
+            .spawn()
+            .map_err(|error| format!("Could not start the Rivet engine: {error}"))?;
+        #[cfg(windows)]
+        let engine_job = super::supervisor::assign_kill_on_close_job(&engine_child)?;
+        let engine = ManagedProcess {
+            child: engine_child,
+            #[cfg(windows)]
+            job: engine_job.0 as isize,
+        };
+
+        Ok(engine)
+    }
+
+    fn wait_engine_listening(&self, engine: &mut ManagedProcess) -> Result<(), String> {
+        let engine_log_path = self.runtime_directory.join("rivet-engine.log");
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while TcpStream::connect_timeout(
+            &format!("127.0.0.1:{}", self.engine_port)
+                .parse()
+                .map_err(|error| format!("Invalid Rivet engine address: {error}"))?,
+            Duration::from_millis(100),
+        )
+        .is_err()
+        {
+            if let Some(status) = engine.child.try_wait().map_err(|error| error.to_string())? {
+                return Err(format!(
+                    "Rivet 2.3.10 Windows engine exited before readiness ({status})"
+                ));
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(fs::read_to_string(&engine_log_path)
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| "Rivet engine did not become ready".to_owned()));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        Ok(())
+    }
+
+    async fn engine_is_ready(&self) -> bool {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct EngineReady {
+            runtime: String,
+            status: String,
+            version: String,
+        }
+        let Ok(client) = local_http::client(Duration::from_secs(5)) else {
+            return false;
+        };
+        let response: Result<EngineReady, _> = local_http::json(
+            client
+                .get(format!("http://127.0.0.1:{}/health", self.engine_port))
+                .bearer_auth(&self.bearer),
+        )
+        .await;
+        response.is_ok_and(|value| {
+            value.runtime == "engine" && value.status == "ok" && value.version == "2.3.10"
+        })
+    }
+
+    pub async fn restart(&self) -> Result<(), String> {
+        let (generation, alive) = {
+            let mut process = self
+                .process
+                .lock()
+                .map_err(|_| "Worker state is poisoned")?;
+            let alive = if let Some(process) = process.as_mut() {
+                process
+                    .engine
+                    .child
+                    .try_wait()
+                    .map_err(|error| error.to_string())?
+                    .is_none()
+            } else {
+                false
+            };
+            (self.process_generation.load(Ordering::SeqCst), alive)
+        };
+        self.ready.store(false, Ordering::SeqCst);
+        let healthy = alive && self.engine_is_ready().await;
+        {
+            let mut process = self
+                .process
+                .lock()
+                .map_err(|_| "Worker state is poisoned")?;
+            if self.process_generation.load(Ordering::SeqCst) != generation {
+                return Err("Rivet runtime changed during restart; retry the request.".into());
+            }
+            self.process_generation.fetch_add(1, Ordering::SeqCst);
+            if !healthy {
+                *process = None;
+            } else if let Some(process) = process.as_mut() {
+                if process
+                    .worker
+                    .child
+                    .try_wait()
+                    .map_err(|error| error.to_string())?
+                    .is_none()
+                {
+                    process
+                        .worker
+                        .child
+                        .kill()
+                        .map_err(|error| error.to_string())?;
+                }
+                process
+                    .worker
+                    .child
+                    .wait()
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        self.ready.store(false, Ordering::SeqCst);
         self.start()
     }
 
@@ -278,7 +384,20 @@ impl EnrichmentSupervisor {
         format!("http://127.0.0.1:{}{path}", self.control_port)
     }
 
+    fn record_readiness(&self, generation: u64, ready: bool) -> bool {
+        let _guard = self
+            .process
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        if self.process_generation.load(Ordering::SeqCst) != generation {
+            return false;
+        }
+        self.ready.store(ready, Ordering::SeqCst);
+        true
+    }
+
     pub async fn sync_jobs(&self, jobs: &[EnrichmentJobRecord]) -> bool {
+        let generation = self.process_generation.load(Ordering::SeqCst);
         if self.is_paused() {
             return false;
         }
@@ -302,7 +421,7 @@ impl EnrichmentSupervisor {
             )
             .await;
             if let Err(error) = response {
-                self.ready.store(false, Ordering::SeqCst);
+                self.record_readiness(generation, false);
                 *self
                     .detail
                     .lock()
@@ -310,22 +429,28 @@ impl EnrichmentSupervisor {
                     Some(error.message("Rivet queue sync"));
                 return false;
             }
-            self.ready.store(true, Ordering::SeqCst);
+            if !self.record_readiness(generation, true) {
+                return false;
+            }
         }
         true
     }
 
     pub async fn queue_status(&self) -> Result<serde_json::Value, String> {
+        let generation = self.process_generation.load(Ordering::SeqCst);
         let client = local_http::client(Duration::from_secs(5))
             .map_err(|error| error.message("Enrichment queue"))?;
         let result = local_http::json(client.get(self.endpoint("/jobs")).bearer_auth(&self.bearer))
             .await
             .map_err(|error| error.message("Enrichment queue"));
-        self.ready.store(result.is_ok(), Ordering::SeqCst);
+        if !self.record_readiness(generation, result.is_ok()) {
+            return Err("Enrichment runtime changed; retry the request.".into());
+        }
         result
     }
 
     async fn verify_readiness(&self) {
+        let generation = self.process_generation.load(Ordering::SeqCst);
         #[derive(serde::Deserialize)]
         #[serde(deny_unknown_fields)]
         struct WorkerReady {
@@ -344,7 +469,7 @@ impl EnrichmentSupervisor {
         }
         .await
             == Some(true);
-        self.ready.store(ready, Ordering::SeqCst);
+        self.record_readiness(generation, ready);
     }
 
     pub(crate) async fn enrichment_request<T: DeserializeOwned>(
@@ -487,8 +612,8 @@ pub async fn resume_enrichment(state: State<'_, EnrichmentSupervisor>) -> Result
 }
 
 #[tauri::command]
-pub fn restart_enrichment(state: State<'_, EnrichmentSupervisor>) -> Result<(), String> {
-    state.inner().restart()
+pub async fn restart_enrichment(state: State<'_, EnrichmentSupervisor>) -> Result<(), String> {
+    state.inner().restart().await
 }
 
 #[cfg(test)]
@@ -788,7 +913,7 @@ mod tests {
                     .unwrap()["accepted"],
                 true
             );
-            supervisor.restart().unwrap();
+            supervisor.restart().await.unwrap();
             let began = std::time::Instant::now();
             let recovered = loop {
                 if let Ok(lease) = supervisor
@@ -856,20 +981,40 @@ mod tests {
         let root = std::env::temp_dir().join(format!("lumen-rivet-{}", uuid::Uuid::new_v4()));
         let supervisor = EnrichmentSupervisor::new(binary, engine, root.clone()).unwrap();
         supervisor.start().unwrap();
+        let (engine_pid, worker_pid) = {
+            let process = supervisor.process.lock().unwrap();
+            let process = process.as_ref().unwrap();
+            (process.engine.child.id(), process.worker.child.id())
+        };
+        assert!(
+            TcpListener::bind(("127.0.0.1", supervisor.engine_port + 1)).is_ok(),
+            "single local engine must not expose private peer API"
+        );
         thread::sleep(Duration::from_secs(2));
         let job = EnrichmentJobRecord {
-            idempotency_key: "file:hash:ocr:route".to_owned(),
+            idempotency_key: "file:owned-hash:ocr:route".to_owned(),
             file_id: "file".to_owned(),
-            content_hash: "hash".to_owned(),
+            content_hash: "a".repeat(64),
             kind: "ocr".to_owned(),
             route: "lumen.vision.cloud".to_owned(),
         };
         tauri::async_runtime::block_on(async {
-            supervisor.sync_jobs(&[job.clone(), job]).await;
+            assert!(supervisor.sync_jobs(&[job.clone(), job]).await);
             let first = supervisor.queue_status().await.unwrap();
             assert_eq!(first[0]["count"].as_u64(), Some(1));
         });
-        supervisor.restart().unwrap();
+        tauri::async_runtime::block_on(supervisor.restart()).unwrap();
+        {
+            let process = supervisor.process.lock().unwrap();
+            let process = process.as_ref().unwrap();
+            assert_eq!(
+                process.engine.child.id(),
+                engine_pid,
+                "normal worker restart retains the owned engine"
+            );
+            assert_ne!(process.worker.child.id(), worker_pid);
+        }
+        assert!(TcpListener::bind(("127.0.0.1", supervisor.engine_port + 1)).is_ok());
         thread::sleep(Duration::from_secs(2));
         tauri::async_runtime::block_on(async {
             supervisor.resume().await.unwrap();
@@ -878,6 +1023,216 @@ mod tests {
         });
         drop(supervisor);
         let _ = fs::remove_dir_all(root);
+    }
+    #[test]
+    #[ignore = "explicit compiled enrichment engine ownership gate after staging"]
+    fn rivet_worker_replaces_dead_engine_and_stops_owned_children() {
+        let fixture = crate::search::test_support::SearchFixture::new("rivet-engine-ownership");
+        let binaries = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+        let supervisor = EnrichmentSupervisor::new(
+            binaries.join("lumen-enrichment-x86_64-pc-windows-msvc.exe"),
+            binaries.join("lumen-rivet-engine-x86_64-pc-windows-msvc.exe"),
+            fixture.root().join("owned-runtime"),
+        )
+        .unwrap();
+        supervisor.start().unwrap();
+        let old_engine = {
+            let mut process = supervisor.process.lock().unwrap();
+            let process = process.as_mut().unwrap();
+            let id = process.engine.child.id();
+            process.engine.child.kill().unwrap();
+            process.engine.child.wait().unwrap();
+            id
+        };
+        tauri::async_runtime::block_on(supervisor.restart()).unwrap();
+        assert!(
+            !supervisor.ready.load(Ordering::SeqCst),
+            "a listening replacement engine is not actor readiness"
+        );
+        {
+            let mut process = supervisor.process.lock().unwrap();
+            let process = process.as_mut().unwrap();
+            assert_ne!(process.engine.child.id(), old_engine);
+            assert!(process.is_running());
+        }
+        assert!(TcpListener::bind(("127.0.0.1", supervisor.engine_port + 1)).is_ok());
+        #[cfg(windows)]
+        {
+            use windows::Win32::{
+                Foundation::CloseHandle,
+                System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+            };
+            let (engine, worker) = {
+                let process = supervisor.process.lock().unwrap();
+                let process = process.as_ref().unwrap();
+                unsafe {
+                    (
+                        OpenProcess(PROCESS_SYNCHRONIZE, false, process.engine.child.id()).unwrap(),
+                        OpenProcess(PROCESS_SYNCHRONIZE, false, process.worker.child.id()).unwrap(),
+                    )
+                }
+            };
+            drop(supervisor);
+            unsafe {
+                assert_eq!(WaitForSingleObject(engine, 1000).0, 0);
+                assert_eq!(WaitForSingleObject(worker, 1000).0, 0);
+                CloseHandle(engine).unwrap();
+                CloseHandle(worker).unwrap();
+            }
+        }
+    }
+    #[test]
+    fn missing_enrichment_engine_does_not_report_readiness_or_spawn_a_worker() {
+        let fixture = crate::search::test_support::SearchFixture::new("rivet-missing-engine");
+        let supervisor = EnrichmentSupervisor::new(
+            std::env::current_exe().unwrap(),
+            fixture.root().join("missing-engine.exe"),
+            fixture.root().join("runtime"),
+        )
+        .unwrap();
+        assert_eq!(
+            supervisor.start().unwrap_err(),
+            "Rivet engine sidecar is not staged"
+        );
+        assert!(!supervisor.ready.load(Ordering::SeqCst));
+        assert!(supervisor.process.lock().unwrap().is_none());
+    }
+    #[test]
+    fn enrichment_late_readiness_cannot_mark_a_replaced_runtime_ready() {
+        for operation in ["health", "status", "sync"] {
+            let fixture = crate::search::test_support::SearchFixture::new("rivet-late-readiness");
+            let supervisor = EnrichmentSupervisor::new(
+                PathBuf::from("unused"),
+                PathBuf::from("unused"),
+                fixture.root().join("runtime"),
+            )
+            .unwrap();
+            let reply = if operation == "health" {
+                r#"{"status":"ready"}"#
+            } else {
+                "[]"
+            };
+            let server = http::server_at(
+                TcpListener::bind(("127.0.0.1", supervisor.control_port)).unwrap(),
+                http::json(reply),
+                Duration::from_millis(200),
+            );
+            tauri::async_runtime::block_on(async {
+                let request = async {
+                    match operation {
+                        "health" => supervisor.verify_readiness().await,
+                        "status" => {
+                            assert_eq!(
+                                supervisor.queue_status().await.unwrap_err(),
+                                "Enrichment runtime changed; retry the request."
+                            );
+                        }
+                        _ => {
+                            assert!(
+                                !supervisor
+                                    .sync_jobs(&[EnrichmentJobRecord {
+                                        idempotency_key: "owned:hash:ocr:route".into(),
+                                        file_id: "owned".into(),
+                                        content_hash: "a".repeat(64),
+                                        kind: "ocr".into(),
+                                        route: "lumen.vision.cloud".into(),
+                                    }])
+                                    .await
+                            );
+                        }
+                    }
+                };
+                let replaced = async {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    let _guard = supervisor.process.lock().unwrap();
+                    supervisor.process_generation.fetch_add(1, Ordering::SeqCst);
+                    supervisor.ready.store(false, Ordering::SeqCst);
+                };
+                tokio::join!(request, replaced);
+            });
+            server.join().unwrap();
+            assert!(
+                !supervisor.ready.load(Ordering::SeqCst),
+                "{operation}: old actor response must not mark the replacement ready"
+            );
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "explicit owned Windows hung-engine integration gate after staging"]
+    fn rivet_worker_replaces_hung_owned_engine_without_false_readiness() {
+        use windows::Win32::{
+            Foundation::{CloseHandle, HANDLE},
+            System::Threading::{OpenProcess, PROCESS_SUSPEND_RESUME},
+        };
+        #[link(name = "ntdll")]
+        unsafe extern "system" {
+            fn NtSuspendProcess(handle: *mut std::ffi::c_void) -> i32;
+            fn NtResumeProcess(handle: *mut std::ffi::c_void) -> i32;
+        }
+        struct OwnedSuspension(HANDLE);
+        impl Drop for OwnedSuspension {
+            fn drop(&mut self) {
+                unsafe {
+                    let _ = NtResumeProcess(self.0.0);
+                    let _ = CloseHandle(self.0);
+                }
+            }
+        }
+        let fixture = crate::search::test_support::SearchFixture::new("rivet-hung-engine");
+        let binaries = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+        let supervisor = EnrichmentSupervisor::new(
+            binaries.join("lumen-enrichment-x86_64-pc-windows-msvc.exe"),
+            binaries.join("lumen-rivet-engine-x86_64-pc-windows-msvc.exe"),
+            fixture.root().join("owned-runtime"),
+        )
+        .unwrap();
+        supervisor.start().unwrap();
+        tauri::async_runtime::block_on(async {
+            let started = std::time::Instant::now();
+            while supervisor.queue_status().await.is_err() {
+                assert!(started.elapsed() < Duration::from_secs(20));
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        });
+        let old_engine = supervisor
+            .process
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .engine
+            .child
+            .id();
+        let suspension = OwnedSuspension(unsafe {
+            OpenProcess(PROCESS_SUSPEND_RESUME, false, old_engine).unwrap()
+        });
+        assert_eq!(unsafe { NtSuspendProcess(suspension.0.0) }, 0);
+        tauri::async_runtime::block_on(async {
+            let (first, second) = tokio::time::timeout(Duration::from_secs(16), async {
+                tokio::join!(supervisor.restart(), supervisor.restart())
+            })
+            .await
+            .expect("owned hung-engine restart watchdog");
+            assert!(
+                first.is_ok() ^ second.is_ok(),
+                "one concurrent restart wins; stale health must not replace its newer runtime"
+            );
+            let stale = first.err().or_else(|| second.err()).unwrap();
+            assert_eq!(
+                stale,
+                "Rivet runtime changed during restart; retry the request."
+            );
+        });
+        let process = supervisor.process.lock().unwrap();
+        let process = process.as_ref().unwrap();
+        assert_ne!(
+            process.engine.child.id(),
+            old_engine,
+            "a listening but hung owned engine must be replaced"
+        );
+        assert!(!supervisor.ready.load(Ordering::SeqCst));
+        drop(suspension);
     }
     #[test]
     fn enrichment_engine_config_matches_selected_loopback_ports_and_owned_database() {
@@ -895,6 +1250,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config["guard"]["host"], "127.0.0.1");
+        assert_eq!(config["auth"]["admin_token"], supervisor.bearer);
         assert_eq!(config["guard"]["port"], 26422);
         assert_eq!(config["api_peer"]["port"], 26423);
         assert_eq!(config["file_system"]["path"], database.to_str().unwrap());

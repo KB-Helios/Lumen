@@ -3,10 +3,16 @@ import rivetWasmPath from '@rivetkit/rivetkit-wasm/rivetkit_wasm_bg.wasm' with {
 import {actor, setup} from 'rivetkit';
 import {createClient} from 'rivetkit/client';
 import {db} from 'rivetkit/db';
+import {z} from 'zod';
 import {enrichmentJobSchema, enrichmentLeaseSchema, enrichmentFinishSchema, enrichmentQueueSql} from './enrichment-queue';
 import {improvementAdvanceSchema, improvementFinishSchema, improvementJobSchema, improvementLeaseSchema, improvementQueueSql} from './improvement-queue';
 
 const enrichmentQueue = actor({
+  onBeforeConnect(context) {
+    // The open-source engine routes actors without validating its gateway token.
+    // Pool authentication identifies the engine, not the originating caller.
+    if (context.request?.headers.get('authorization') !== `Bearer ${bearer}`) throw new Error('Unauthorized queue caller');
+  },
   db: db({
     onMigrate: async (database) => {
       await database.execute(enrichmentQueueSql.migrate);
@@ -23,8 +29,10 @@ const enrichmentQueue = actor({
       await context.db.execute(enrichmentQueueSql.enqueue, job.idempotencyKey, job.fileId, job.contentHash, job.kind, job.route, Date.now());
       return {accepted: true};
     },
-    lease: async (context) => {
+    lease: async (context, input: unknown) => {
       const now = Date.now();
+      const deadline = z.number().int().positive().parse(input);
+      if (deadline < now || deadline > now + 5000) return null;
       await context.db.execute(enrichmentQueueSql.resumeExpired, now, now);
       const rows = await context.db.execute(enrichmentQueueSql.lease, now, now, now);
       return rows[0] ?? null;
@@ -57,8 +65,10 @@ const enrichmentQueue = actor({
       await context.db.execute(improvementQueueSql.enqueue, job.idempotencyKey, job.baseVersion, job.configDigest, job.phase, job.candidateId, Date.now());
       return {accepted: true};
     },
-    leaseImprovement: async (context) => {
+    leaseImprovement: async (context, input: unknown) => {
       const now = Date.now();
+      const deadline = z.number().int().positive().parse(input);
+      if (deadline < now || deadline > now + 5000) return null;
       await context.db.execute(improvementQueueSql.resumeExpired, now, now);
       const rows = await context.db.execute(improvementQueueSql.lease, now, now);
       return rows[0] ?? null;
@@ -97,18 +107,33 @@ const rivetWasmModule = new WebAssembly.Module(await Bun.file(rivetWasmPath).arr
 export const registry = setup({
   use: {enrichmentQueue},
   runtime: 'wasm',
-  wasm: {bindings: rivetWasm, initInput: rivetWasmModule},
+  wasm: {bindings: rivetWasm, initInput: {module_or_path: rivetWasmModule}},
   sqlite: 'remote',
   httpHost: '127.0.0.1',
   httpPort: actorPort,
   endpoint: `http://127.0.0.1:${enginePort}`,
+  token: bearer,
+  configurePool: {url: `http://127.0.0.1:${actorPort}/api/rivet`, headers: {'x-rivet-token': bearer}},
+  serverless: {publicEndpoint: `http://127.0.0.1:${enginePort}`},
   startEngine: false,
   noWelcome: true,
   logging: {level: 'warn'},
 });
-await registry.start();
+Bun.serve({
+  hostname: '127.0.0.1', port: actorPort,
+  fetch(request) {
+    if (request.headers.get('x-rivet-token') !== bearer) return Response.json({error: 'unauthorized'}, {status: 401});
+    return registry.handler(request);
+  },
+});
+// Metadata initializes the supported serverless runtime and registers its pool.
+const metadata = await registry.handler(new Request(`http://127.0.0.1:${actorPort}/api/rivet/metadata`));
+if (!metadata.ok) throw new Error('Rivet serverless pool could not be configured');
 
-const client = createClient<typeof registry>(`http://127.0.0.1:${actorPort}`);
+// HTTP gateway actions support x-rivet-token. The SDK's token option also puts
+// the credential in actor URLs, which the engine logs on recovery warnings.
+const client = createClient<typeof registry>({endpoint: `http://127.0.0.1:${enginePort}`, namespace: 'default',
+  headers: {'x-rivet-token': bearer, authorization: `Bearer ${bearer}`}, disableMetadataLookup: true});
 const queue = client.enrichmentQueue.getOrCreate(['lumen']);
 
 Bun.serve({
@@ -119,34 +144,36 @@ Bun.serve({
       return Response.json({error: 'unauthorized'}, {status: 401});
     }
     const path = new URL(request.url).pathname;
+    const action = (name: string, args: unknown[] = []) => queue.action({name, args,
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(5000)]), skipReadyWait: true});
     try {
       if (request.method === 'GET' && path === '/health') {
-        await queue.status();
+        await action('status');
         return Response.json({status: 'ready'});
       }
-      if (path === '/improvements' && request.method === 'POST') return Response.json(await queue.enqueueImprovement(await request.json()));
-      if (path === '/improvements/lease' && request.method === 'POST') return Response.json(await queue.leaseImprovement());
-      if (path === '/improvements/heartbeat' && request.method === 'POST') return Response.json(await queue.heartbeatImprovement(await request.json()));
-      if (path === '/improvements/advance' && request.method === 'POST') return Response.json(await queue.advanceImprovement(await request.json()));
-      if (path === '/improvements/finish' && request.method === 'POST') return Response.json(await queue.finishImprovement(await request.json()));
-      if (path === '/improvements' && request.method === 'DELETE') return Response.json(await queue.clearImprovements());
+      if (path === '/improvements' && request.method === 'POST') return Response.json(await action('enqueueImprovement', [await request.json()]));
+      if (path === '/improvements/lease' && request.method === 'POST') return Response.json(await action('leaseImprovement', [Date.now() + 5000]));
+      if (path === '/improvements/heartbeat' && request.method === 'POST') return Response.json(await action('heartbeatImprovement', [await request.json()]));
+      if (path === '/improvements/advance' && request.method === 'POST') return Response.json(await action('advanceImprovement', [await request.json()]));
+      if (path === '/improvements/finish' && request.method === 'POST') return Response.json(await action('finishImprovement', [await request.json()]));
+      if (path === '/improvements' && request.method === 'DELETE') return Response.json(await action('clearImprovements'));
       if (request.method === 'GET' && path === '/jobs') {
-        return Response.json(await queue.status());
+        return Response.json(await action('status'));
       }
       if (request.method === 'POST' && path === '/jobs') {
-        return Response.json(await queue.enqueue(await request.json()));
+        return Response.json(await action('enqueue', [await request.json()]));
       }
       if (request.method === 'POST' && path === '/jobs/lease') {
-        return Response.json(await queue.lease());
+        return Response.json(await action('lease', [Date.now() + 5000]));
       }
       if (request.method === 'POST' && path === '/jobs/resume') {
-        await queue.resumeInterrupted();
+        await action('resumeInterrupted');
         return Response.json({resumed: true});
       }
-      if (request.method === 'POST' && path === '/jobs/heartbeat') return Response.json(await queue.heartbeat(await request.json()));
-      if (request.method === 'POST' && path === '/jobs/finish') return Response.json(await queue.finish(await request.json()));
-      if (request.method === 'POST' && path === '/jobs/retain') return Response.json(await queue.retain(await request.json()));
-      if (request.method === 'POST' && path === '/jobs/failed') return Response.json(await queue.failed());
+      if (request.method === 'POST' && path === '/jobs/heartbeat') return Response.json(await action('heartbeat', [await request.json()]));
+      if (request.method === 'POST' && path === '/jobs/finish') return Response.json(await action('finish', [await request.json()]));
+      if (request.method === 'POST' && path === '/jobs/retain') return Response.json(await action('retain', [await request.json()]));
+      if (request.method === 'POST' && path === '/jobs/failed') return Response.json(await action('failed'));
       return Response.json({error: 'not_found'}, {status: 404});
     } catch {
       return Response.json({error: 'worker_failed'}, {status: 500});

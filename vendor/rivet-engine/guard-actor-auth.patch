@@ -1,0 +1,70 @@
+diff --git a/engine/packages/guard/src/routing/pegboard_gateway/mod.rs b/engine/packages/guard/src/routing/pegboard_gateway/mod.rs
+index e16ec4f..85c812f 100644
+--- a/engine/packages/guard/src/routing/pegboard_gateway/mod.rs
++++ b/engine/packages/guard/src/routing/pegboard_gateway/mod.rs
+@@ -7,6 +7,7 @@ use anyhow::Result;
+ use gas::{ctx::message::SubscriptionHandle, prelude::*};
+ use hyper::header::HeaderName;
+ use rivet_guard_core::{RouteConfig, RouteTarget, RoutingOutput, request_context::RequestContext};
++use subtle::ConstantTimeEq;
+ 
+ use super::{
+ 	SEC_WEBSOCKET_PROTOCOL, WS_PROTOCOL_ACTOR, WS_PROTOCOL_SKIP_READY_WAIT, WS_PROTOCOL_TOKEN,
+@@ -32,6 +33,21 @@ const RUNNER_POOL_ERROR_CHECK_INTERVAL: Duration = Duration::from_secs(2);
+ 
+ pub const X_RIVET_ACTOR: HeaderName = HeaderName::from_static("x-rivet-actor");
+ 
++// Private local runtimes use the same configured authority as public management.
++// Check it before resolving a query: resolution can create a durable actor.
++fn authenticate_actor_gateway(ctx: &StandaloneCtx, token: Option<&str>) -> Result<()> {
++	let Some(auth) = &ctx.config().auth else {
++		return Ok(());
++	};
++	let Some(token) = token else {
++		return Err(rivet_api_builder::ApiForbidden.build());
++	};
++	if token.as_bytes().ct_ne(auth.admin_token.read().as_bytes()).into() {
++		return Err(rivet_api_builder::ApiForbidden.build());
++	}
++	Ok(())
++}
++
+ /// Route requests to actor services using path-based routing
+ #[tracing::instrument(skip_all)]
+ pub async fn route_request_path_based(
+@@ -71,19 +87,21 @@ pub async fn route_request_path_based_inner(
+ 	};
+ 
+ 	tracing::debug!(?actor_path, "routing using path-based actor routing");
++	let path_token = match &actor_path {
++		ParsedActorPath::Direct(path) => path.token.as_deref(),
++		ParsedActorPath::Query(path) => path.token.as_deref(),
++	};
++	let token = read_gateway_token_for_path_based(req_ctx, path_token)?.map(ToOwned::to_owned);
++	authenticate_actor_gateway(ctx, token.as_deref())?;
+ 
+ 	let (actor_id, token, stripped_path, skip_ready_wait) = match actor_path {
+ 		ParsedActorPath::Direct(path) => (
+ 			Id::parse(&path.actor_id).context("invalid actor id in path")?,
+-			read_gateway_token_for_path_based(req_ctx, path.token.as_deref())?
+-				.map(ToOwned::to_owned),
++			token,
+ 			path.stripped_path.clone(),
+ 			read_skip_ready_wait_for_path_based(req_ctx)?,
+ 		),
+ 		ParsedActorPath::Query(path) => {
+-			let token = read_gateway_token_for_path_based(req_ctx, path.token.as_deref())?
+-				.map(ToOwned::to_owned);
+-
+ 			match phase_timeout(
+ 				Phase::new(
+ 					"route_pegboard_resolve_query",
+@@ -234,6 +252,8 @@ pub async fn route_request(
+ 		(actor_id.to_string(), token, skip_ready_wait)
+ 	};
+ 
++	authenticate_actor_gateway(ctx, token.as_deref())?;
++
+ 	// Find actor to route to
+ 	let actor_id = Id::parse(&actor_id_str).context("invalid x-rivet-actor header")?;
+ 	let stripped_path = req_ctx.path().to_owned();

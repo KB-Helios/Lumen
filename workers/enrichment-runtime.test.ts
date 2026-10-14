@@ -1,0 +1,200 @@
+import {expect, test} from 'bun:test';
+import {createHash} from 'node:crypto';
+import {mkdir, mkdtemp, readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join, resolve} from 'node:path';
+import {createServer} from 'node:net';
+import {createClient} from 'rivetkit/client';
+
+// Explicit native gate: never substitutes SQL-only fixtures for compiled acceptance.
+const runtimeTest = process.env.LUMEN_COMPILED_ENRICHMENT_TEST === '1' ? test : test.skip;
+runtimeTest('compiled worker authenticates and persists fenced enrichment leases through crash', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lumen-task2b-'));
+  const binaries = resolve('src-tauri/binaries');
+  const engine = join(binaries, 'lumen-rivet-engine-x86_64-pc-windows-msvc.exe');
+  const worker = join(binaries, 'lumen-enrichment-x86_64-pc-windows-msvc.exe');
+  expect(createHash('sha256').update(await readFile(engine)).digest('hex')).toBe('6ec17d878a0800962e5c88ca05e6e58665b2ba693fa86dac3077ee5d9d89d089');
+  const guard = 26460, actor = 26462, control = 26463;
+  const bearer = crypto.randomUUID();
+  await mkdir(join(directory, 'db'));
+  await Bun.write(join(directory, 'engine.json'), JSON.stringify({
+    auth: {admin_token: bearer},
+    guard: {host: '127.0.0.1', port: guard}, api_peer: {host: '127.0.0.1', port: guard + 1},
+    metrics: {host: '127.0.0.1', port: guard + 10}, file_system: {path: join(directory, 'db')}, telemetry: {enabled: false},
+    topology: {datacenter_label: 1, datacenters: {default: {datacenter_label: 1, is_leader: true,
+      public_url: `http://127.0.0.1:${guard}`, peer_url: `http://127.0.0.1:${guard + 1}`}}},
+  }));
+  const environment: Record<string, string> = {};
+  for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP']) if (process.env[key]) environment[key] = process.env[key]!;
+  const logs: string[] = [];
+  let engineLaunch = 0, workerLaunch = 0;
+  const launchEngine = () => {
+    const paths = [join(directory, `engine-${engineLaunch}.log`), join(directory, `engine-${engineLaunch++}-error.log`)];
+    logs.push(...paths);
+    return Bun.spawn([engine, 'start', '--except-services', 'api_peer', '--config', join(directory, 'engine.json')],
+      {cwd: directory, env: {...environment, RUST_LOG: 'info'}, stdout: Bun.file(paths[0]), stderr: Bun.file(paths[1])});
+  };
+  const launchWorker = () => {
+    const paths = [join(directory, `worker-${workerLaunch}.log`), join(directory, `worker-${workerLaunch++}-error.log`)];
+    logs.push(...paths);
+    return Bun.spawn([worker], {cwd: directory, env: {...environment,
+      LUMEN_RIVET_PORT: String(actor), LUMEN_RIVET_ENGINE_PORT: String(guard), LUMEN_WORKER_CONTROL_PORT: String(control), LUMEN_WORKER_BEARER: bearer},
+      stdout: Bun.file(paths[0]), stderr: Bun.file(paths[1])});
+  };
+  let engineChild = launchEngine();
+  let workerChild: ReturnType<typeof launchWorker> | undefined;
+  console.log(`Owned compiled fixture directory: ${directory}; engine PID ${engineChild.pid}`);
+  async function request(path: string, body?: unknown, token = bearer) {
+    const response = await fetch(`http://127.0.0.1:${control}${path}`, {method: body === undefined ? 'GET' : 'POST',
+      headers: {authorization: `Bearer ${token}`, 'content-type': 'application/json'},
+      body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(5000), proxy: null});
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+  async function until<T>(operation: () => Promise<T>, accept: (value: T) => boolean, milliseconds: number) {
+    const deadline = Date.now() + milliseconds;
+    let last: unknown;
+    do {
+      try {const value = await operation(); if (accept(value)) return value;} catch (error) {last = error;}
+      await Bun.sleep(100);
+    } while (Date.now() < deadline);
+    throw new Error(`Compiled readiness/recovery deadline ${milliseconds}ms: ${String(last)}`);
+  }
+  async function peerListenerIsAbsent() {
+    const listener = createServer();
+    await new Promise<void>((resolve, reject) => listener.once('error', reject).listen(guard + 1, '127.0.0.1', resolve));
+    await new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()));
+    await expect(fetch(`http://127.0.0.1:${guard + 1}/namespaces?name=default`, {proxy: null, signal: AbortSignal.timeout(500)})).rejects.toThrow();
+  }
+  const engineHealth = async () => {
+    const response = await fetch(`http://127.0.0.1:${guard}/health`, {proxy: null, signal: AbortSignal.timeout(5000)});
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  const engineIsHealthy = (body: {runtime: string; status: string; version: string}) =>
+    body.runtime === 'engine' && body.status === 'ok' && body.version === '2.3.10';
+  try {
+    await until(engineHealth, engineIsHealthy, 10000);
+    workerChild = launchWorker();
+    console.log(`Owned worker PID ${workerChild.pid}`);
+    await until(() => request('/health'), body => body.status === 'ready', 20000);
+    const inventory = async () => {
+      const response = await fetch(`http://127.0.0.1:${guard}/actors?namespace=default&name=enrichmentQueue`, {
+        headers: {authorization: `Bearer ${bearer}`}, proxy: null, signal: AbortSignal.timeout(5000)});
+      expect(response.status).toBe(200);
+      return (await response.json()).actors as {actor_id: string}[];
+    };
+    const beforeAnonymousAllocation = await inventory();
+    expect(beforeAnonymousAllocation).toHaveLength(1);
+    for (const token of [undefined, 'owned-invalid-token']) {
+      const key = token ? 'owned-invalid-actor' : 'owned-unauthorized-actor';
+      const response = await fetch(`http://127.0.0.1:${guard}/gateway/enrichmentQueue/action/status?rvt-namespace=default&rvt-method=getOrCreate&rvt-runner=default&rvt-key=${key}&rvt-skip-ready-wait=true`, {
+        method: 'POST', body: JSON.stringify({args: []}), proxy: null, signal: AbortSignal.timeout(5000),
+        headers: {'content-type': 'application/json', ...(token ? {'x-rivet-token': token} : {})}});
+      expect(response.status).toBe(403);
+      expect((await response.json()).message).toBe('Access denied');
+      expect((await inventory()).map(actor => actor.actor_id)).toEqual(beforeAnonymousAllocation.map(actor => actor.actor_id));
+    }
+    expect((await fetch(`http://127.0.0.1:${control}/jobs`, {proxy: null})).status).toBe(401);
+    expect((await fetch(`http://127.0.0.1:${actor}/api/rivet/metadata`, {proxy: null})).status).toBe(401);
+    expect((await fetch(`http://127.0.0.1:${guard}/datacenters?namespace=default`, {proxy: null})).status).toBe(403);
+    for (const token of [undefined, 'owned-invalid-token']) {
+      const mutation = await fetch(`http://127.0.0.1:${guard}/namespaces`, {method: 'POST', proxy: null,
+        headers: {'content-type': 'application/json', ...(token ? {authorization: `Bearer ${token}`} : {})},
+        body: JSON.stringify({name: 'owned-forbidden-namespace', display_name: 'Owned forbidden namespace'}), signal: AbortSignal.timeout(5000)});
+      expect(mutation.status).toBe(403);
+    }
+    await peerListenerIsAbsent();
+    const job = {idempotencyKey: 'owned:ocr', fileId: 'owned', contentHash: 'a'.repeat(64), kind: 'ocr', route: 'lumen.vision.cloud'};
+    const invalid = await fetch(`http://127.0.0.1:${control}/jobs`, {method: 'POST', proxy: null,
+      headers: {authorization: `Bearer ${bearer}`, 'content-type': 'application/json'},
+      body: JSON.stringify({...job, providerKey: 'synthetic-forbidden-worker-key'}), signal: AbortSignal.timeout(5000)});
+    expect(invalid.status).toBe(500);
+    expect(await invalid.json()).toEqual({error: 'worker_failed'});
+    expect(await request('/jobs')).toEqual([]);
+    await request('/jobs', job); await request('/jobs', job);
+    expect(await request('/jobs')).toEqual([{status: 'queued', count: 1}]);
+    for (const token of [undefined, 'owned-invalid-token']) {
+      const unauthorized = createClient({endpoint: `http://127.0.0.1:${guard}`, namespace: 'default', poolName: 'default', token: '', disableMetadataLookup: true,
+        headers: token ? {'x-rivet-token': token, authorization: `Bearer ${token}`} : {}}).enrichmentQueue.getOrCreate(['lumen']);
+      for (const name of ['retain', 'clearImprovements']) {
+        await expect(unauthorized.action({name, args: name === 'retain' ? [[]] : [], signal: AbortSignal.timeout(5000), skipReadyWait: true})).rejects.toThrow('Access denied');
+      }
+      const base = `http://127.0.0.1:${guard}/gateway/enrichmentQueue`;
+      const query = '?rvt-namespace=default&rvt-method=getOrCreate&rvt-runner=default&rvt-key=lumen&rvt-skip-ready-wait=true';
+      const headers = {'content-type': 'application/json', ...(token ? {'x-rivet-token': token, authorization: `Bearer ${token}`} : {})};
+      const inspector = await fetch(`${base}/inspector/database/execute${query}`, {method: 'POST', headers,
+        body: JSON.stringify({sql: 'DELETE FROM enrichment_jobs'}), proxy: null, signal: AbortSignal.timeout(5000)});
+      expect(inspector.status).toBe(403);
+      const queue = await fetch(`${base}/queue/owned-denied${query}`, {method: 'POST', headers,
+        body: JSON.stringify({body: {owned: true}}), proxy: null, signal: AbortSignal.timeout(5000)});
+      expect(queue.status).toBe(403);
+      expect((await queue.json()).message).toBe('Access denied');
+      const actorId = beforeAnonymousAllocation[0].actor_id;
+      for (const path of [`/gateway/${actorId}/action/retain`, '/request/action/retain']) {
+        const mutation = await fetch(`http://127.0.0.1:${guard}${path}`, {method: 'POST', headers: {...headers,
+          'x-rivet-target': 'actor', 'x-rivet-actor': actorId}, body: JSON.stringify({args: [[]]}), proxy: null, signal: AbortSignal.timeout(5000)});
+        expect(mutation.status).toBe(403);
+      }
+      const preflight = await fetch(`${base}/action/retain${query.replace('rvt-key=lumen', 'rvt-key=owned-preflight-actor')}`, {method: 'OPTIONS', proxy: null,
+        headers: {origin: 'http://owned.invalid', 'access-control-request-method': 'POST'}, signal: AbortSignal.timeout(5000)});
+      expect(preflight.status).toBe(204);
+      for (const url of [`http://127.0.0.1:${guard}/gateway/${actorId}/connect`, `${base}/connect${query.replace('rvt-key=lumen', 'rvt-key=owned-ws-denied')}`]) {
+        let messages = 0;
+        const socket = new WebSocket(url.replace('http:', 'ws:'), token ? ['rivet', `rivet_token.${token}`] : ['rivet']);
+        try {
+          const closed = await new Promise<{code: number; reason: string}>((resolve, reject) => {
+            const deadline = setTimeout(() => {socket.close(); reject(new Error('Owned forbidden WebSocket did not close within 5000ms'));}, 5000);
+            socket.onmessage = () => {messages += 1;};
+            socket.onclose = event => {clearTimeout(deadline); resolve({code: event.code, reason: event.reason});};
+          });
+          expect(closed.code).toBe(1011);
+          expect(closed.reason).toMatch(/^api\.forbidden#[a-z0-9]+$/);
+          expect(messages).toBe(0);
+        } finally {socket.close();}
+      }
+      expect((await inventory()).map(actor => actor.actor_id)).toEqual(beforeAnonymousAllocation.map(actor => actor.actor_id));
+      expect(await request('/jobs')).toEqual([{status: 'queued', count: 1}]);
+    }
+    // The inspector has its own per-actor token; guard admission alone must not
+    // authorize arbitrary SQL even when the native controller is authenticated.
+    const inspector = await fetch(`http://127.0.0.1:${guard}/gateway/${beforeAnonymousAllocation[0].actor_id}/inspector/database/execute`, {
+      method: 'POST', headers: {'content-type': 'application/json', 'x-rivet-token': bearer, authorization: `Bearer ${bearer}`},
+      body: JSON.stringify({sql: 'DELETE FROM enrichment_jobs'}), proxy: null, signal: AbortSignal.timeout(5000)});
+    expect(inspector.status).toBe(401);
+    expect(await request('/jobs')).toEqual([{status: 'queued', count: 1}]);
+    const first = await request('/jobs/lease', {deadline: Number.MAX_SAFE_INTEGER});
+    expect(first).toMatchObject({...job, generation: 1, attempts: 1});
+    expect(await request('/jobs/lease', {})).toBeNull();
+    expect(await request('/jobs/heartbeat', {idempotencyKey: job.idempotencyKey, generation: 1})).toEqual({accepted: true});
+    workerChild.kill(); engineChild.kill(); await Promise.all([workerChild.exited, engineChild.exited]);
+    engineChild = launchEngine();
+    await until(engineHealth, engineIsHealthy, 10000);
+    workerChild = launchWorker();
+    await peerListenerIsAbsent();
+    const recovered = await until(() => request('/jobs/lease', {}), lease => lease !== null, 40000);
+    expect(recovered).toMatchObject({...job, generation: 2, attempts: 2});
+    expect(await request('/jobs/finish', {idempotencyKey: job.idempotencyKey, generation: 1, status: 'completed'})).toEqual({accepted: false});
+    expect(await request('/jobs/finish', {idempotencyKey: job.idempotencyKey, generation: 2, status: 'deferred'})).toEqual({accepted: true});
+    const neutral = await request('/jobs/lease', {});
+    expect(neutral).toMatchObject({generation: 3, attempts: 2});
+    expect(await request('/jobs/finish', {idempotencyKey: job.idempotencyKey, generation: 3, status: 'queued'})).toEqual({accepted: true});
+    expect(await request('/jobs/lease', {})).toBeNull();
+    const final = await until(() => request('/jobs/lease', {}), lease => lease !== null, 15000);
+    expect(final).toMatchObject({generation: 4, attempts: 3});
+    expect(await request('/jobs/finish', {idempotencyKey: job.idempotencyKey, generation: 4, status: 'queued'})).toEqual({accepted: true});
+    expect(await request('/jobs')).toEqual([{status: 'failed', count: 1}]);
+    expect(await request('/jobs/failed', {})).toEqual([job]);
+    await request('/jobs/retain', []); expect(await request('/jobs')).toEqual([]);
+  } finally {
+    workerChild?.kill(); engineChild.kill();
+    await Promise.all([workerChild?.exited, engineChild.exited]);
+    for (const path of logs) {
+      const log = await readFile(path);
+      for (const token of new Set([bearer, encodeURIComponent(bearer), Buffer.from(bearer).toString('base64'), Buffer.from(bearer).toString('base64url')])) {
+        expect(log.includes(Buffer.from(token))).toBe(false);
+      }
+    }
+    console.log(`Owned fixture stopped; retained logs: ${directory}`);
+  }
+}, 120000);
