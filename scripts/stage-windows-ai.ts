@@ -13,15 +13,26 @@ function ownedTarget(root: string, target: string) {
   return absoluteTarget;
 }
 
-/** Validate every ancestor and child before copying, replacing or recursively removing. */
-export async function verifyOwnedTree(root: string, target: string) {
+/** Validate an existing directory and its ancestors without scanning retained siblings. */
+export async function verifyOwnedDirectory(root: string, target: string) {
   const absoluteRoot = resolve(root);
   const absoluteTarget = ownedTarget(root, target);
+  const canonicalRoot = await realpath(absoluteRoot);
   for (let path = absoluteTarget; ; path = resolve(path, '..')) {
     const info = await lstat(path);
     if (info.isSymbolicLink()) throw new Error('Windows AI staging refuses reparse links.');
+    if (!info.isDirectory()) throw new Error('Windows AI staging requires regular directories.');
+    const canonical = relative(canonicalRoot, await realpath(path));
+    if (isAbsolute(canonical) || canonical.startsWith('..')) throw new Error('Windows AI staging escapes its owned directory.');
     if (path === absoluteRoot) break;
   }
+}
+
+/** Validate every child of a tree that will be copied, replaced or removed. */
+export async function verifyOwnedTree(root: string, target: string) {
+  await verifyOwnedDirectory(root, target);
+  const absoluteTarget = resolve(target);
+  const absoluteRoot = resolve(root);
   const canonicalRoot = await realpath(absoluteRoot);
   let visited = 0;
   async function visit(path: string) {
@@ -40,7 +51,7 @@ export async function verifyOwnedTree(root: string, target: string) {
 export async function replaceStagedDirectory(root: string, candidate: string, destination: string) {
   ownedTarget(root, destination);
   await verifyOwnedTree(root, candidate);
-  if (dirname(resolve(destination)) !== resolve(root)) await verifyOwnedTree(root, dirname(destination));
+  if (dirname(resolve(destination)) !== resolve(root)) await verifyOwnedDirectory(root, dirname(destination));
   let exists = false;
   try { await lstat(destination); exists = true; } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   if (exists) await verifyOwnedTree(root, destination);
@@ -62,8 +73,9 @@ async function stage() {
   if (process.platform !== 'win32' || !['x64', 'arm64'].includes(arch)) throw new Error('Windows AI staging requires Windows x64 or ARM64.');
   const runtime = `win-${arch}`;
   const buildRoot = join(worker, '.build');
+  await verifyOwnedDirectory(workspace, worker);
   await mkdir(buildRoot, {recursive:true});
-  await verifyOwnedTree(workspace, buildRoot);
+  await verifyOwnedDirectory(workspace, buildRoot);
   const fresh = await mkdtemp(join(buildRoot, `stable-${runtime}-`));
   const artifacts = join(fresh, 'artifacts');
   const publish = join(fresh, 'publish');
@@ -76,8 +88,9 @@ async function stage() {
   if (arch === process.arch) await run(['bun','test',join(worker,'protocol.test.ts')], {LUMEN_WINDOWS_AI_TEST_EXE:join(publish,'lumen-windows-ai.exe')});
   if (process.argv.includes('--build-only')) { console.log(`Published and verified Windows AI helper (${runtime}) at ${publish}; staging was not requested.`); return; }
   const binaries = join(workspace,'src-tauri','binaries');
+  await verifyOwnedDirectory(workspace, join(workspace, 'src-tauri'));
   await mkdir(binaries, {recursive:true});
-  await verifyOwnedTree(workspace, binaries);
+  await verifyOwnedDirectory(workspace, binaries);
   const candidate = await mkdtemp(join(binaries,'.windows-ai-stable-'));
   await cp(publish,candidate,{recursive:true,errorOnExist:true,force:false});
   await verifyOwnedTree(workspace, join(worker,'licenses'));
