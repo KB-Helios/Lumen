@@ -3,9 +3,9 @@ import rivetWasmPath from '@rivetkit/rivetkit-wasm/rivetkit_wasm_bg.wasm' with {
 import {actor, setup} from 'rivetkit';
 import {createClient} from 'rivetkit/client';
 import {db} from 'rivetkit/db';
-import {z} from 'zod';
 import {enrichmentJobSchema, enrichmentLeaseSchema, enrichmentFinishSchema, enrichmentQueueSql} from './enrichment-queue';
 import {improvementAdvanceSchema, improvementFinishSchema, improvementJobSchema, improvementLeaseSchema, improvementQueueSql} from './improvement-queue';
+import {leaseBeforeDeadline} from './lease-deadline';
 
 const enrichmentQueue = actor({
   onBeforeConnect(context) {
@@ -29,14 +29,7 @@ const enrichmentQueue = actor({
       await context.db.execute(enrichmentQueueSql.enqueue, job.idempotencyKey, job.fileId, job.contentHash, job.kind, job.route, Date.now());
       return {accepted: true};
     },
-    lease: async (context, input: unknown) => {
-      const now = Date.now();
-      const deadline = z.number().int().positive().parse(input);
-      if (deadline < now || deadline > now + 5000) return null;
-      await context.db.execute(enrichmentQueueSql.resumeExpired, now, now);
-      const rows = await context.db.execute(enrichmentQueueSql.lease, now, now, now);
-      return rows[0] ?? null;
-    },
+    lease: async (context, input: unknown) => leaseBeforeDeadline(context.db, enrichmentQueueSql, input),
     heartbeat: async (context, input: unknown) => {
       const lease = enrichmentLeaseSchema.parse(input); const now = Date.now();
       const rows = await context.db.execute(enrichmentQueueSql.heartbeat, now, now, lease.idempotencyKey, lease.generation, now);
@@ -65,14 +58,7 @@ const enrichmentQueue = actor({
       await context.db.execute(improvementQueueSql.enqueue, job.idempotencyKey, job.baseVersion, job.configDigest, job.phase, job.candidateId, Date.now());
       return {accepted: true};
     },
-    leaseImprovement: async (context, input: unknown) => {
-      const now = Date.now();
-      const deadline = z.number().int().positive().parse(input);
-      if (deadline < now || deadline > now + 5000) return null;
-      await context.db.execute(improvementQueueSql.resumeExpired, now, now);
-      const rows = await context.db.execute(improvementQueueSql.lease, now, now);
-      return rows[0] ?? null;
-    },
+    leaseImprovement: async (context, input: unknown) => leaseBeforeDeadline(context.db, improvementQueueSql, input),
     heartbeatImprovement: async (context, input: unknown) => {
       const lease = improvementLeaseSchema.parse(input); const now = Date.now();
       const rows = await context.db.execute(improvementQueueSql.heartbeat, now, now, lease.idempotencyKey, lease.generation, now);

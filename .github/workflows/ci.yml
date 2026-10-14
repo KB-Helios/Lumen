@@ -75,7 +75,7 @@ jobs:
         run: bun run stage:sidecars
 
       - name: Verify pinned Rivet SDK and staging integrity
-        run: bun test workers/rivet-wasm.test.ts scripts/stage-rivet-engine.test.ts workers/enrichment-queue.test.ts
+        run: bun test workers/rivet-wasm.test.ts scripts/stage-rivet-engine.test.ts workers/enrichment-queue.test.ts workers/improvement-queue.test.ts workers/lease-deadline.test.ts
 
       - name: Verify compiled enrichment recovery
         env:

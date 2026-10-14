@@ -22,9 +22,10 @@ export const improvementQueueSql = {
     lease_until INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`,
   enqueue: `INSERT OR IGNORE INTO improvement_jobs
     (idempotency_key,base_version,config_digest,phase,candidate_id,updated_at) VALUES (?,?,?,?,?,?)`,
-  lease: `UPDATE improvement_jobs SET status='running',generation=generation+1,lease_until=?+30000,updated_at=?
+  lease: `UPDATE improvement_jobs SET status='running',generation=generation+1,lease_until=?1+30000,updated_at=?1
     WHERE idempotency_key=(SELECT idempotency_key FROM improvement_jobs WHERE status='queued' ORDER BY updated_at LIMIT 1)
     AND NOT EXISTS(SELECT 1 FROM improvement_jobs WHERE status='running')
+    AND ?2 >= CAST(unixepoch('subsec')*1000 AS INTEGER)
     RETURNING idempotency_key AS idempotencyKey,base_version AS baseVersion,config_digest AS configDigest,
     phase,candidate_id AS candidateId,generation`,
   heartbeat: `UPDATE improvement_jobs SET lease_until=?+30000,updated_at=? WHERE idempotency_key=? AND generation=? AND status='running' AND lease_until>=?

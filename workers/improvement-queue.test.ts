@@ -19,13 +19,13 @@ test('independent improvement queue validates allowlisted metadata and is idempo
 });
 test('leases are atomic, fenced and only expired work is resumed', () => {
   const db = database(); enqueue(db);
-  const first = db.query(improvementQueueSql.lease).get(1000, 1000) as {generation: number};
+  const first = db.query(improvementQueueSql.lease).get(1000, Date.now() + 5000) as {generation: number};
   expect(first.generation).toBe(1);
-  expect(db.query(improvementQueueSql.lease).get(1001, 1001)).toBeNull();
+  expect(db.query(improvementQueueSql.lease).get(1001, Date.now() + 5000)).toBeNull();
   db.query(improvementQueueSql.resumeExpired).run(2000, 2000);
-  expect(db.query(improvementQueueSql.lease).get(2000, 2000)).toBeNull();
+  expect(db.query(improvementQueueSql.lease).get(2000, Date.now() + 5000)).toBeNull();
   db.query(improvementQueueSql.resumeExpired).run(32_000, 32_000);
-  const second = db.query(improvementQueueSql.lease).get(32_000, 32_000) as {generation: number};
+  const second = db.query(improvementQueueSql.lease).get(32_000, Date.now() + 5000) as {generation: number};
   expect(second.generation).toBe(2);
   expect(db.query(improvementQueueSql.finish).get('completed', 32_001, 'job-1', 1, 32_001)).toBeNull();
   expect(db.query(improvementQueueSql.finish).get('completed', 32_001, 'job-1', 2, 32_001)).not.toBeNull();
