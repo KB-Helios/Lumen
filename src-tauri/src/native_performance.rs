@@ -122,7 +122,7 @@ pub fn run(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     .initialization_script("Object.defineProperty(window, '__LUMEN_NATIVE_PERFORMANCE__', {value: true});")
                     .on_navigation(|url| url.scheme() == "http" && url.host_str() == Some("localhost") && url.port() == Some(1420) && url.path() == "/scripts/native-performance.html")
                     .build()?;
-                crate::window::apply_native_material(&window)?;
+                crate::window::apply_native_material(&window, WindowMode::Collapsed)?;
                 Ok(())
             })
             .run(context)?;

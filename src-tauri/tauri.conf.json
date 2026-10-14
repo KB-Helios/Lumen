@@ -31,11 +31,7 @@
         "skipTaskbar": true,
         "shadow": false,
         "zoomHotkeysEnabled": false,
-        "backgroundColor": "#00000000",
-        "windowEffects": {
-          "effects": ["acrylic", "mica", "blur"],
-          "color": "#0a121bc4"
-        }
+        "backgroundColor": "#00000000"
       }
     ],
     "security": {

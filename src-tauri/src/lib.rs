@@ -249,7 +249,7 @@ pub fn run() {
             }
 
             if let Some(main_window) = app.get_webview_window("main") {
-                window::apply_native_material(&main_window)?;
+                window::apply_native_material(&main_window, window::WindowMode::Collapsed)?;
             }
             smoke_checkpoint("material");
 

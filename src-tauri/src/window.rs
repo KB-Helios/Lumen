@@ -420,14 +420,18 @@ fn place_on_preferred_monitor(
         .map_err(|error| error.to_string())
 }
 
-pub fn apply_native_material(window: &WebviewWindow) -> Result<(), String> {
+fn native_effects_for_mode(mode: WindowMode) -> Option<tauri::utils::config::WindowEffectsConfig> {
+    (mode != WindowMode::Collapsed).then(|| {
+        EffectsBuilder::new()
+            .effects(effect_fallback_order())
+            .color(Color(10, 18, 27, 196))
+            .build()
+    })
+}
+
+pub fn apply_native_material(window: &WebviewWindow, mode: WindowMode) -> Result<(), String> {
     window
-        .set_effects(
-            EffectsBuilder::new()
-                .effects(effect_fallback_order())
-                .color(Color(10, 18, 27, 196))
-                .build(),
-        )
+        .set_effects(native_effects_for_mode(mode))
         .map_err(|error| error.to_string())
 }
 
@@ -456,6 +460,7 @@ pub(crate) fn show_for_performance_fixture(
     let geometry = geometry_for(mode);
     apply_geometry(window, geometry)?;
     place_on_preferred_monitor(window, geometry, MonitorBehavior::default())?;
+    apply_native_material(window, mode)?;
     let hwnd = window.hwnd().map_err(|error| error.to_string())?;
     // ShowWindow's first call can honor STARTUPINFO instead of its no-activate flag.
     unsafe {
@@ -485,6 +490,7 @@ fn show_window(
         .unwrap_or_default();
     apply_geometry(window, geometry)?;
     place_on_preferred_monitor(window, geometry, monitor_behavior)?;
+    apply_native_material(window, mode)?;
     window.show().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())?;
     window
@@ -747,6 +753,21 @@ mod tests {
             effect_fallback_order(),
             [Effect::Acrylic, Effect::Mica, Effect::Blur]
         );
+    }
+
+    #[test]
+    fn collapsed_launcher_has_no_full_window_material() {
+        let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+        assert!(context.config().app.windows[0].window_effects.is_none());
+        assert!(native_effects_for_mode(WindowMode::Collapsed).is_none());
+        for mode in [
+            WindowMode::Expanded,
+            WindowMode::Onboarding,
+            WindowMode::Settings,
+            WindowMode::Gallery,
+        ] {
+            assert!(native_effects_for_mode(mode).is_some(), "{mode:?}");
+        }
     }
 
     #[test]

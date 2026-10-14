@@ -18,7 +18,7 @@ The React palette never owns or continuously animates those OS bounds. It reques
 
 ## Material fallback
 
-The transparent Windows window requests Acrylic, then Mica, then Blur through Tauri's native effects list. The web surface always supplies adaptive tint, restrained luminosity, texture, edges, and shadow. If native composition is unavailable—or transparency is disabled—the opaque Tailwind CSS semantic theme remains complete and readable.
+The collapsed launcher clears full-window native effects so the transparent window does not paint a rectangle outside its rounded pill. Expanded, onboarding, settings, and gallery modes request Acrylic, then Mica, then Blur through Tauri's native effects list. The web surface always supplies adaptive tint, restrained luminosity, texture, edges, and shadow. If native composition is unavailable—or transparency is disabled—the opaque Tailwind CSS semantic theme remains complete and readable.
 
 ## Security and plugins
 
