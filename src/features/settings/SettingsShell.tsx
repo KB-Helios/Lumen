@@ -109,7 +109,14 @@ export function SettingsShell({onClose, pages}: SettingsShellProps) {
         className="grid min-h-0 min-w-0 grid-cols-[clamp(148px,30%,260px)_minmax(0,1fr)]"
       >
         <div className="min-h-0 min-w-0 overflow-y-auto border-r border-border-subtle bg-surface-inset"><SettingsNav /></div>
-        <main ref={contentRef} aria-label="Settings content" className="min-h-0 min-w-0 overflow-y-auto" data-testid="settings-content">
+        <main ref={contentRef} aria-label="Settings content" className="min-h-0 min-w-0 overflow-y-auto" data-testid="settings-content"
+          onFocusCapture={(event) => {
+            // Portal focus bubbles through React; reveal only this scrollport's own descendants.
+            if (event.target instanceof HTMLElement && event.currentTarget.contains(event.target)) {
+              event.target.scrollIntoView?.({block: 'nearest', inline: 'nearest', behavior: 'instant'});
+            }
+          }}
+        >
           <TabPanel id={page.id} className="min-w-0 outline-none">
             <motion.div
               key={page.id}

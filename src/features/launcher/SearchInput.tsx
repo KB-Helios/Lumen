@@ -118,6 +118,13 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       commitAfterInputPaint(value, startedAt);
     };
 
+    const handleCompositionStart = () => {
+      cancelPendingCommit();
+      // Publish preceding ordinary input before composition changes its admission boundary.
+      setDraft(inputRef.current?.value ?? '');
+      startComposition();
+    };
+
     const handleCompositionEnd = () => {
       cancelPendingCommit();
       setDraft(inputRef.current?.value ?? '');
@@ -142,7 +149,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           type="search"
           className="min-w-0 flex-1 border-0 bg-transparent p-0 font-sans text-[1.0625rem] font-normal leading-tight tracking-tight text-[color:var(--einui-command-text)] caret-accent outline-none placeholder:text-[color:var(--einui-command-muted-text)]"
           onCompositionEnd={handleCompositionEnd}
-          onCompositionStart={startComposition}
+          onCompositionStart={handleCompositionStart}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
         />
