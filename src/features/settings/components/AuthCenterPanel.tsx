@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 
 import {LumenButton} from '../../../design-system/primitives/LumenButton';
 import {LumenText} from '../../../design-system/primitives/LumenText';
@@ -52,6 +52,7 @@ function OAuthAccountSection({
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const cancelRequested = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,9 +73,10 @@ function OAuthAccountSection({
     if (session === null) return;
     let cancelled = false;
     const poll = async () => {
+      if (cancelRequested.current) return;
       try {
         const result = await api.oauthPoll(session.state);
-        if (cancelled) return;
+        if (cancelled || cancelRequested.current) return;
         if (result.error) {
           setError(result.error);
           setSession(null);
@@ -83,7 +85,7 @@ function OAuthAccountSection({
           setLinked(true);
         }
       } catch (caught) {
-        if (!cancelled) {
+        if (!cancelled && !cancelRequested.current) {
           setError(toProviderErrorMessage(caught));
           setSession(null);
         }
@@ -97,6 +99,7 @@ function OAuthAccountSection({
   }, [api, session, pollIntervalMs]);
 
   const start = async () => {
+    cancelRequested.current = false;
     setBusy(true);
     setError('');
     try {
@@ -110,13 +113,17 @@ function OAuthAccountSection({
 
   const cancel = async () => {
     if (session === null) return;
+    cancelRequested.current = true;
     setBusy(true);
+    setError('');
     try {
-      await api.oauthCancel(session.state);
+      if (await api.oauthCancel(session.state) !== true) {
+        throw new Error('Sign-in cancellation was not confirmed. Try again.');
+      }
+      setSession(null);
     } catch (caught) {
       setError(toProviderErrorMessage(caught));
     } finally {
-      setSession(null);
       setBusy(false);
     }
   };

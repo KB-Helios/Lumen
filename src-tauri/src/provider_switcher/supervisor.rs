@@ -66,6 +66,11 @@ impl ProviderSwitcherSupervisor {
     /// Start the selected binary with the runtime config unless its child is running.
     /// Report a missing binary, process error, or Windows Job assignment failure.
     pub fn start(&mut self) -> Result<(), String> {
+        let management_key = std::env::var("CLIPROXY_MGMT_KEY").ok();
+        self.start_with_management_key(management_key.as_deref())
+    }
+
+    fn start_with_management_key(&mut self, management_key: Option<&str>) -> Result<(), String> {
         if let Some(running) = self.child.as_mut() {
             let still_running = running
                 .child
@@ -80,13 +85,17 @@ impl ProviderSwitcherSupervisor {
         if !self.binary.is_file() {
             return Err("Cliproxy sidecar is not staged".to_owned());
         }
-        if let Some(parent) = self.config.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
+        let runtime = self
+            .config
+            .parent()
+            .ok_or("Invalid Cliproxy runtime path")?;
+        super::config::initialize_runtime(runtime, management_key)?;
         let mut command = Command::new(&self.binary);
         command
             .arg("-config")
             .arg(&self.config)
+            // Management authentication must match the native-owned config/key.
+            .env_remove("MANAGEMENT_PASSWORD")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -260,5 +269,31 @@ mod tests {
     #[test]
     fn health_url_is_loopback() {
         assert_eq!(health_url(8317), "http://127.0.0.1:8317/healthz");
+    }
+
+    #[test]
+    fn clean_start_initializes_config_before_spawning() {
+        let directory =
+            std::env::temp_dir().join(format!("lumen-proxy-start-{}", uuid::Uuid::new_v4()));
+        // A non-executable owned file reaches startup preparation without starting a real sidecar.
+        std::fs::create_dir(&directory).unwrap();
+        let binary = directory.join("not-executable.exe");
+        std::fs::write(&binary, b"owned fixture, not a process").unwrap();
+        let runtime = directory.join("runtime");
+        let mut supervisor = ProviderSwitcherSupervisor::new(&binary, &binary, &runtime);
+        assert!(
+            supervisor
+                .start_with_management_key(Some("owned-start-key"))
+                .is_err()
+        );
+        let config = std::fs::read_to_string(runtime.join("config.yaml"));
+        let key = std::fs::read_to_string(runtime.join("mgmt.key"));
+        let auths = runtime.join("auths").is_dir();
+        std::fs::remove_dir_all(&directory).unwrap();
+        let config = config.expect("clean startup must prepare the fixed config before spawn");
+        let key = key.expect("clean startup must prepare a native management key");
+        assert!(!key.is_empty());
+        assert!(config.contains(&format!("secret-key: \"{key}\"")));
+        assert!(auths);
     }
 }

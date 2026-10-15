@@ -134,10 +134,13 @@ impl CliproxyClient {
             .await
             .map_err(|_| "Cliproxy request failed".to_owned())?;
         let value = check_status(response).await?;
-        Ok(value
-            .get("cancelled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false))
+        match (
+            value.get("status").and_then(Value::as_str),
+            value.get("cancelled").and_then(Value::as_bool),
+        ) {
+            (Some("ok"), Some(cancelled)) => Ok(cancelled),
+            _ => Err("Cliproxy did not confirm OAuth cancellation".to_owned()),
+        }
     }
 
     /// Boolean link status for one OAuth provider, derived from
