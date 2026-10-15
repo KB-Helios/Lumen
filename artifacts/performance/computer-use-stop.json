@@ -1,89 +1,89 @@
 {
-  "gateP95Micros": 1,
+  "gateP95Micros": 0,
   "method": "native gate and Job Object with blocked stdin and held admission permit",
   "platform": "Windows x64",
   "repetitions": 20,
   "samples": [
     {
-      "gateMicros": 274,
-      "teardownMicros": 7731
+      "gateMicros": 2,
+      "teardownMicros": 3057
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 6015
+      "teardownMicros": 3214
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 2766
+      "teardownMicros": 2721
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 2778
+      "teardownMicros": 3182
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 2857
+      "teardownMicros": 3148
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4373
+      "teardownMicros": 3241
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4296
+      "teardownMicros": 3213
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4529
+      "teardownMicros": 4221
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4521
+      "teardownMicros": 2663
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3930
+      "teardownMicros": 3168
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3898
-    },
-    {
-      "gateMicros": 1,
-      "teardownMicros": 3402
+      "teardownMicros": 3162
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4392
+      "teardownMicros": 2714
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3888
-    },
-    {
-      "gateMicros": 1,
-      "teardownMicros": 4277
+      "teardownMicros": 3157
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 2786
+      "teardownMicros": 3154
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 5948
+      "teardownMicros": 3150
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4472
+      "teardownMicros": 3178
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3072
+      "teardownMicros": 2676
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4346
+      "teardownMicros": 3141
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3145
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3142
     }
   ],
-  "teardownP95Micros": 6015
+  "teardownP95Micros": 3241
 }
