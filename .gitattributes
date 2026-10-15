@@ -5,3 +5,5 @@ vendor/rivet-engine/THIRD-PARTY-NOTICES.txt -text
 vendor/rivet-engine/notice-sources.json -text
 vendor/rivet-engine/build.sh text eol=lf
 patches/rivetkit@2.3.10.patch -text
+# Preserve the raw performance evidence hashes and original log encodings.
+artifacts/performance/production-readiness-2026-10-15/** -text

@@ -1,0 +1,62 @@
+{
+  "version": {
+    "Browser": "Edg/155.0.4283.45",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0",
+    "V8-Version": "15.5.9.4",
+    "WebKit-Version": "537.36 (@50f24ef2aa5369a074b8888b7db82d9c0652d642)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9709/devtools/browser/791d25af-3153-43fe-bc29-736913e634b0"
+  },
+  "rootPid": 34476,
+  "listenerPid": 33788,
+  "ownedProcesses": [
+    {
+      "ProcessId": 34476,
+      "ParentProcessId": 3920,
+      "Name": "lumen.exe",
+      "CommandLine": "D:/CodexBuilds/Lumen/production-readiness/debug/lumen.exe"
+    },
+    {
+      "ProcessId": 34156,
+      "ParentProcessId": 34476,
+      "Name": "conhost.exe",
+      "CommandLine": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+    },
+    {
+      "ProcessId": 33788,
+      "ParentProcessId": 34476,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\155.0.4283.45\\msedgewebview2.exe\" --embedded-browser-webview=1 --webview-exe-name=lumen.exe --webview-exe-version=0.1.0 --user-data-dir=\"\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView\" --noerrdialogs --embedded-browser-webview-dpi-awareness=2 --autoplay-policy=no-user-gesture-required --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-address=127.0.0.1 --remote-debugging-port=9709 --lang=sv-SE --mojo-named-platform-channel-pipe=34476.5636.15515471364683042802 /pfhostedapp:bb5e79d5238b386f8a2918e7c914faa7ec4a5f08"
+    },
+    {
+      "ProcessId": 16420,
+      "ParentProcessId": 33788,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\155.0.4283.45\\msedgewebview2.exe\" --type=crashpad-handler --user-data-dir=\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView /prefetch:4 /pfhostedapp:bb5e79d5238b386f8a2918e7c914faa7ec4a5f08 --monitor-self-annotation=ptype=crashpad-handler --database=\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView\\Crashpad --metrics-dir=\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView --annotation=IsOfficialBuild=1 --annotation=channel= --annotation=chromium-version=155.0.8059.40 \"--annotation=exe=C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\155.0.4283.45\\msedgewebview2.exe\" --annotation=plat=Win64 \"--annotation=prod=Edge WebView2\" --annotation=ver=155.0.4283.45 --initial-client-data=0x17c,0x180,0x184,0x158,0x18c,0x7ffdc57e83e0,0x7ffdc57e83f0,0x7ffdc57e8400"
+    },
+    {
+      "ProcessId": 4976,
+      "ParentProcessId": 33788,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\155.0.4283.45\\msedgewebview2.exe\" --type=gpu-process --gpu-recent-crash-count=0 --noerrdialogs --user-data-dir=\"\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView\" --webview-exe-name=lumen.exe --webview-exe-version=0.1.0 --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --gpu-preferences=WAAAAAAAAADgAAAEAAAAAAAAAAAAAGAAQAAAAAAAAAADAAAAAAAAADgAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAAEAAAAAIAAAABAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --startup-read-main-dll --metrics-shmem-handle=1780,i,14777167982357550908,2088234248353717149,262144 --field-trial-handle=1952,i,15081337250753425252,4497246176924162409,262144 --disable-features=msPdfOOUI,msSmartScreenProtection,msWebOOUI --variations-seed-version --pseudonymization-salt-handle=1964,i,551384653527934725,6705745793602166919,4 --trace-process-track-uuid=3190708988185955192 --mojo-platform-channel-handle=1944 /prefetch:2 /pfhostedapp:bb5e79d5238b386f8a2918e7c914faa7ec4a5f08"
+    },
+    {
+      "ProcessId": 33548,
+      "ParentProcessId": 33788,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\155.0.4283.45\\msedgewebview2.exe\" --type=utility --utility-sub-type=network.mojom.NetworkService --lang=sv --service-sandbox-type=none --noerrdialogs --user-data-dir=\"\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView\" --webview-exe-name=lumen.exe --webview-exe-version=0.1.0 --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --startup-read-main-dll --metrics-shmem-handle=2124,i,18124251663927529799,1466193161137769519,524288 --field-trial-handle=1952,i,15081337250753425252,4497246176924162409,262144 --disable-features=msPdfOOUI,msSmartScreenProtection,msWebOOUI --variations-seed-version --pseudonymization-salt-handle=1964,i,551384653527934725,6705745793602166919,4 --trace-process-track-uuid=3190708989122997041 --mojo-platform-channel-handle=2132 /prefetch:11 /pfhostedapp:bb5e79d5238b386f8a2918e7c914faa7ec4a5f08"
+    },
+    {
+      "ProcessId": 4632,
+      "ParentProcessId": 33788,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\155.0.4283.45\\msedgewebview2.exe\" --type=utility --utility-sub-type=storage.mojom.StorageService --lang=sv --service-sandbox-type=service --noerrdialogs --user-data-dir=\"\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView\" --webview-exe-name=lumen.exe --webview-exe-version=0.1.0 --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --startup-read-main-dll --metrics-shmem-handle=2496,i,7738853363488394971,8610325979033502105,524288 --field-trial-handle=1952,i,15081337250753425252,4497246176924162409,262144 --disable-features=msPdfOOUI,msSmartScreenProtection,msWebOOUI --variations-seed-version --pseudonymization-salt-handle=1964,i,551384653527934725,6705745793602166919,4 --trace-process-track-uuid=3190708990060038890 --mojo-platform-channel-handle=2516 /prefetch:13 /pfhostedapp:bb5e79d5238b386f8a2918e7c914faa7ec4a5f08"
+    },
+    {
+      "ProcessId": 34296,
+      "ParentProcessId": 33788,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\155.0.4283.45\\msedgewebview2.exe\" --type=renderer --noerrdialogs --user-data-dir=\"\\\\?\\C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-vGgzsx\\webview\\EBWebView\" --webview-exe-name=lumen.exe --webview-exe-version=0.1.0 --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --autoplay-policy=no-user-gesture-required --remote-debugging-port=9709 --video-capture-use-gpu-memory-buffer --lang=sv --js-flags --device-scale-factor=1.5 --num-raster-threads=4 --enable-main-frame-before-activation --renderer-client-id=5 --js-flags=--ms-user-locale=sv_SE --ssd-no-pressure-read-main-dll --launch-time-ticks=1984008130 --metrics-shmem-handle=3840,i,4542725510142890051,10821523657320372713,1048576 --field-trial-handle=1952,i,15081337250753425252,4497246176924162409,262144 --disable-features=msPdfOOUI,msSmartScreenProtection,msWebOOUI --variations-seed-version --pseudonymization-salt-handle=1964,i,551384653527934725,6705745793602166919,4 --trace-process-track-uuid=3190708990997080739 --mojo-platform-channel-handle=3800 /pfhostedapp:bb5e79d5238b386f8a2918e7c914faa7ec4a5f08 /prefetch:1"
+    }
+  ]
+}

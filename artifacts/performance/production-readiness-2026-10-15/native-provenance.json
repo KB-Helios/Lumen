@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-10-15T10:34:10.650Z",
+  "executable": "D:/CodexBuilds/Lumen/production-readiness/debug/lumen.exe",
+  "executableSha256": "94824234de4ab9d0aa089c40f80c9591ae47722f60949bbf3526a7db9c137cb6",
+  "gitSha": "27c9742d50b5859e9a07819ccbd870f3c733573c",
+  "sourceDirty": "?? docs/superpowers/plans/2026-10-12-production-readiness.md",
+  "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sourceHashes": {
+    "scripts/native-performance-profile.mjs": "9b34805dc5e74687958c9d7a9b08f334a2067ec6e77ba4d237d1224640c71481",
+    "scripts/native-performance.html": "3f68c6b5c2692c64ea17f439ad27b196dd909e5226f164d570df2c7899a5bc42",
+    "src-tauri/src/lib.rs": "ac5b3afc07bdfe3712057508058c6641932f56a0ba828901621ed64050773cd4",
+    "src-tauri/src/window.rs": "4611ca88180c38237942f70d451a2053524d70ee46b5dfb3775c2e4e29d8f3cb",
+    "src-tauri/src/native_performance.rs": "4d755ed2ea31475122140771bb6369db3e915bdbbd4fce057855c2c32dfc9375",
+    "src-tauri/src/native_performance_root.rs": "fcf7c4174f0427ed2f768ec827cf5d2d3a290078927f05aa75ab9fbdab2789f6",
+    "src/test/NativePerformanceFixture.tsx": "9e68781aeec744b6ac7136097b3eb5a90eebae663423ca0d7047df11f2d5403b",
+    "src/test/native-performance.tsx": "69841b48a641efc4baeb48c1b6a328127724d61008edc9efc6e68fd4034a9574",
+    "src/features/launcher/ContextActions.tsx": "f7576979290185352e25b11ba9b3cfe48f731a5b7cab217097676e63a2178e71",
+    "src/features/launcher/ScopeRail.tsx": "52cce9c54e80a148055100f685e2d2cfa6d7afe8c3b51b1fc192d65b62dcd469",
+    "src/features/launcher/semantic-search-context.ts": "be49eb35425ee8eef0a9663aeb1010af3529802d4bc68ea15e10371bcd46ee27",
+    "src/services/search/semantic-search-service.ts": "1eb5c531757c93dbb7cc66ddc9b4eb9cf7a0c1168649cc1de31e5bffd3f501f4"
+  },
+  "root": "C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-IecnaB",
+  "physicalDisplays": [
+    {
+      "Name": "USB Mobile Monitor Virtual Display",
+      "CurrentHorizontalResolution": null,
+      "CurrentVerticalResolution": null,
+      "CurrentRefreshRate": null,
+      "DriverVersion": "2.0.0.1"
+    },
+    {
+      "Name": "AMD Radeon(TM) 890M Graphics",
+      "CurrentHorizontalResolution": 2560,
+      "CurrentVerticalResolution": 1600,
+      "CurrentRefreshRate": 240,
+      "DriverVersion": "32.0.31041.1004"
+    }
+  ]
+}

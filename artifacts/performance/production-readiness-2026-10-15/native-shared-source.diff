@@ -1,0 +1,75 @@
+diff --git a/scripts/native-performance-profile.mjs b/scripts/native-performance-profile.mjs
+index 089727d..0eb15a1 100644
+--- a/scripts/native-performance-profile.mjs
++++ b/scripts/native-performance-profile.mjs
+@@ -103,9 +103,9 @@ export async function measure(page, output) {
+   for (let index = 0; index < 3; index += 1) {
+     const inputBefore = await readInput();
+     await page.evaluate(async () => {
+-      const {createWindowService} = await import('/src/platform/window/tauri-window-service.ts');
++      const {nativePerformanceWindow} = await import('/src/test/NativePerformanceFixture.tsx');
+       const {requestWindowHide} = await import('/src/features/launcher/useLauncherPresentation.ts');
+-      if (!await requestWindowHide(createWindowService())) throw new Error('Typed native hide failed');
++      if (!await requestWindowHide(nativePerformanceWindow)) throw new Error('Typed native hide failed');
+     });
+     await page.locator('[data-launcher-visible="false"]').waitFor({state: 'attached'});
+     const hidden = await status();
+diff --git a/src/test/NativePerformanceFixture.test.tsx b/src/test/NativePerformanceFixture.test.tsx
+index 6120ad3..4fa92b0 100644
+--- a/src/test/NativePerformanceFixture.test.tsx
++++ b/src/test/NativePerformanceFixture.test.tsx
+@@ -4,7 +4,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
+ import {BrowserWindowService} from '../platform/window/browser-window-service';
+ import {useLauncherStore} from '../features/launcher/launcher.store';
+ import {useQueryStore} from '../features/launcher/query.store';
+-import {NativePerformanceFixture} from './NativePerformanceFixture';
++import {NativePerformanceFixture, nativePerformanceWindow} from './NativePerformanceFixture';
+ import {requestWindowHide} from '../features/launcher/useLauncherPresentation';
+ 
+ const {invoke} = vi.hoisted(() => ({invoke: vi.fn(() => Promise.reject(new Error('Native service access forbidden')))}));
+@@ -40,19 +40,21 @@ describe('offline native performance fixture', () => {
+   });
+   it('preserves the query and caret through typed hide and diagnostics show', async () => {
+     Object.defineProperty(window, '__LUMEN_NATIVE_PERFORMANCE__', {value: true, configurable: true});
+-    const windowService = new BrowserWindowService();
++    const windowService = nativePerformanceWindow as BrowserWindowService;
+     const user = userEvent.setup();
+-    render(<NativePerformanceFixture windowService={windowService} />);
++    render(<NativePerformanceFixture />);
+     const search = await screen.findByRole('searchbox', {name: 'Search files'}) as HTMLInputElement;
+     await user.type(search, 'report');
+     await screen.findAllByRole('row');
+     search.setSelectionRange(2, 4);
+     await act(async () => { expect(await requestWindowHide(windowService)).toBeTruthy(); });
+     expect(useLauncherStore.getState().visible).toBe(false);
++    expect(windowService.snapshot().visible).toBe(false);
+     expect(search.value).toBe('report');
+     expect([search.selectionStart, search.selectionEnd]).toEqual([2, 4]);
+     await act(async () => { window.dispatchEvent(new CustomEvent('lumen:diagnostics-show-launcher')); });
+     await waitFor(() => expect(useLauncherStore.getState().visible).toBe(true));
++    expect(windowService.snapshot().visible).toBe(true);
+     expect(search.value).toBe('report');
+     expect([search.selectionStart, search.selectionEnd]).toEqual([2, 4]);
+     expect(invoke).not.toHaveBeenCalled();
+diff --git a/src/test/NativePerformanceFixture.tsx b/src/test/NativePerformanceFixture.tsx
+index 41c7dd9..c0a101f 100644
+--- a/src/test/NativePerformanceFixture.tsx
++++ b/src/test/NativePerformanceFixture.tsx
+@@ -20,7 +20,7 @@ declare global {
+   interface Window { __LUMEN_NATIVE_PERFORMANCE__?: boolean }
+ }
+ 
+-const nativeWindow = createWindowService();
++export const nativePerformanceWindow = createWindowService();
+ const unavailableWindows = new UnavailableWindowsAiService();
+ const runtimeAnswer = new UnavailableAnswerService();
+ const answer = new WindowsAiAnswerService(runtimeAnswer, unavailableWindows, () => null);
+@@ -33,7 +33,7 @@ const DiagnosticsOverlay = lazy(async () => ({default: (await import('../feature
+ const appearance = {mode: 'dark', transparency: 'native', effects: 'full', motion: 'full'} as const;
+ 
+ /** Developer-only UI workload. Ordinary App and its native startup effects never mount. */
+-export function NativePerformanceFixture({windowService = nativeWindow}: {windowService?: WindowService}) {
++export function NativePerformanceFixture({windowService = nativePerformanceWindow}: {windowService?: WindowService}) {
+   if (!import.meta.env.DEV || window.__LUMEN_NATIVE_PERFORMANCE__ !== true) throw new Error('Native performance fixture bootstrap required');
+   useNativeLauncherLifecycle(windowService);
+   useEffect(() => {
