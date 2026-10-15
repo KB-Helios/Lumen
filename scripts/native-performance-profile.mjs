@@ -103,9 +103,9 @@ export async function measure(page, output) {
   for (let index = 0; index < 3; index += 1) {
     const inputBefore = await readInput();
     await page.evaluate(async () => {
-      const {createWindowService} = await import('/src/platform/window/tauri-window-service.ts');
+      const {nativePerformanceWindow} = await import('/src/test/NativePerformanceFixture.tsx');
       const {requestWindowHide} = await import('/src/features/launcher/useLauncherPresentation.ts');
-      if (!await requestWindowHide(createWindowService())) throw new Error('Typed native hide failed');
+      if (!await requestWindowHide(nativePerformanceWindow)) throw new Error('Typed native hide failed');
     });
     await page.locator('[data-launcher-visible="false"]').waitFor({state: 'attached'});
     const hidden = await status();

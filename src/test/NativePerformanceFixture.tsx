@@ -20,7 +20,7 @@ declare global {
   interface Window { __LUMEN_NATIVE_PERFORMANCE__?: boolean }
 }
 
-const nativeWindow = createWindowService();
+export const nativePerformanceWindow = createWindowService();
 const unavailableWindows = new UnavailableWindowsAiService();
 const runtimeAnswer = new UnavailableAnswerService();
 const answer = new WindowsAiAnswerService(runtimeAnswer, unavailableWindows, () => null);
@@ -33,7 +33,7 @@ const DiagnosticsOverlay = lazy(async () => ({default: (await import('../feature
 const appearance = {mode: 'dark', transparency: 'native', effects: 'full', motion: 'full'} as const;
 
 /** Developer-only UI workload. Ordinary App and its native startup effects never mount. */
-export function NativePerformanceFixture({windowService = nativeWindow}: {windowService?: WindowService}) {
+export function NativePerformanceFixture({windowService = nativePerformanceWindow}: {windowService?: WindowService}) {
   if (!import.meta.env.DEV || window.__LUMEN_NATIVE_PERFORMANCE__ !== true) throw new Error('Native performance fixture bootstrap required');
   useNativeLauncherLifecycle(windowService);
   useEffect(() => {

@@ -4,7 +4,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {BrowserWindowService} from '../platform/window/browser-window-service';
 import {useLauncherStore} from '../features/launcher/launcher.store';
 import {useQueryStore} from '../features/launcher/query.store';
-import {NativePerformanceFixture} from './NativePerformanceFixture';
+import {NativePerformanceFixture, nativePerformanceWindow} from './NativePerformanceFixture';
 import {requestWindowHide} from '../features/launcher/useLauncherPresentation';
 
 const {invoke} = vi.hoisted(() => ({invoke: vi.fn(() => Promise.reject(new Error('Native service access forbidden')))}));
@@ -40,19 +40,21 @@ describe('offline native performance fixture', () => {
   });
   it('preserves the query and caret through typed hide and diagnostics show', async () => {
     Object.defineProperty(window, '__LUMEN_NATIVE_PERFORMANCE__', {value: true, configurable: true});
-    const windowService = new BrowserWindowService();
+    const windowService = nativePerformanceWindow as BrowserWindowService;
     const user = userEvent.setup();
-    render(<NativePerformanceFixture windowService={windowService} />);
+    render(<NativePerformanceFixture />);
     const search = await screen.findByRole('searchbox', {name: 'Search files'}) as HTMLInputElement;
     await user.type(search, 'report');
     await screen.findAllByRole('row');
     search.setSelectionRange(2, 4);
     await act(async () => { expect(await requestWindowHide(windowService)).toBeTruthy(); });
     expect(useLauncherStore.getState().visible).toBe(false);
+    expect(windowService.snapshot().visible).toBe(false);
     expect(search.value).toBe('report');
     expect([search.selectionStart, search.selectionEnd]).toEqual([2, 4]);
     await act(async () => { window.dispatchEvent(new CustomEvent('lumen:diagnostics-show-launcher')); });
     await waitFor(() => expect(useLauncherStore.getState().visible).toBe(true));
+    expect(windowService.snapshot().visible).toBe(true);
     expect(search.value).toBe('report');
     expect([search.selectionStart, search.selectionEnd]).toEqual([2, 4]);
     expect(invoke).not.toHaveBeenCalled();
