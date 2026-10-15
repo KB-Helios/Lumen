@@ -98,3 +98,60 @@ src/services/search/search.types.ts 44360433b9f60cdaa80301b551b6b32d96655db68eea
 src/services/search/development-file-search-service.ts 969d8a9c7cfd44347415e328b31ee9702135c6550f11f1e4db79493d4cf079d4
 src/services/search/development-file-search-service.test.ts 4ef0cca548c91cc7ec42702cc84d06d24d882a59ac15d3e5d2533b91fb3588de
 ```
+
+## Fix round 1: XLSX value fidelity
+
+2026-10-15; fix base `0315374536ca12afb06aa444de5e406082230ae7`. Both Important findings in `task-11-review.md` were verified against the decoder and real ZIP fixtures before product changes. Only `src-tauri/src/search/extraction.rs` and this existing tracked report change in this round. The original snapshot above remains historical evidence.
+
+Shared and inline string readers now track phonetic-subtree ancestry and exclude `<rPh>` text from the cell's plain/rich base value. This follows the distinction between base strings and pronunciation annotations in Microsoft's [PhoneticRun documentation](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.phoneticrun?view=openxml-3.0.1). Worksheet cells separately track whether a `<v>` or supported inline `<is>` exists: absent results are blank before type dispatch, while present empty/malformed boolean/shared-index values still reject. Formula text is never evaluated; [CellValue documentation](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.cellvalue?view=openxml-3.0.1) distinguishes the stored last calculation result from the formula itself.
+
+Four real ZIP regressions assert: shared plain/rich strings with phonetic hints retain exactly `東京`; inline plain/rich strings retain the same exact value; typed boolean/shared formulas and empty shared cells without cached results remain blank beside numeric neighbor `7`; present empty/invalid boolean and empty/non-numeric/out-of-range shared indices still reject the whole sheet. Assertions, limits and deadlines were not weakened.
+
+Observed RED before either production fix:
+
+```text
+rtk proxy powershell.exe -NoProfile -File .superpowers/run-native.ps1 test --manifest-path src-tauri/Cargo.toml --all-features -j 1 review_xlsx -- --nocapture
+Finished `test` profile [unoptimized] target(s) in 2m 09s
+running 4 tests
+called `Result::unwrap()` on an `Err` value: Failed { ... message: "Invalid boolean value" }
+shared and inline assertion output:
+  left: ["東京とうきょう", "東京とうきょう"]
+ right: ["東京", "東京"]
+review_xlsx_present_malformed_typed_values_still_reject_the_sheet ... ok
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 381 filtered out; finished in 0.01s
+exit 1
+```
+
+After only the phonetic correction, its focused GREEN command/result was:
+
+```text
+rtk proxy powershell.exe -NoProfile -File .superpowers/run-native.ps1 test --manifest-path src-tauri/Cargo.toml --all-features -j 1 phonetic_hints -- --nocapture
+Finished `test` profile [unoptimized] target(s) in 2m 06s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 383 filtered out; finished in 0.01s
+exit 0
+```
+
+After both corrections and scoped formatting, the frozen amended source passed:
+
+```text
+rtk proxy powershell.exe -NoProfile -File .superpowers/run-native.ps1 test --manifest-path src-tauri/Cargo.toml --all-features -j 1 search::extraction::tests
+Finished `test` profile [unoptimized] target(s) in 1m 39s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 372 filtered out; finished in 0.71s
+exit 0
+
+rtk proxy powershell.exe -NoProfile -File .superpowers/run-native.ps1 test --manifest-path src-tauri/Cargo.toml --all-features -j 1 search::indexing::document_preview_tests
+Finished `test` profile [unoptimized] target(s) in 1.11s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 377 filtered out; finished in 0.34s
+exit 0
+
+rtk proxy powershell.exe -NoProfile -File .superpowers/run-native.ps1 clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -j 1 -- -D warnings
+Finished `dev` profile [unoptimized] target(s) in 43.11s
+no diagnostics; exit 0
+
+rtk proxy powershell.exe -NoProfile -Command 'rustfmt --check --edition 2024 --config skip_children=true src-tauri/src/search/extraction.rs; git diff --check'
+no formatting/whitespace errors; exit 0
+```
+
+The source SHA-256 after formatting, before these final covering checks, is `6cdbc5916867086473c82246811e930ec047783664f63ec1b9ed2297e671412b` for `src-tauri/src/search/extraction.rs`, obtained successfully using .NET SHA-256 over exact working-tree bytes (exit 0). No source changed afterward. Native checks ran serially through the existing D-target wrapper. Initial unrelated `cargo build -p ws-embed` processes were observed and left untouched; initial C/D free space was 118.5/341.5 GB.
+
+Existing 16 MiB actual XML/decompression, depth/shared-string, 40-by-12, 64 KiB UTF-8 and source bounds remain unchanged. Source-v2/root/hash/revision/generation/Stop/privacy admission and passive rendering are unchanged. This round's fresh evidence is 21 focused native tests plus strict Clippy/scoped formatting; it does not restate the earlier 127-test or 93-frontend snapshot as a new run. Unchanged frontend/full suites and release/UI/live acceptance were deliberately not repeated. Task 12, the two ignored integration probes, Task 14 and Docker acceptance remain pending. No provider/bootstrap/OS/install/permission operations, push or new force-added internal files were performed.

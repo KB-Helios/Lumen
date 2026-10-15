@@ -125,6 +125,7 @@ fn shared_strings(xml: &str, path: &Path) -> Result<Vec<String>, ExtractionError
     let mut strings = Vec::new();
     let mut current = None::<String>;
     let mut in_text = false;
+    let mut phonetic_depth = 0_usize;
     visit_office_xml(xml, path, |event, _| {
         match event {
             Event::Start(value) if value.local_name().as_ref() == b"si" => {
@@ -133,7 +134,11 @@ fn shared_strings(xml: &str, path: &Path) -> Result<Vec<String>, ExtractionError
                 }
                 current = Some(String::new());
             }
-            Event::Start(value) if value.local_name().as_ref() == b"t" => in_text = true,
+            Event::Start(value) if value.local_name().as_ref() == b"rPh" => phonetic_depth += 1,
+            Event::End(value) if value.local_name().as_ref() == b"rPh" => phonetic_depth -= 1,
+            Event::Start(value) if value.local_name().as_ref() == b"t" => {
+                in_text = phonetic_depth == 0
+            }
             Event::End(value) if value.local_name().as_ref() == b"t" => in_text = false,
             Event::End(value) if value.local_name().as_ref() == b"si" => strings.push(
                 current
@@ -179,8 +184,10 @@ fn worksheet(
     let mut position = None;
     let mut cell_type = String::new();
     let mut value = String::new();
+    let mut has_value = false;
     let mut in_value = false;
     let mut in_inline = false;
+    let mut phonetic_depth = 0_usize;
     let mut height = 0;
     let mut width = 0;
     let mut body_bytes = 0;
@@ -190,6 +197,7 @@ fn worksheet(
                 position = None;
                 cell_type.clear();
                 value.clear();
+                has_value = false;
                 for attribute in cell.attributes() {
                     let attribute = attribute.map_err(|error| failure(path, error))?;
                     let decoded = attribute
@@ -208,9 +216,17 @@ fn worksheet(
                     return Err(failure(path, "Missing or invalid cell reference"));
                 }
             }
-            Event::Start(tag) if tag.local_name().as_ref() == b"v" => in_value = true,
+            Event::Start(tag) if tag.local_name().as_ref() == b"v" => {
+                in_value = true;
+                has_value = true;
+            }
+            Event::Start(tag) if tag.local_name().as_ref() == b"is" && cell_type == "inlineStr" => {
+                has_value = true;
+            }
+            Event::Start(tag) if tag.local_name().as_ref() == b"rPh" => phonetic_depth += 1,
+            Event::End(tag) if tag.local_name().as_ref() == b"rPh" => phonetic_depth -= 1,
             Event::Start(tag) if tag.local_name().as_ref() == b"t" && cell_type == "inlineStr" => {
-                in_inline = true
+                in_inline = phonetic_depth == 0
             }
             Event::End(tag) if tag.local_name().as_ref() == b"v" => in_value = false,
             Event::End(tag) if tag.local_name().as_ref() == b"t" => in_inline = false,
@@ -219,23 +235,27 @@ fn worksheet(
                     .take()
                     .ok_or_else(|| failure(path, "Invalid cell"))?;
                 if row < MAX_PREVIEW_ROWS && column < MAX_PREVIEW_COLUMNS {
-                    let decoded = match cell_type.as_str() {
-                        "s" => strings
-                            .get(
-                                value
-                                    .trim()
-                                    .parse::<usize>()
-                                    .map_err(|error| failure(path, error))?,
-                            )
-                            .ok_or_else(|| failure(path, "Invalid shared string index"))?
-                            .clone(),
-                        "b" => match value.trim() {
-                            "1" => "TRUE".to_owned(),
-                            "0" => "FALSE".to_owned(),
-                            _ => return Err(failure(path, "Invalid boolean value")),
-                        },
-                        "" | "n" | "str" | "inlineStr" | "e" | "d" => value.clone(),
-                        _ => return Err(failure(path, "Unsupported cell value type")),
+                    let decoded = if !has_value {
+                        String::new()
+                    } else {
+                        match cell_type.as_str() {
+                            "s" => strings
+                                .get(
+                                    value
+                                        .trim()
+                                        .parse::<usize>()
+                                        .map_err(|error| failure(path, error))?,
+                                )
+                                .ok_or_else(|| failure(path, "Invalid shared string index"))?
+                                .clone(),
+                            "b" => match value.trim() {
+                                "1" => "TRUE".to_owned(),
+                                "0" => "FALSE".to_owned(),
+                                _ => return Err(failure(path, "Invalid boolean value")),
+                            },
+                            "" | "n" | "str" | "inlineStr" | "e" | "d" => value.clone(),
+                            _ => return Err(failure(path, "Unsupported cell value type")),
+                        }
                     };
                     body_bytes = body_bytes - rows[row][column].len() + decoded.len();
                     // Reserve the maximum column-heading bytes (A through L).
@@ -653,6 +673,69 @@ mod tests {
             archive.write_all(xml.as_bytes()).unwrap();
         }
         archive.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn review_xlsx_shared_strings_exclude_phonetic_hints_from_plain_and_rich_values() {
+        let fixture = SearchFixture::new("xlsx-shared-phonetic");
+        let bytes = workbook(&[
+            (
+                "xl/sharedStrings.xml",
+                "<sst><si><t>東京</t><rPh sb=\"0\" eb=\"2\"><t>とうきょう</t></rPh></si><si><r><t>東</t></r><r><t>京</t></r><rPh sb=\"0\" eb=\"2\"><t>とうきょう</t></rPh></si></sst>",
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                "<worksheet><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c></worksheet>",
+            ),
+        ]);
+        let table = xlsx_preview(&bytes, &fixture.root().join("phonetic.xlsx")).unwrap();
+        assert_eq!(table.rows[0], ["東京", "東京"]);
+    }
+
+    #[test]
+    fn review_xlsx_inline_strings_exclude_phonetic_hints_from_plain_and_rich_values() {
+        let fixture = SearchFixture::new("xlsx-inline-phonetic");
+        let bytes = workbook(&[(
+            "xl/worksheets/sheet1.xml",
+            "<worksheet><c r=\"A1\" t=\"inlineStr\"><is><t>東京</t><rPh sb=\"0\" eb=\"2\"><t>とうきょう</t></rPh></is></c><c r=\"B1\" t=\"inlineStr\"><is><r><t>東</t></r><r><t>京</t></r><rPh sb=\"0\" eb=\"2\"><t>とうきょう</t></rPh></is></c></worksheet>",
+        )]);
+        let table = xlsx_preview(&bytes, &fixture.root().join("phonetic.xlsx")).unwrap();
+        assert_eq!(table.rows[0], ["東京", "東京"]);
+    }
+
+    #[test]
+    fn review_xlsx_absent_typed_cached_values_are_blank_and_preserve_real_neighbors() {
+        let fixture = SearchFixture::new("xlsx-absent-cached-values");
+        let bytes = workbook(&[(
+            "xl/worksheets/sheet1.xml",
+            "<worksheet><c r=\"A1\" t=\"b\"><f>1=1</f></c><c r=\"B1\" t=\"s\"><f>CONCAT(&quot;a&quot;,&quot;b&quot;)</f></c><c r=\"C1\" t=\"s\"/><c r=\"D1\" t=\"inlineStr\"><is/></c><c r=\"E1\"><v>7</v></c></worksheet>",
+        )]);
+        let table = xlsx_preview(&bytes, &fixture.root().join("cached.xlsx")).unwrap();
+        assert_eq!(table.rows[0], ["", "", "", "", "7"]);
+    }
+
+    #[test]
+    fn review_xlsx_present_malformed_typed_values_still_reject_the_sheet() {
+        let fixture = SearchFixture::new("xlsx-present-invalid-values");
+        for (cell_type, cached) in [
+            ("b", "<v/>"),
+            ("b", "<v>2</v>"),
+            ("s", "<v/>"),
+            ("s", "<v>bad</v>"),
+            ("s", "<v>9</v>"),
+        ] {
+            let xml = format!(
+                "<worksheet><c r=\"A1\" t=\"{cell_type}\">{cached}</c><c r=\"B1\"><v>7</v></c></worksheet>"
+            );
+            let bytes = workbook(&[
+                ("xl/sharedStrings.xml", "<sst><si><t>real</t></si></sst>"),
+                ("xl/worksheets/sheet1.xml", &xml),
+            ]);
+            assert!(
+                xlsx_preview(&bytes, &fixture.root().join("invalid.xlsx")).is_err(),
+                "present invalid {cell_type} {cached} must fail"
+            );
+        }
     }
 
     #[test]
