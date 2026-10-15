@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {assertCompiledBinding, assertIdentityMetadata, assertInventory, assertSignature, assertSigningMutation, checkVersions, inventory, isPortableExecutable, preparePayload, validateArchivePaths} from './release';
@@ -59,7 +59,8 @@ describe('release trust boundaries', () => {
   });
 
   it('preserves original bytes before mutation and seals only the final signed copy', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'lumen-release-test-'));
+    // Windows runner TEMP can use an 8.3 alias; release inputs require canonical paths.
+    const root = await mkdtemp(join(await realpath(tmpdir()), 'lumen-release-test-'));
     try {
       const staged = join(root, 'payload.pyd'); await writeFile(staged, 'upstream verified');
       const mapping = {'nested/payload.pyd':staged};
@@ -79,11 +80,22 @@ describe('release trust boundaries', () => {
   });
 
   it('rejects colliding installed paths and captures non-PE resources too', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'lumen-release-test-'));
+    const root = await mkdtemp(join(await realpath(tmpdir()), 'lumen-release-test-'));
     try {
       await mkdir(join(root, 'data')); const file = join(root, 'data/file.txt'); await writeFile(file, 'owned data');
       expect(Object.keys(await inventory({'data/file.txt':file}))).toEqual(['data/file.txt']);
       await expect(inventory({'x.dll':file, 'X.dll':file})).rejects.toThrow(/collision/i);
+    } finally { await rm(root, {recursive:true, force:true}); }
+  });
+
+  it('rejects a directory junction in a release source path', async () => {
+    const root = await mkdtemp(join(await realpath(tmpdir()), 'lumen-release-test-'));
+    try {
+      const source = join(root, 'source'); await mkdir(source);
+      await writeFile(join(source, 'runtime.dll'), 'pinned input');
+      const alias = join(root, 'alias'); await symlink(source, alias, 'junction');
+      await expect(inventory({'runtime.dll':join(alias, 'runtime.dll')})).rejects.toThrow(/reparse/i);
+      expect((await readFile(join(source, 'runtime.dll'))).toString()).toBe('pinned input');
     } finally { await rm(root, {recursive:true, force:true}); }
   });
 
@@ -97,7 +109,7 @@ describe('release trust boundaries', () => {
   });
 
   it('retains original provenance when signing fails and never returns a final seal', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'lumen-release-test-'));
+    const root = await mkdtemp(join(await realpath(tmpdir()), 'lumen-release-test-'));
     try {
       const file = join(root, 'runtime.dll'); await writeFile(file,'pinned input');
       await expect(preparePayload({'runtime.dll':file},join(root,'originals'),async () => { throw new Error('timestamp refused'); })).rejects.toThrow('timestamp refused');
