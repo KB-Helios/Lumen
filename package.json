@@ -23,7 +23,10 @@
     "stage:improvement": "bun scripts/stage-improvement.ts",
     "stage:windows-ai": "bun scripts/stage-windows-ai.ts",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "release:preflight": "bun scripts/release.ts preflight",
+    "release:build": "bun scripts/release.ts build",
+    "release:verify": "bun scripts/release.ts verify"
   },
   "dependencies": {
     "@openai/apps-sdk-ui": "^0.2.2",

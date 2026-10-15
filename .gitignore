@@ -40,6 +40,7 @@ pnpm-debug.log*
 *.sw?
 
 # Test artifacts
+/.build/
 playwright-report/
 test-results/
 .playwright-cli/

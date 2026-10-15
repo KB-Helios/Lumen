@@ -9,11 +9,11 @@ From a developer PowerShell at the repository root:
 ```powershell
 powershell -NoProfile -File packaging/windows/Build-Identity.ps1 -ValidateOnly
 powershell -NoProfile -File packaging/windows/Build-Identity.ps1
-powershell -NoProfile -File packaging/windows/Sign-Identity.ps1 -PackagePath packaging/windows/output/Lumen.Identity.msix -CertificateThumbprint <existing-certificate-thumbprint>
+powershell.exe -NoProfile -File packaging/windows/Sign-Identity.ps1 -PackagePath packaging/windows/output/Lumen.Identity.msix -CertificateThumbprint <existing-certificate-thumbprint> -CertificateStore CurrentUser -TimestampUrl <owner-approved-rfc3161-url>
 powershell -NoProfile -File packaging/windows/Register-Identity.ps1 -PackagePath packaging/windows/output/Lumen.Identity.msix -InstallDirectory <actual-Lumen-install-directory>
 ```
 
-The build uses the installed Windows SDK MakeAppx tool and the documented `/nv` switch because executable locations are external. Signing uses an existing CurrentUser/My certificate; registration requires a signature already trusted by Windows. Assets are included inside the identity package and also bundled with NSIS. Restart Lumen and refresh Diagnostics after registration. Verify package identity for both main and helper processes before interpreting a Windows API as usable.
+The build uses the installed Windows SDK MakeAppx tool and the documented `/nv` switch because executable locations are external. Signing selects an existing CurrentUser/My or LocalMachine/My certificate with the exact manifest publisher, SHA256 and a trusted RFC3161 timestamp; registration requires a signature already trusted by Windows. Assets are included inside the identity package and also bundled with NSIS. Restart Lumen and refresh Diagnostics after registration. Verify package identity for both main and helper processes before interpreting a Windows API as usable. Signed NSIS release gates and owned clean-account install/upgrade acceptance are described in [the release runbook](../../docs/reports/signed-release-and-upgrade-acceptance.md).
 
 The main fusion manifest preserves Tauri's Common Controls v6 dependency. The .NET helper embeds `helper.manifest` directly so its package application identity has a single source. Identity validation rejects a main manifest that drops the dependency. Changing the publisher also requires updating the helper's fixed identity validation in `WindowsHost.cs`.
 

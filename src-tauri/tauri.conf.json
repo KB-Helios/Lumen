@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run stage:sidecars && bun run build",
+    "beforeBuildCommand": "bun scripts/release.ts before-build",
     "frontendDist": "../dist"
   },
   "app": {

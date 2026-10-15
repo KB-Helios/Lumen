@@ -8,7 +8,7 @@ import {stageSqliteVector} from './stage-sqlite-vector';
 
 const version = 'v1.4.1';
 const asset = 'agentgateway-windows-amd64.exe';
-const expectedSha256 = '7fcdc2a51cb7ab7f5c4b5a21f9066b3704f30ec6895c386332871381fab84ab6';
+export const AGENTGATEWAY_UPSTREAM_SHA256 = '7fcdc2a51cb7ab7f5c4b5a21f9066b3704f30ec6895c386332871381fab84ab6';
 const output = join(import.meta.dirname, '..', 'src-tauri', 'binaries', 'agentgateway-x86_64-pc-windows-msvc.exe');
 const workerOutput = join(import.meta.dirname, '..', 'src-tauri', 'binaries', 'lumen-enrichment-x86_64-pc-windows-msvc.exe');
 const rivetEngineOutput = join(import.meta.dirname, '..', 'src-tauri', 'binaries', 'lumen-rivet-engine-x86_64-pc-windows-msvc.exe');
@@ -19,7 +19,7 @@ async function digest(path: string) {
 async function main() {
   await mkdir(dirname(output), {recursive: true});
   try {
-    if ((await stat(output)).isFile() && await digest(output) === expectedSha256) {
+    if ((await stat(output)).isFile() && await digest(output) === AGENTGATEWAY_UPSTREAM_SHA256) {
       console.log(`AgentGateway ${version} already staged and verified.`);
     } else {
       throw new Error('replace');
@@ -31,9 +31,9 @@ async function main() {
     if (!response.ok) throw new Error(`AgentGateway download failed: HTTP ${response.status}`);
     await writeFile(temporary, new Uint8Array(await response.arrayBuffer()));
     const actualSha256 = await digest(temporary);
-    if (actualSha256 !== expectedSha256) {
+    if (actualSha256 !== AGENTGATEWAY_UPSTREAM_SHA256) {
       await rm(temporary, {force: true});
-      throw new Error(`AgentGateway checksum mismatch: expected ${expectedSha256}, got ${actualSha256}`);
+      throw new Error(`AgentGateway checksum mismatch: expected ${AGENTGATEWAY_UPSTREAM_SHA256}, got ${actualSha256}`);
     }
     await rename(temporary, output);
     console.log(`Staged AgentGateway ${version} (${actualSha256}).`);
@@ -75,4 +75,4 @@ async function main() {
   console.log(`Verified ${requiredOutputs.length} packaged runtime files.`);
 }
 
-await main();
+if (import.meta.main) await main();

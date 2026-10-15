@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     config::{
-        AGENTGATEWAY_SHA256, AGENTGATEWAY_VERSION, GatewayPorts, render_enrichment_config,
+        AGENTGATEWAY_VERSION, GatewayPorts, agentgateway_sha256, render_enrichment_config,
         render_gateway_config,
     },
     credentials,
@@ -151,7 +151,7 @@ impl GatewaySupervisor {
             return Err(state.detail.clone().unwrap_or_default());
         }
         let actual = sha256_file(&self.binary)?;
-        if actual != AGENTGATEWAY_SHA256 {
+        if actual != agentgateway_sha256() {
             state.detail = Some("AgentGateway checksum validation failed".to_owned());
             return Err(state.detail.clone().unwrap_or_default());
         }
@@ -410,6 +410,33 @@ mod tests {
         assert!(config.contains("$LUMEN_GATEWAY_BEARER"));
         assert!(!config.contains(&supervisor.bearer));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn gateway_admission_rejects_changed_bytes_before_credentials_or_spawn() {
+        let root =
+            std::env::temp_dir().join(format!("lumen-gateway-seal-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let binary = root.join("agentgateway.exe");
+        fs::write(&binary, b"untrusted executable bytes").unwrap();
+        let routes = crate::gateway::registry::ProviderRegistry::in_memory().routes();
+        let supervisor = GatewaySupervisor::new(binary, &root, &routes).unwrap();
+        assert_eq!(
+            supervisor.start().unwrap_err(),
+            "AgentGateway checksum validation failed"
+        );
+        assert!(supervisor.state.lock().unwrap().slots.is_empty());
+        assert!(!supervisor.log_paths.iter().any(|path| path.exists()));
+        drop(supervisor);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires the verified staged Gateway; never reads credentials or starts it"]
+    fn pinned_gateway_digest_matches_compiled_admission() {
+        let binary = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries/agentgateway-x86_64-pc-windows-msvc.exe");
+        assert_eq!(sha256_file(&binary).unwrap(), agentgateway_sha256());
     }
 
     #[test]
