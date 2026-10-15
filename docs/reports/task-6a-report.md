@@ -93,3 +93,125 @@ Source/native/Docker/build/test ownership is released after the scoped commit fo
 | docs/architecture/improvement.md | 64287b7609a6986053bdeb5e0380ada769a96640d5bca15319439ec5bb19d490 |
 
 Current documentation consulted through Context7: [BuildKit Docker tar export](https://github.com/moby/buildkit/blob/master/README.md), [BuildKit reproducibility](https://github.com/moby/buildkit/blob/master/docs/build-repro.md), [Docker Desktop CLI](https://github.com/docker/docs/blob/main/content/manuals/desktop/features/desktop-cli.md). These references support the exporter/lifecycle syntax; they do not establish a local runtime pass.
+
+## Task 6a review fix round 1: awaited failure cleanup
+
+Fix base: a7bad9d1bf25f50b664bd4eae9f0b487df6e7f43. The independent review found a valid Important issue: the new probe could panic after create before awaiting exact-owner container and host-canary removal, while ContainerGuard Drop only scheduled an unobserved cleanup future. This round changes only the cfg(test) module and this report; the textual exporter-test Minor remains deferred to final triage.
+
+The diagnostic probe now runs through a test-only result-producing helper. It catches probe assertion unwinds, retains operation errors, awaits the exact-owner container cleanup, then attempts canary deletion even if container cleanup failed, and only afterward returns a pass or failure. Cleanup failures include CLEANUP_UNCERTAIN plus separate probe/container/canary outcomes; container errors retain the generated owner/name, and canary errors retain its owned path. Cleanup is attempted whenever create was attempted, including create failure or timeout with uncertain delivery. Failures before create still remove any canary but do not invoke nonexistent-container cleanup. The new probe no longer depends on ContainerGuard's asynchronous Drop. Existing exact-owner verification, assertions, image/resource controls, bounds and deadlines are unchanged. Production ContainerGuard and execution APIs are unchanged.
+
+Three deterministic tests cover probe error and assertion panic ordering across an async cleanup yield, simultaneous container/canary failures without losing the probe error, and successful probe results that cannot pass when cleanup fails. The synthetic assertion deliberately invokes Rust's panic hook; its caught panic line in raw stderr is expected. The check must still report zero failed tests. Process abort, external cancellation/termination and actual Docker deletion are not established by these in-process cases; abrupt-exit/runtime gates remain pending.
+
+Pre-write capacity snapshot was C: 121812385792 bytes, D: 335442673664 bytes; no unrelated cleanup was performed. Docker remains pending by the user's instruction. No Docker command/start/stage/runtime attempt, Python change/test or broad frontend/full-lint rerun was made in this round. Previous full-app gate failures remain recorded, without independently proving their cause here.
+
+Regression-first command: rtk proxy powershell.exe -NoProfile -File .superpowers/run-native.ps1 test --manifest-path workers/improvement-runtime/rust-tests/Cargo.toml -j 1 probe_ -- --nocapture. Before the helper existed this exited 1 with two E0425 errors: cannot find function probe_then_cleanup in this scope. After the helper and first two cases were implemented the same command exited 0 (2 passed). The final standalone suite below includes all three added tests.
+
+Final raw command metadata/stdout/stderr are retained separately from the original evidence in .superpowers/sdd/2026-10-12-production-readiness/task6a-fix1-evidence/. Final covering commands and exact raw output follow. Native compile/test operations used the serial D: wrapper; source and compile ownership is released after this scoped commit. No push.
+
+### rust-fmt
+
+Command arguments: ["rtk","proxy","powershell.exe","-NoProfile","-File",".superpowers/run-native.ps1","fmt","--manifest-path","workers/improvement-runtime/rust-tests/Cargo.toml","--all","--","--check"]
+
+Exit: 0. Start: 2026-10-15T01:38:49.967Z. End: 2026-10-15T01:38:59.120Z.
+
+stdout SHA256: 83e0d22e17ff71740661d9c6a252f73f6a9180125dc15888ce3765cd91d2592c. stderr SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+
+Raw stdout:
+
+```text
+**********************************************************************
+** Visual Studio 2026 Developer PowerShell v18.9.3
+** Copyright (c) 2026 Microsoft Corporation
+**********************************************************************
+```
+
+Raw stderr:
+
+```text
+```
+
+### rust-clippy
+
+Command arguments: ["rtk","proxy","powershell.exe","-NoProfile","-File",".superpowers/run-native.ps1","clippy","--manifest-path","workers/improvement-runtime/rust-tests/Cargo.toml","--all-targets","-j","1","--","-D","warnings"]
+
+Exit: 0. Start: 2026-10-15T01:39:14.971Z. End: 2026-10-15T01:39:24.860Z.
+
+stdout SHA256: 83e0d22e17ff71740661d9c6a252f73f6a9180125dc15888ce3765cd91d2592c. stderr SHA256: 455af489817aca58bddd699b802854f3cf4981fc7e21c21e0231c2a4f5988366.
+
+Raw stdout:
+
+```text
+**********************************************************************
+** Visual Studio 2026 Developer PowerShell v18.9.3
+** Copyright (c) 2026 Microsoft Corporation
+**********************************************************************
+```
+
+Raw stderr:
+
+```text
+    Checking lumen-improvement-runtime-tests v0.1.0 (C:\Users\kevin\.codex\worktrees\3505\Lumen\workers\improvement-runtime\rust-tests)
+    Finished `dev` profile [unoptimized] target(s) in 3.42s
+```
+
+### rust-test
+
+Command arguments: ["rtk","proxy","powershell.exe","-NoProfile","-File",".superpowers/run-native.ps1","test","--manifest-path","workers/improvement-runtime/rust-tests/Cargo.toml","-j","1","--","--nocapture"]
+
+Exit: 0. Start: 2026-10-15T01:40:19.017Z. End: 2026-10-15T01:40:36.668Z.
+
+stdout SHA256: 74c50007f005d3835a5a635194da41438bf047e280b2740701708cc9c9271b82. stderr SHA256: 8ac3d270ac09dcb90c2b234a75b313c254c032fd0a6eacaa9d2d852631094d67.
+
+Raw stdout:
+
+```text
+**********************************************************************
+** Visual Studio 2026 Developer PowerShell v18.9.3
+** Copyright (c) 2026 Microsoft Corporation
+**********************************************************************
+
+running 14 tests
+test docker::tests::actual_docker_prime_acceptance_generation_cancel_and_ownership ... ignored, Requires explicit LUMEN_IMPROVEMENT_ASSETS, staged pinned image and running Docker Desktop Linux engine; synthetic broker, real Prime ACP
+test docker::tests::actual_docker_sandbox_empirical_confinement ... ignored, Requires explicit staged assets and healthy Docker; actual diagnostic guest under production sandbox args, no inference
+test docker::tests::cleanup_rejects_a_container_owned_by_another_installation ... ok
+test docker::tests::duplicate_guest_protocol_keys_are_rejected ... ok
+test docker::tests::sandbox_arguments_do_not_admit_host_access ... ok
+test docker::tests::broker_request_cannot_change_route_or_send_extra_network_fields ... ok
+test docker::tests::metadata_input_rejects_extra_private_payloads ... ok
+test docker::tests::initial_harness_version_zero_is_valid_for_first_generation ... ok
+test docker::tests::probe_cleanup_uncertainty_preserves_both_failures_and_still_removes_canary ... ok
+test docker::tests::probe_success_requires_successful_cleanup_before_returning_value ... ok
+test docker::tests::probe_failure_still_awaits_both_cleanup_steps ... ok
+test docker::tests::oversized_unterminated_frame_is_rejected_without_waiting_for_eof ... ok
+test docker::tests::interleaved_broker_completion_preserves_partially_consumed_frame ... ok
+test docker::tests::blocked_guest_stdin_does_not_block_native_cancellation ... ok
+
+test result: ok. 12 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+```
+
+Raw stderr:
+
+```text
+   Compiling lumen-improvement-runtime-tests v0.1.0 (C:\Users\kevin\.codex\worktrees\3505\Lumen\workers\improvement-runtime\rust-tests)
+    Finished `test` profile [unoptimized] target(s) in 8.76s
+     Running unittests src\lib.rs (D:/CodexBuilds/Lumen/production-readiness\debug\deps\lumen_improvement_runtime_tests-3601157dabba695f.exe)
+
+thread 'docker::tests::probe_failure_still_awaits_both_cleanup_steps' (33892) panicked at src\..\..\..\..\src-tauri\src\improvement\docker.rs:15:21:
+synthetic probe assertion
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+     Running unittests src\bin\acceptance.rs (D:/CodexBuilds/Lumen/production-readiness\debug\deps\acceptance-90de03a04f377e44.exe)
+   Doc-tests lumen_improvement_runtime_tests
+```
+
+Final covering results: standalone Rust fmt and Clippy with warnings denied exited 0; standalone Rust tests exited 0 with 12 passed, 0 failed and 2 ignored. Current working-file SHA256 for src-tauri/src/improvement/docker.rs: 3d504bb8cfafc5ec98b773bba074d0e2f23e097a9e929216b4f0ea69106fdc05. The earlier content-hash table describes the initial source milestone. Ignored Docker tests are still pending, not passes.

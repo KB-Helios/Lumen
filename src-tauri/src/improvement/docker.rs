@@ -3,6 +3,129 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[tokio::test]
+    async fn probe_failure_still_awaits_both_cleanup_steps() {
+        use std::cell::RefCell;
+        let events = RefCell::new(Vec::new());
+        for panic in [false, true] {
+            events.borrow_mut().clear();
+            let result = probe_then_cleanup(
+                async {
+                    events.borrow_mut().push("probe");
+                    assert!(!panic, "synthetic probe assertion");
+                    Err::<(), _>("synthetic probe failure".to_string())
+                },
+                async {
+                    tokio::task::yield_now().await;
+                    events.borrow_mut().push("container");
+                    Ok(())
+                },
+                || {
+                    events.borrow_mut().push("canary");
+                    Ok(())
+                },
+            )
+            .await;
+            events.borrow_mut().push("returned");
+            assert!(result.unwrap_err().contains(if panic {
+                "synthetic probe assertion"
+            } else {
+                "synthetic probe failure"
+            }));
+            assert_eq!(
+                *events.borrow(),
+                ["probe", "container", "canary", "returned"]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_cleanup_uncertainty_preserves_both_failures_and_still_removes_canary() {
+        let canary_attempted = std::cell::Cell::new(false);
+        let result = probe_then_cleanup(
+            async { Err::<(), _>("probe-error".to_string()) },
+            async { Err("container-error".to_string()) },
+            || {
+                canary_attempted.set(true);
+                Err("canary-error".to_string())
+            },
+        )
+        .await;
+        assert!(canary_attempted.get());
+        let detail = result.unwrap_err();
+        for expected in [
+            CLEANUP_UNCERTAIN,
+            "probe-error",
+            "container-error",
+            "canary-error",
+        ] {
+            assert!(detail.contains(expected));
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_success_requires_successful_cleanup_before_returning_value() {
+        for cleanup_fails in [false, true] {
+            let cleaned = std::cell::Cell::new(false);
+            let canary_removed = std::cell::Cell::new(false);
+            let outcome = probe_then_cleanup(
+                async { Ok(42) },
+                async {
+                    tokio::task::yield_now().await;
+                    cleaned.set(true);
+                    if cleanup_fails {
+                        Err("cleanup-error".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    canary_removed.set(true);
+                    Ok(())
+                },
+            )
+            .await;
+            assert!(cleaned.get() && canary_removed.get());
+            if cleanup_fails {
+                assert!(outcome.unwrap_err().contains(CLEANUP_UNCERTAIN));
+            } else {
+                assert_eq!(outcome.unwrap(), 42);
+            }
+        }
+    }
+
+    async fn probe_then_cleanup<T>(
+        probe: impl std::future::Future<Output = Result<T, String>>,
+        cleanup: impl std::future::Future<Output = Result<(), String>>,
+        remove_canary: impl FnOnce() -> Result<(), String>,
+    ) -> Result<T, String> {
+        use futures_util::FutureExt;
+        let outcome = std::panic::AssertUnwindSafe(probe)
+            .catch_unwind()
+            .await
+            .unwrap_or_else(|panic| {
+                let detail = panic
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| panic.downcast_ref::<&str>().copied())
+                    .unwrap_or("unknown probe panic");
+                Err(format!("Probe assertion failed: {detail}"))
+            });
+        let container = cleanup.await;
+        let canary = remove_canary();
+        if container.is_err() || canary.is_err() {
+            return Err(format!(
+                "{CLEANUP_UNCERTAIN} container={container:?}; canary={canary:?}; probe={}",
+                outcome
+                    .as_ref()
+                    .err()
+                    .map(String::as_str)
+                    .unwrap_or("passed")
+            ));
+        }
+        outcome
+    }
+
     #[test]
     fn sandbox_arguments_do_not_admit_host_access() {
         let args = sandbox_args("installation", "run", "sha256:image");
@@ -160,96 +283,112 @@ mod tests {
         let manifest = runtime.manifest().await.unwrap();
         let run = uuid::Uuid::new_v4().to_string();
         let name = format!("lumen-improvement-{run}");
-        let mut guard = ContainerGuard {
-            owner: owner.clone(),
-            name: name.clone(),
-            armed: true,
-        };
         let canary = std::env::temp_dir().join(format!("lumen-sandbox-canary-{run}"));
         let token = uuid::Uuid::new_v4().to_string();
-        std::fs::write(&canary, token.as_bytes()).unwrap();
-        let host_path = canary.to_str().unwrap().replace('\\', "/");
-        let host_path = host_path.trim_start_matches("//?/");
-        let mapped = host_path.replacen(':', "", 1);
-        let mapped = format!("{}{}", &mapped[..1].to_lowercase(), &mapped[1..]);
-        let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let route = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
-        // Select the host interface without sending a packet to the documentation-only address.
-        route.connect("192.0.2.1:9").unwrap();
-        let host_endpoint = std::net::SocketAddr::new(
-            route.local_addr().unwrap().ip(),
-            listener.local_addr().unwrap().port(),
-        );
-        let host_control =
-            std::net::TcpStream::connect_timeout(&host_endpoint, Duration::from_secs(2)).unwrap();
-        let accepted_control = listener.accept().unwrap();
-        drop(accepted_control);
-        drop(host_control);
-        let config = json!({"hostPaths":[format!("/host_mnt/{mapped}"), format!("/run/desktop/mnt/host/{mapped}")],
+        let create_attempted = std::cell::Cell::new(false);
+        let probe = async {
+            std::fs::write(&canary, token.as_bytes()).unwrap();
+            let host_path = canary.to_str().unwrap().replace('\\', "/");
+            let host_path = host_path.trim_start_matches("//?/");
+            let mapped = host_path.replacen(':', "", 1);
+            let mapped = format!("{}{}", &mapped[..1].to_lowercase(), &mapped[1..]);
+            let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let route = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+            // Select the host interface without sending a packet to the documentation-only address.
+            route.connect("192.0.2.1:9").unwrap();
+            let host_endpoint = std::net::SocketAddr::new(
+                route.local_addr().unwrap().ip(),
+                listener.local_addr().unwrap().port(),
+            );
+            let host_control =
+                std::net::TcpStream::connect_timeout(&host_endpoint, Duration::from_secs(2))
+                    .unwrap();
+            let accepted_control = listener.accept().unwrap();
+            drop(accepted_control);
+            drop(host_control);
+            let config = json!({"hostPaths":[format!("/host_mnt/{mapped}"), format!("/run/desktop/mnt/host/{mapped}")],
             "hostAddress":route.local_addr().unwrap().ip().to_string(), "hostPort":listener.local_addr().unwrap().port()});
-        let mut args = sandbox_args(&owner, &run, &manifest.image_id);
-        let image_index = args.len() - 1;
-        args.splice(
-            image_index..image_index,
-            ["--entrypoint".into(), "python3".into()],
-        );
-        args.extend([
-            "-c".into(),
-            include_str!("../../../workers/improvement-runtime/sandbox_probe.py").into(),
-            config.to_string(),
-        ]);
-        let created = tokio::time::timeout(
-            Duration::from_secs(30),
-            command()
-                .env("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN", &token)
-                .args(&args)
-                .output(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        assert!(created.status.success());
-        let inspected = execute(
-            &["container".into(), "inspect".into(), name.clone()],
-            Duration::from_secs(15),
-        )
-        .await
-        .unwrap();
-        let inspected: Value = serde_json::from_slice(&inspected).unwrap();
-        assert_sandbox_configuration(&inspected);
+            let mut args = sandbox_args(&owner, &run, &manifest.image_id);
+            let image_index = args.len() - 1;
+            args.splice(
+                image_index..image_index,
+                ["--entrypoint".into(), "python3".into()],
+            );
+            args.extend([
+                "-c".into(),
+                include_str!("../../../workers/improvement-runtime/sandbox_probe.py").into(),
+                config.to_string(),
+            ]);
+            create_attempted.set(true);
+            let created = tokio::time::timeout(
+                Duration::from_secs(30),
+                command()
+                    .env("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN", &token)
+                    .args(&args)
+                    .output(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!(created.status.success());
+            let inspected = execute(
+                &["container".into(), "inspect".into(), name.clone()],
+                Duration::from_secs(15),
+            )
+            .await
+            .unwrap();
+            let inspected: Value = serde_json::from_slice(&inspected).unwrap();
+            assert_sandbox_configuration(&inspected);
 
-        let env = inspected[0]["Config"]["Env"].to_string();
-        assert!(!env.contains("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN") && !env.contains(&token));
-        let outcome = execute(
-            &[
-                "container".into(),
-                "start".into(),
-                "--attach".into(),
-                name.clone(),
-            ],
-            Duration::from_secs(30),
-        )
-        .await;
-        let cleanup = remove_exact_owned(&owner, &name).await;
-        std::fs::remove_file(canary).unwrap();
-        cleanup.unwrap();
-        guard.armed = false;
-        let bytes = outcome.unwrap();
-        assert!(!std::str::from_utf8(&bytes).unwrap().contains(&token));
-        let evidence: Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(evidence.as_object().unwrap().len(), 9);
-        assert!(
-            evidence
-                .as_object()
-                .unwrap()
-                .values()
-                .all(|value| value == true)
-        );
-        assert_eq!(
-            listener.accept().unwrap_err().kind(),
-            std::io::ErrorKind::WouldBlock
-        );
+            let env = inspected[0]["Config"]["Env"].to_string();
+            assert!(!env.contains("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN") && !env.contains(&token));
+            let outcome = execute(
+                &[
+                    "container".into(),
+                    "start".into(),
+                    "--attach".into(),
+                    name.clone(),
+                ],
+                Duration::from_secs(30),
+            )
+            .await;
+            let bytes = outcome.unwrap();
+            assert!(!std::str::from_utf8(&bytes).unwrap().contains(&token));
+            let evidence: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(evidence.as_object().unwrap().len(), 9);
+            assert!(
+                evidence
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .all(|value| value == true)
+            );
+            assert_eq!(
+                listener.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock
+            );
+            Ok(evidence)
+        };
+        let cleanup = async {
+            if create_attempted.get() {
+                remove_exact_owned(&owner, &name)
+                    .await
+                    .map_err(|detail| format!("owner={owner}; container={name}; {detail}"))
+            } else {
+                Ok(())
+            }
+        };
+        let evidence = probe_then_cleanup(probe, cleanup, || match std::fs::remove_file(&canary) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "Host canary {} removal failed: {error}",
+                canary.display()
+            )),
+        })
+        .await
+        .expect("Sandbox probe and awaited owned cleanup must succeed");
         println!("sandboxEmpiricalEvidence={evidence}; liveModel=false");
     }
 
