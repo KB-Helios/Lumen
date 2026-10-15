@@ -165,6 +165,8 @@ pub struct BasicPreview {
     pub title: String,
     pub subtitle: String,
     pub text: Option<String>,
+    pub rows: Option<Vec<Vec<String>>>,
+    pub columns: Option<Vec<String>>,
     pub source_url: Option<String>,
     pub mime_type: Option<String>,
     pub children: Vec<PreviewChild>,

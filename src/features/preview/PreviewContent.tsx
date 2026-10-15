@@ -40,9 +40,12 @@ function previewBody(preview: FilePreview) {
       return <pre className="m-0 overflow-auto rounded-control border border-[color:var(--einui-command-divider)] bg-[var(--lumen-surface-inset)] p-3 font-mono text-xs leading-relaxed text-[color:var(--einui-command-text)] whitespace-pre-wrap"><code>{preview.text || 'No source preview available.'}</code></pre>;
     case 'markdown':
       return <SafeMarkdown source={preview.text || 'No Markdown preview available.'} />;
-    case 'pdf': return <Placeholder kind="pdf" label="PDF document" />;
-    case 'document': return <Placeholder kind="document" label="Document preview" />;
-    case 'presentation': return <Placeholder kind="presentation" label="Presentation preview" />;
+    case 'pdf':
+    case 'document':
+    case 'presentation':
+      return preview.text
+        ? <p className="m-0 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-[color:var(--einui-command-text)]">{preview.text}</p>
+        : <Placeholder kind={preview.kind} label={{pdf: 'PDF document', document: 'Document preview', presentation: 'Presentation preview'}[preview.kind]} />;
     case 'spreadsheet':
       return preview.rows?.length ? (
         <div className="min-w-0 overflow-auto rounded-control border border-[color:var(--einui-command-divider)]">
@@ -68,6 +71,7 @@ export function PreviewContent({preview}: {preview: FilePreview}) {
   return (
     <div className="grid min-h-70 min-w-0 content-start gap-6 bg-canvas high-contrast:bg-[Canvas] p-4" data-preview-surface="opaque" data-testid={`preview-${preview.kind}`}>
       {previewBody(preview)}
+      {preview.metadata.Preview === 'Truncated' ? <p className="m-0 font-sans text-xs text-text-secondary">Preview truncated at 64 KiB.</p> : null}
       {metadata.length ? (
         <dl className="grid grid-cols-[minmax(84px,auto)_minmax(0,1fr)] gap-2 border-t border-[color:var(--einui-command-divider)] pt-3 font-sans text-sm">
           {metadata.flatMap(([key, value]) => [

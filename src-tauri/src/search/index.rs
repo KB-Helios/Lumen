@@ -883,16 +883,37 @@ impl IndexDatabase {
     }
 
     pub fn representative_hit(&self, stable_id: &str) -> IndexResult<Option<IndexedHit>> {
+        self.representative_hit_with_limit(stable_id, i64::MAX, None)
+    }
+
+    pub(super) fn preview_hit(&self, stable_id: &str) -> IndexResult<Option<IndexedHit>> {
+        // SQLite counts characters here: at most 256 KiB is hydrated, then the
+        // native preview retains at most 64 KiB at a valid UTF-8 boundary.
+        self.representative_hit_with_limit(
+            stable_id,
+            64 * 1024,
+            Some(super::extraction::EXTRACTION_VERSION),
+        )
+    }
+
+    fn representative_hit_with_limit(
+        &self,
+        stable_id: &str,
+        text_limit: i64,
+        extraction_version: Option<&str>,
+    ) -> IndexResult<Option<IndexedHit>> {
         let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
         connection
             .query_row(
                 "SELECT files.stable_id, files.root_path, files.path, files.name,
                         files.content_hash, files.index_revision, COALESCE(chunks.extraction_kind, 'metadata'),
-                        COALESCE(chunks.text, ''), chunks.page, chunks.time_start_ms, chunks.time_end_ms
+                        substr(COALESCE(chunks.text, ''), 1, ?2), chunks.page, chunks.time_start_ms, chunks.time_end_ms
                  FROM files LEFT JOIN chunks ON chunks.file_id = files.id
-                 WHERE files.stable_id = ?1
+                   AND (?3 IS NULL OR (chunks.content_hash = files.content_hash
+                     AND chunks.index_revision = files.index_revision))
+                 WHERE files.stable_id = ?1 AND (?3 IS NULL OR files.extraction_version = ?3)
                  ORDER BY chunks.ordinal ASC LIMIT 1",
-                [stable_id],
+                rusqlite::params![stable_id, text_limit, extraction_version],
                 |row| {
                     Ok(IndexedHit {
                         stable_id: row.get(0)?,

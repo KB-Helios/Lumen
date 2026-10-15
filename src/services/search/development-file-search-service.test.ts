@@ -703,6 +703,53 @@ describe('DevelopmentFileSearchService', () => {
     expect(invoke).toHaveBeenCalledWith('open_containing_folder', {root: 'C:\\Projects', path: 'C:\\Projects\\Readme.md'});
   });
 
+  it.each([
+    {rows: [['decoded & <script>']], columns: ['A']},
+    {rows: null, columns: null},
+  ])('maps optional native table fields through the public preview contract %#', async body => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Workbook.xlsx')]);
+      if (command === 'get_basic_preview') return {kind: 'spreadsheet', title: 'Workbook.xlsx', subtitle: 'C:\\Projects\\Workbook.xlsx', text: null, children: [], metadata: {}, ...body};
+    });
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
+    const response = await service.search(request);
+    await expect(service.getPreview(response.groups[0]!.items[0]!.id)).resolves.toMatchObject({
+      rows: body.rows ?? undefined,
+      columns: body.columns ?? undefined,
+    });
+  });
+
+  it.each([
+    {rows: [['😀'.repeat(17000)]]},
+    {rows: Array.from({length: 41}, () => ['cell'])},
+    {columns: Array.from({length: 13}, () => 'A')},
+    {rows: [[1]]},
+    {text: 'a'.repeat(65530), columns: ['1234567']},
+  ])('rejects malformed or over-budget native preview bodies %#', async body => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Workbook.xlsx')]);
+      if (command === 'get_basic_preview') return {kind: 'spreadsheet', title: 'Workbook.xlsx', subtitle: 'C:\\Projects\\Workbook.xlsx', children: [], metadata: {}, ...body};
+    });
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
+    const response = await service.search(request);
+    await expect(service.getPreview(response.groups[0]!.items[0]!.id)).rejects.toMatchObject({code: 'invalid-response'});
+  });
+
+  it('suppresses an in-flight document preview after its caller aborts', async () => {
+    let deliver!: (value: unknown) => void;
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'search_hybrid') return nativeResponse([indexedHit('Brief.pdf')]);
+      if (command === 'get_basic_preview') return new Promise(resolve => { deliver = resolve; });
+    });
+    const service = createService({getRoots: () => ['C:\\Projects'], invoke});
+    const response = await service.search(request);
+    const abort = new AbortController();
+    const result = service.getPreview(response.groups[0]!.items[0]!.id, abort.signal);
+    abort.abort();
+    deliver({kind: 'pdf', title: 'Brief.pdf', subtitle: 'C:\\Projects\\Brief.pdf', text: 'old excerpt', children: [], metadata: {}});
+    await expect(result).rejects.toMatchObject({name: 'AbortError'});
+  });
+
   it('routes Related through the selected indexed result and applies pins natively', async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === 'search_related') return [{

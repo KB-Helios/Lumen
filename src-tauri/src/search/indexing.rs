@@ -34,6 +34,10 @@ use super::{embedding, ranking};
 #[path = "freshness_tests.rs"]
 mod freshness_tests;
 
+#[cfg(test)]
+#[path = "document_preview_tests.rs"]
+mod document_preview_tests;
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexRootRequest {
@@ -267,6 +271,14 @@ pub struct IndexRuntime {
 #[cfg(test)]
 type ExtractionGate = Arc<dyn Fn(&Path) + Send + Sync>;
 
+pub(super) struct DocumentPreviewSource {
+    generation: u64,
+    root: PathBuf,
+    pub path: PathBuf,
+    pub bytes: Vec<u8>,
+    pub hit: Option<IndexedHit>,
+}
+
 fn search_failure(operation: &str, error: impl std::fmt::Display) -> SearchFailure {
     SearchFailure::new(
         "search-failed",
@@ -291,6 +303,110 @@ fn stable_id(root: &Path, path: &Path) -> String {
 }
 
 impl IndexRuntime {
+    fn preview_path_is_admitted(&self, root: &Path, path: &Path) -> Result<bool, SearchFailure> {
+        if !self.work.configured.load(Ordering::SeqCst) || self.work.stop.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
+        let roots = self
+            .work
+            .roots
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let Some(grant) = roots.iter().find(|grant| Path::new(&grant.path) == root) else {
+            return Ok(false);
+        };
+        Ok(traversal::policy_record(root, path, &Self::root_traversal_policy(grant)?)?.is_some())
+    }
+
+    pub(super) fn capture_document_preview(
+        &self,
+        root: &Path,
+        path: &Path,
+    ) -> Result<Option<DocumentPreviewSource>, SearchFailure> {
+        let Some((root, path)) = super::preview::confined_document_path(root, path)? else {
+            return Ok(None);
+        };
+        let (generation, hit) = {
+            let _guard = self
+                .synchronization
+                .lock()
+                .map_err(|error| search_failure("admit document preview", error))?;
+            if !self.preview_path_is_admitted(&root, &path)? {
+                return Ok(None);
+            }
+            let hit = match self.stable_id_for_path(&path)? {
+                Some(id) => self
+                    .database
+                    .preview_hit(&id)
+                    .map_err(|error| search_failure("read indexed preview", error))?,
+                None => None,
+            };
+            if hit
+                .as_ref()
+                .is_some_and(|hit| hit.root_path != root || hit.path != path)
+            {
+                return Ok(None);
+            }
+            (self.current_generation(), hit)
+        };
+        let Some(bytes) = super::preview::document_source_bytes(&path) else {
+            return Ok(None);
+        };
+        let source = DocumentPreviewSource {
+            generation,
+            root,
+            path,
+            bytes,
+            hit,
+        };
+        Ok(self.document_preview_is_current(&source)?.then_some(source))
+    }
+
+    pub(super) fn document_preview_is_current(
+        &self,
+        source: &DocumentPreviewSource,
+    ) -> Result<bool, SearchFailure> {
+        // Source I/O is outside the short commit guard. This is a freshness fence,
+        // not an atomic snapshot against future concurrent filesystem writes.
+        let Some((_, path)) = super::preview::confined_document_path(&source.root, &source.path)?
+        else {
+            return Ok(false);
+        };
+        let Some(bytes) = super::preview::document_source_bytes(&path) else {
+            return Ok(false);
+        };
+        let digest = Sha256::digest(&bytes);
+        if digest != Sha256::digest(&source.bytes) {
+            return Ok(false);
+        }
+        if let Some(hit) = &source.hit
+            && digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+                != hit.content_hash
+        {
+            return Ok(false);
+        }
+        let _guard = self
+            .synchronization
+            .lock()
+            .map_err(|error| search_failure("validate document preview", error))?;
+        if self.current_generation() != source.generation
+            || !self.preview_path_is_admitted(&source.root, &source.path)?
+        {
+            return Ok(false);
+        }
+        let current = match self.stable_id_for_path(&source.path)? {
+            Some(id) => self
+                .database
+                .preview_hit(&id)
+                .map_err(|error| search_failure("validate indexed preview", error))?,
+            None => None,
+        };
+        Ok(current == source.hit)
+    }
+
     pub fn open(
         path: &Path,
         vector_extension: &Path,
