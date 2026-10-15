@@ -48,6 +48,9 @@ pub(crate) struct Metrics {
     scans_done: AtomicU64,
     selection_ns: AtomicU64,
     selection_candidates: AtomicU64,
+    status_retry_candidates: AtomicU64,
+    status_ns: AtomicU64,
+    admission_ns: AtomicU64,
     extraction_ns: AtomicU64,
     commit_ns: AtomicU64,
     sleep_ns: AtomicU64,
@@ -61,6 +64,18 @@ pub(crate) struct Metrics {
 }
 
 impl Metrics {
+    pub fn status_retry_candidates(&self, count: usize) {
+        self.status_retry_candidates
+            .fetch_add(count as u64, Ordering::Relaxed);
+    }
+    pub fn status(&self, elapsed: Duration) {
+        self.status_ns
+            .fetch_add(elapsed.as_nanos() as u64, Ordering::Relaxed);
+    }
+    pub fn admission(&self, elapsed: Duration) {
+        self.admission_ns
+            .fetch_add(elapsed.as_nanos() as u64, Ordering::Relaxed);
+    }
     pub fn inventory_record(&self, elapsed: Duration) {
         self.metadata_records.fetch_add(1, Ordering::Relaxed);
         self.metadata_ns
@@ -127,6 +142,9 @@ impl Metrics {
             "metadata_records":self.metadata_records.load(Ordering::Relaxed),"metadata_upsert_ms":self.metadata_ns.load(Ordering::Relaxed) as f64/1e6,
             "selection_ms":self.selection_ns.load(Ordering::Relaxed) as f64/1e6,
             "selection_candidates":self.selection_candidates.load(Ordering::Relaxed),
+            "status_retry_candidates":self.status_retry_candidates.load(Ordering::Relaxed),
+            "status_ms":self.status_ns.load(Ordering::Relaxed) as f64/1e6,
+            "content_admission_ms":self.admission_ns.load(Ordering::Relaxed) as f64/1e6,
             "extraction_ms":self.extraction_ns.load(Ordering::Relaxed) as f64/1e6,
             "commit_ms":self.commit_ns.load(Ordering::Relaxed) as f64/1e6,
             "worker_sleep_ms":self.sleep_ns.load(Ordering::Relaxed) as f64/1e6,
@@ -477,7 +495,7 @@ fn content_worker_batches_small_documents_with_bounded_rest() {
 }
 
 #[test]
-fn pending_selection_does_not_rescan_every_remaining_successful_job() {
+fn pending_selection_and_status_do_not_rescan_every_remaining_successful_job() {
     let base = owned_base("pending-selection");
     let root = base.join("root");
     fs::create_dir(&root).unwrap();
@@ -512,6 +530,20 @@ fn pending_selection_does_not_rescan_every_remaining_successful_job() {
         candidates <= 40 * 3,
         "40successful jobs must not examine the triangular820 pending candidates, observed{candidates}"
     );
+    eventually(|| runtime.snapshot().phase == "ready");
+    let status_candidates = runtime
+        .work
+        .metrics
+        .status_retry_candidates
+        .load(Ordering::Relaxed);
+    assert_eq!(
+        status_candidates, 0,
+        "status must not traverse pending entries after each successful job"
+    );
+    let status = runtime.snapshot();
+    assert_eq!(status.pending_items, 0);
+    assert_eq!(status.skipped_items, 0);
+    assert_eq!(status.indexed_items, 40);
     runtime.stop_index_worker();
     drop(runtime);
 }

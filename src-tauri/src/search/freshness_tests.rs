@@ -823,15 +823,67 @@ fn directory_events_preserve_existing_body_and_enrichment() {
 }
 
 #[test]
+fn retry_status_clears_after_success_and_root_revocation() {
+    let (fixture, runtime, roots) = setup("retry-status");
+    let path = fixture.file("retry.txt", &[0xff, 0xfe]);
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    admit(&runtime, roots, true);
+    eventually("first extraction reports its retry", || {
+        runtime.snapshot().skipped_items == 1
+    });
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "degraded");
+    assert_eq!((status.pending_items, status.skipped_items), (1, 1));
+    runtime.set_content_enabled(false);
+    assert_eq!(runtime.snapshot().phase, "paused");
+    assert_eq!(runtime.snapshot().skipped_items, 1);
+    std::fs::write(&path, b"ok").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    runtime.work.pending.lock().unwrap().make_due_for_test();
+    runtime.set_content_enabled(true);
+    eventually("successful retry publishes ready", || {
+        runtime.snapshot().phase == "ready"
+    });
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "ready");
+    assert_eq!((status.pending_items, status.skipped_items), (0, 0));
+    assert_eq!(status.indexed_items, 1);
+    assert!(!runtime.database.search("ok", 10).unwrap().is_empty());
+    let broken = fixture.file("broken.txt", &[0xff, 0xfe]);
+    assert!(broken.is_file());
+    eventually("new extraction reports its retry", || {
+        runtime.snapshot().skipped_items == 1
+    });
+    assert_eq!(runtime.snapshot().skipped_items, 1);
+    runtime.configure_roots(Vec::new(), true).unwrap();
+    eventually("revocation completes empty inventory", || {
+        runtime.snapshot().phase == "ready"
+    });
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "ready");
+    assert_eq!(
+        (
+            status.pending_items,
+            status.skipped_items,
+            status.indexed_items
+        ),
+        (0, 0, 0)
+    );
+}
+
+#[test]
 fn permanent_invalid_utf8_has_bounded_retries_and_truthful_metadata_only_state() {
     let (fixture, runtime, roots) = manual_setup("terminal-extraction");
     let path = fixture.file("broken.txt", &[0xff, 0xfe, 0xff]);
     admit(&runtime, roots, true);
     runtime.reconcile_inventory(false).unwrap();
     for attempt in 1..=6 {
-        for pending in runtime.work.pending.lock().unwrap().values_mut() {
-            pending.retry_at = Instant::now();
-        }
+        runtime.work.pending.lock().unwrap().make_due_for_test();
         runtime.extract_pending().unwrap();
         assert_eq!(runtime.snapshot().skipped_items, 1);
         if attempt < 3 {

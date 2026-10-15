@@ -35,6 +35,7 @@ pub(super) struct PendingContent {
 pub(super) struct PendingQueue {
     jobs: HashMap<String, PendingContent>,
     ordered: BTreeSet<(PathBuf, String)>,
+    retrying: usize,
 }
 
 impl std::ops::Deref for PendingQueue {
@@ -46,12 +47,21 @@ impl std::ops::Deref for PendingQueue {
 
 impl PendingQueue {
     #[cfg(test)]
-    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut PendingContent> {
-        self.jobs.values_mut()
+    pub fn make_due_for_test(&mut self) {
+        for item in self.jobs.values_mut() {
+            item.retry_at = Instant::now();
+        }
+    }
+
+    pub fn retry_count(&self) -> (u64, usize) {
+        // Report retry status without visiting every pending item after each commit.
+        (self.retrying as u64, 0)
     }
 
     pub fn insert(&mut self, id: String, item: PendingContent) {
+        self.retrying += usize::from(item.attempts > 0);
         if let Some(previous) = self.jobs.insert(id.clone(), item.clone()) {
+            self.retrying -= usize::from(previous.attempts > 0);
             self.ordered.remove(&(previous.path, id.clone()));
         }
         self.ordered.insert((item.path, id));
@@ -59,6 +69,7 @@ impl PendingQueue {
 
     pub fn remove(&mut self, id: &str) -> Option<PendingContent> {
         let item = self.jobs.remove(id)?;
+        self.retrying -= usize::from(item.attempts > 0);
         self.ordered.remove(&(item.path.clone(), id.to_owned()));
         Some(item)
     }
@@ -66,14 +77,17 @@ impl PendingQueue {
     pub fn clear(&mut self) {
         self.jobs.clear();
         self.ordered.clear();
+        self.retrying = 0;
     }
 
     pub fn retain(&mut self, mut keep: impl FnMut(&String, &PendingContent) -> bool) {
         let ordered = &mut self.ordered;
+        let retrying = &mut self.retrying;
         self.jobs.retain(|id, item| {
             if keep(id, item) {
                 true
             } else {
+                *retrying -= usize::from(item.attempts > 0);
                 ordered.remove(&(item.path.clone(), id.clone()));
                 false
             }
@@ -83,6 +97,7 @@ impl PendingQueue {
     // Retry mutations cannot change the path used by the ordered index.
     pub fn retry(&mut self, id: &str, retry_at: Instant) {
         if let Some(item) = self.jobs.get_mut(id) {
+            self.retrying += usize::from(item.attempts == 0);
             item.attempts = item.attempts.saturating_add(1);
             item.retry_at = retry_at;
         }
@@ -138,6 +153,50 @@ mod pending_queue_tests {
         queue.insert("a".into(), item("a.txt"));
         queue.clear();
         assert_eq!(queue.next_due().1, 0);
+    }
+
+    #[test]
+    fn retry_count_tracks_every_pending_queue_mutation() {
+        let mut queue = PendingQueue::default();
+        let check = |queue: &PendingQueue, expected| {
+            assert_eq!(queue.retry_count(), (expected, 0));
+            assert_eq!(
+                queue.values().filter(|item| item.attempts > 0).count() as u64,
+                expected
+            );
+        };
+        queue.insert("a".into(), item("a.txt"));
+        queue.insert("b".into(), item("b.txt"));
+        check(&queue, 0);
+        queue.retry("a", Instant::now() + Duration::from_secs(5));
+        check(&queue, 1);
+        queue.retry("a", Instant::now() + Duration::from_secs(10));
+        queue.retry("missing", Instant::now());
+        queue.make_due_for_test();
+        check(&queue, 1);
+        assert_eq!(queue["a"].attempts, 2);
+        queue.insert("a".into(), item("replacement.txt"));
+        check(&queue, 0);
+        let mut retry = item("same-path.txt");
+        retry.attempts = 1;
+        queue.insert("a".into(), retry.clone());
+        check(&queue, 1);
+        retry.root = PathBuf::from("other-root");
+        queue.insert("a".into(), retry.clone());
+        queue.insert("overlap".into(), retry);
+        check(&queue, 2);
+        assert!(queue.remove("missing").is_none());
+        check(&queue, 2);
+        queue.retain(|id, _| id != "a");
+        check(&queue, 1);
+        queue.remove("b");
+        check(&queue, 1);
+        queue.remove("overlap");
+        check(&queue, 0);
+        queue.insert("a".into(), item("a.txt"));
+        queue.retry("a", Instant::now());
+        queue.clear();
+        check(&queue, 0);
     }
 }
 

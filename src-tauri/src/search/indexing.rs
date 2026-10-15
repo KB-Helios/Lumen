@@ -1213,13 +1213,19 @@ impl IndexRuntime {
     }
 
     fn refresh_worker_status(&self) -> Result<(), SearchFailure> {
+        #[cfg(test)]
+        let status_clock = Instant::now();
         let (indexed_items, queued_enrichment) = self
             .database
             .counts()
             .map_err(|e| search_failure("read index status", e))?;
         let pending = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
         let pending_items = pending.len() as u64;
-        let retries = pending.values().filter(|item| item.attempts > 0).count() as u64;
+        let (retries, examined) = pending.retry_count();
+        #[cfg(test)]
+        self.work.metrics.status_retry_candidates(examined);
+        #[cfg(not(test))]
+        let _ = examined;
         drop(pending);
         let enrichment_failures = self
             .database
@@ -1275,6 +1281,8 @@ impl IndexRuntime {
             }
             .into(),
         });
+        #[cfg(test)]
+        self.work.metrics.status(status_clock.elapsed());
         Ok(())
     }
 
@@ -1698,6 +1706,8 @@ impl IndexRuntime {
         let Some((id, pending)) = next else {
             return Ok(false);
         };
+        #[cfg(test)]
+        let admission_clock = Instant::now();
         {
             let _admission = self
                 .synchronization
@@ -1733,6 +1743,8 @@ impl IndexRuntime {
             }
         }
         #[cfg(test)]
+        self.work.metrics.admission(admission_clock.elapsed());
+        #[cfg(test)]
         let gate = self.extraction_gate.lock().unwrap().clone();
         #[cfg(test)]
         if let Some(gate) = gate {
@@ -1749,6 +1761,8 @@ impl IndexRuntime {
         if let Some(gate) = gate {
             gate(&pending.path);
         }
+        #[cfg(test)]
+        let admission_clock = Instant::now();
         let _commit = self
             .synchronization
             .lock()
@@ -1787,6 +1801,8 @@ impl IndexRuntime {
         }) {
             return Ok(false);
         }
+        #[cfg(test)]
+        self.work.metrics.admission(admission_clock.elapsed());
         let extracted = match extracted {
             Ok(extracted) => extracted,
             Err(_) => {
