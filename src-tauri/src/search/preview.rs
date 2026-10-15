@@ -260,8 +260,21 @@ pub fn get_basic_preview_impl(root: &Path, path: &Path) -> Result<BasicPreview, 
             preview.kind = PreviewKind::Unsupported;
             return Ok(preview);
         }
-        match String::from_utf8(bytes) {
-            Ok(text) => {
+        let text = match String::from_utf8(bytes) {
+            Ok(text) => Some(text),
+            Err(error) => {
+                let utf8_error = error.utf8_error();
+                if truncated && utf8_error.error_len().is_none() {
+                    std::str::from_utf8(&error.as_bytes()[..utf8_error.valid_up_to()])
+                        .ok()
+                        .map(str::to_owned)
+                } else {
+                    None
+                }
+            }
+        };
+        match text {
+            Some(text) => {
                 if truncated {
                     preview
                         .metadata
@@ -270,7 +283,7 @@ pub fn get_basic_preview_impl(root: &Path, path: &Path) -> Result<BasicPreview, 
                 preview.kind = kind;
                 preview.text = Some(text);
             }
-            Err(_) => preview.kind = PreviewKind::Unsupported,
+            None => preview.kind = PreviewKind::Unsupported,
         }
         return Ok(preview);
     }
@@ -318,6 +331,61 @@ mod tests {
             preview.metadata.get("Preview"),
             Some(&"Truncated".to_owned())
         );
+    }
+
+    #[test]
+    fn truncated_text_keeps_the_valid_prefix_when_utf8_is_cut_at_the_limit() {
+        let fixture = SearchFixture::new("truncated-utf8-preview");
+        let mut bytes = vec![b'a'; MAX_TEXT_BYTES as usize - 1];
+        bytes.extend_from_slice("🦀".as_bytes());
+        let path = fixture.file("crossing.txt", &bytes);
+
+        let preview = get_basic_preview_impl(fixture.root(), &path).unwrap();
+        assert_eq!(preview.kind, PreviewKind::Text);
+        assert_eq!(
+            preview.text.as_deref(),
+            Some("a".repeat(MAX_TEXT_BYTES as usize - 1).as_str())
+        );
+        assert_eq!(
+            preview.metadata.get("Preview"),
+            Some(&"Truncated".to_owned())
+        );
+    }
+
+    #[test]
+    fn text_preview_rejects_invalid_and_eof_incomplete_utf8() {
+        let fixture = SearchFixture::new("invalid-utf8-preview");
+
+        let mut exact_limit = vec![b'a'; MAX_TEXT_BYTES as usize - 4];
+        exact_limit.extend_from_slice("🦀".as_bytes());
+        let exact_path = fixture.file("exact.txt", &exact_limit);
+        let exact_preview = get_basic_preview_impl(fixture.root(), &exact_path).unwrap();
+        assert_eq!(exact_preview.kind, PreviewKind::Text);
+        assert_eq!(
+            exact_preview.text.as_deref(),
+            Some(std::str::from_utf8(&exact_limit).unwrap())
+        );
+        assert!(!exact_preview.metadata.contains_key("Preview"));
+
+        for (name, bytes) in [
+            ("interior.txt", b"valid\xFFtext".to_vec()),
+            (
+                "continuation.txt",
+                [
+                    vec![b'a'; MAX_TEXT_BYTES as usize - 4],
+                    vec![0xF0, 0x28, 0x8C, 0x28],
+                    vec![b'z'; 8],
+                ]
+                .concat(),
+            ),
+            ("eof.txt", b"incomplete\xF0\x9F".to_vec()),
+            ("nul.txt", b"text\0body".to_vec()),
+        ] {
+            let path = fixture.file(name, &bytes);
+            let preview = get_basic_preview_impl(fixture.root(), &path).unwrap();
+            assert_eq!(preview.kind, PreviewKind::Unsupported, "{name}");
+            assert!(preview.text.is_none(), "{name}");
+        }
     }
 
     #[test]
