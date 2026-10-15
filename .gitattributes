@@ -10,3 +10,5 @@ artifacts/performance/production-readiness-2026-10-15/** -text
 artifacts/native/launcher-appearance-2026-10-15/** -text
 # Preserve exact portable verification bytes across Windows checkouts.
 artifacts/verification/final-windows-gates/** -text
+artifacts/performance/computer-use-stop.json -text
+artifacts/performance/answer-native-integration.json -text
