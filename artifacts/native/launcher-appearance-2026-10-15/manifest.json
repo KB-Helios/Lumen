@@ -1,0 +1,180 @@
+{
+  "archivedAt": "2026-10-15T11:23:05.954Z",
+  "preservationBase": "027dccd0d24ac7499bdab7de0a69fb283aded520",
+  "captureAt": "2026-10-15T01:11:48.495Z",
+  "captureHead": "b39d22263b3815928f3b8a30c5f4be76e19dada1",
+  "captureDirtyPatchSha256": "3acb4c491373e7d1a47db8e7175adbe37055e20e8f6718516298ef207b6395a5",
+  "laterSourceCommit": "911fa8546d57aba87d2e3ddff2169b928666c4ff",
+  "archiveRoot": "artifacts/native/launcher-appearance-2026-10-15",
+  "scope": "Owned synthetic offline native fixture; browser-alpha is separate installed-Edge evidence. Historical raw bytes; no capture rerun or installed/performance/physical acceptance.",
+  "historicalReports": [
+    {
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/task-11-report.md",
+      "originalBytes": 18060,
+      "originalSha256": "99c1c1b73cfcba53de7be36e8b5a2f95e6f57c333d97533bc654e59cecae23cf",
+      "promoted": "docs/reports/2026-10-15-bounded-document-previews.md",
+      "promotedBytes": 18439,
+      "promotedSha256": "3095a94515bc5b3dc6343a14a16bc7e489412a27c8e793e67d0102d65a53dcdc"
+    },
+    {
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-verification-report.md",
+      "originalBytes": 17823,
+      "originalSha256": "60ac56cf08191d45a57f0f3f6dedaeaba86c690b9b2285d1ca6d583b87843764",
+      "promoted": "docs/reports/2026-10-15-launcher-native-appearance.md",
+      "promotedBytes": 19711,
+      "promotedSha256": "3c98d7abd8b87da9dcb507bb0c1edbd5a3d678ffe7cb1f4c7b71f902f9dfcffc"
+    }
+  ],
+  "files": [
+    {
+      "file": "attachment-before.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/attachment-before.json",
+      "bytes": 7970,
+      "sha256": "6265a65a175a1e536b7cc0f89258b7fe6cdc128b94be8d7ede7787896dd986ef"
+    },
+    {
+      "file": "attachment.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/attachment.json",
+      "bytes": 43407,
+      "sha256": "51725cf3008810da8c65fe32804093a82b6e6cf967b185c69dc2a5120ee285e3"
+    },
+    {
+      "file": "browser-alpha.png",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/browser-alpha.png",
+      "bytes": 12841,
+      "sha256": "160095cf3cbf763c91651b3ded0dcefb80b49ef7eeb4e3b8bd22cd9d90cbfb47"
+    },
+    {
+      "file": "browser-failure.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/browser-failure.json",
+      "bytes": 4581,
+      "sha256": "dd253251102906cadb879cec021230d04412cbda4bd3a568b79a82861a41431f"
+    },
+    {
+      "file": "browser-paint.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/browser-paint.json",
+      "bytes": 1123,
+      "sha256": "5b4b4281bc74031122ac41a37c9060431f6701aac87eb046f4d6c12bf8d131a9"
+    },
+    {
+      "file": "captures.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/captures.json",
+      "bytes": 103266,
+      "sha256": "4f1aa880eccabbc3646f98dab68a61b3d13df0767e2847d57dc14fda41d94411"
+    },
+    {
+      "file": "cleanup-verification.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/cleanup-verification.json",
+      "bytes": 438,
+      "sha256": "dd8106757067c152af3f58671a24700bd416194dc7c0030b0f11bda93c71138a"
+    },
+    {
+      "file": "cleanup.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/cleanup.json",
+      "bytes": 192,
+      "sha256": "0ffad4342e80401ba83b8b8f062d9df6a87feb284aa87d18326038579a789321"
+    },
+    {
+      "file": "collapsed-initial-cyan.png",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/collapsed-initial-cyan.png",
+      "bytes": 16678,
+      "sha256": "ca32034d860758e49cb358fabe365ba874a49714a90b705a1980c8c4b90ad1e2"
+    },
+    {
+      "file": "collapsed-initial-orange.png",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/collapsed-initial-orange.png",
+      "bytes": 16572,
+      "sha256": "fbc17755360b642a25d7e22c67daf5efde99598f6f23fbc2e489eb184b3d8dda"
+    },
+    {
+      "file": "collapsed-reopened.png",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/collapsed-reopened.png",
+      "bytes": 16667,
+      "sha256": "7546bd3bcc7ecb2367545ebe843cd451fbe44a2d34a9e161f2e08cfc3f4c59ee"
+    },
+    {
+      "file": "expanded-to-collapsed-cyan.png",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/expanded-to-collapsed-cyan.png",
+      "bytes": 16708,
+      "sha256": "4799849125717e34c483e693d46adf9c326ae229778e48b0c366bdbf875a52a2"
+    },
+    {
+      "file": "expanded-to-collapsed-orange.png",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/expanded-to-collapsed-orange.png",
+      "bytes": 16561,
+      "sha256": "243434c91a0926c566f9f25d80503a7ae95715a498a215b03a2cea016317997c"
+    },
+    {
+      "file": "expanded.png",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/expanded.png",
+      "bytes": 87950,
+      "sha256": "5bc9b1b45d1d6440a67251f8f9d63d9f3bf9ec8b8a977f065b5685b70988cf76"
+    },
+    {
+      "file": "final-verification.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/final-verification.json",
+      "bytes": 1389,
+      "sha256": "0a6fdb6d8000cb7673d9d9582a4413cb3fbeff79ddcb2b9add388e0b68e32c24"
+    },
+    {
+      "file": "hide-direct.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/hide-direct.json",
+      "bytes": 17002,
+      "sha256": "5d4d90db2efb6597c5f922f78a876bf972eaf0b8c5e73c8138dac3c1c38cf37b"
+    },
+    {
+      "file": "hide-independent.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/hide-independent.json",
+      "bytes": 16862,
+      "sha256": "e838a4326418de17c8c498b3b0f330cedbfdb5befa6acf408c35d145fc710e09"
+    },
+    {
+      "file": "hide-red.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/hide-red.json",
+      "bytes": 17002,
+      "sha256": "5d4d90db2efb6597c5f922f78a876bf972eaf0b8c5e73c8138dac3c1c38cf37b"
+    },
+    {
+      "file": "hide-samples.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/hide-samples.json",
+      "bytes": 75641,
+      "sha256": "6be98e463bc4f59dc2d540821cb97319b47cd1221e0917f79a53388c44bd7a45"
+    },
+    {
+      "file": "invoke-trace.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/invoke-trace.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "provenance-red.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/provenance-red.json",
+      "bytes": 1277,
+      "sha256": "b89325b3259c5e8a448e4463fc5174dca44610a2219cfe5ed1a9b426ddf21748"
+    },
+    {
+      "file": "provenance.json",
+      "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence/provenance.json",
+      "bytes": 1316,
+      "sha256": "aff63ba3d93ed671e78198ee6f2dddf0011bf4f03ae3282ce1052c237636d04e"
+    },
+    {
+      "file": "launcher-native-verify.mjs.txt",
+      "source": ".superpowers/launcher-native-verify.mjs",
+      "bytes": 11237,
+      "sha256": "08910ea1d227fd4d3e0fac4ecbaf016eaa9f0596d9db1167a4b6aa36fa977321"
+    },
+    {
+      "file": "launcher-controlled-underlay.ps1.txt",
+      "source": ".superpowers/launcher-controlled-underlay.ps1",
+      "bytes": 6158,
+      "sha256": "df917eafb1fdd01af7658f08cedbf038ac5643188896cad0a0fcb5cb3a7982b9"
+    },
+    {
+      "file": "capture-source.patch",
+      "source": "git diff b39d22263b3815928f3b8a30c5f4be76e19dada1 911fa8546d57aba87d2e3ddff2169b928666c4ff -- src-tauri/src/native_performance.rs",
+      "bytes": 2258,
+      "sha256": "3acb4c491373e7d1a47db8e7175adbe37055e20e8f6718516298ef207b6395a5"
+    }
+  ]
+}

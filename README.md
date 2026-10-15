@@ -10,16 +10,16 @@ Lumen is a keyboard-first Windows 11 search and Computer Use experience built wi
 - Global `Alt+Space` invocation, single-instance redirection, active-monitor placement, and hide-on-close lifecycle.
 - Collapsed launcher and expanded search workspace with scopes, filters, stable selection, action bar, virtualized 10,000-result handling, and responsive preview.
 - Keyboard-complete search, details, open, containing-folder, settings, onboarding, and dialog flows.
-- Eight-scene onboarding and ten settings pages covering appearance, roots, search, local AI, AgentGateway, Computer Use, activity, privacy, and diagnostics.
+- Four-step onboarding and eleven settings pages covering appearance, roots, search, local AI, AgentGateway, provider profiles, Computer Use, activity, privacy, and diagnostics.
 - Light, dark, opaque, reduced-effects, reduced-motion, and forced-colors/high-contrast presentation.
 - Typed local-file search, metadata, preview, and opener commands confined to user-selected roots.
 - A Rust Computer Use coordinator with semantic Edge/UI Automation routes, a credential-free local executor, scoped approvals, Fast/Background modes, and native Ctrl+Alt+Esc Stop.
-- Availability-checked Windows AI, App Content Search, Agent Launchers and current-host Edge AI integrations, with controls in the existing settings pages.
-- Development-only 57-scenario visual gallery, screenshot set, contact sheet, six interaction recordings, accessibility/DPI suites, and a strict high-refresh profiler.
+- Availability-checked Windows AI and Agent Launcher controls, the public App Content Search catalogue integration (currently blocked pending Microsoft activation), and current-host Edge AI detection in existing settings pages.
+- Development-only 86-scenario visual gallery, screenshot set, contact sheet, six interaction recordings, accessibility/DPI suites, and a strict high-refresh profiler.
 
 The normal Tauri application always uses the real local-file adapter. Deterministic memory data is available only to development tests, recordings, and gallery routes.
 
-The shipped answer path is provider-neutral at the React boundary and routes typed requests through native services. A general provider/model registry, semantic/vector search and reranking, MCP, and other production phase-two services remain explicit follow-up work rather than preview claims.
+The answer path is provider-neutral at the React boundary and routes typed requests through native services. The native AgentGateway provider/model registry and MCP services, plus local vector-backed semantic search and ranking, have implemented paths behind typed services. Their use still depends on host availability, local runtime/vector support, configuration and consent. `FutureProductionSearchService` remains an intentionally unavailable adapter stub; the normal Tauri application uses the real local-file/index adapter. These source paths do not establish broad live-provider or release acceptance.
 
 ## Requirements
 
@@ -42,13 +42,13 @@ The first run asks for one development search root. Press `Alt+Space` from anoth
 
 ## Windows integrations
 
-Open Settings with `Ctrl+,`. Local AI contains the Windows/Edge enable switches, local answer engine, capability status, explicit preparation, engine test and native access-token setup. Privacy contains separate permissions for downloads, selected-preview text tools, OCR, image descriptions and local microphone dictation, plus language settings. Search controls Lumen's public help catalogue and its optional Windows semantic index. AgentGateway controls installed Windows agents and Lumen's opt-in agent registration. Diagnostics reports the current host, runtime, provider and per-feature availability.
+Open Settings with `Ctrl+,`. Local AI contains the Windows/Edge enable switches, local answer engine, capability status, explicit preparation, engine test and native access-token setup. Privacy contains separate permissions for downloads, selected-preview text tools, OCR, image descriptions and local microphone dictation, plus language settings. Search controls local scopes, ranking, and the public App Content Search catalogue; that Windows API remains blocked until Microsoft activation is available. Local vector-backed semantic search is a separate optional path whose availability depends on the local runtime and vector support. AgentGateway controls installed Windows agents and Lumen's opt-in agent registration. Diagnostics reports the current host, runtime, provider and per-feature availability.
 
 The launcher uses only ready, enabled engines. Automatic local answers prefer a ready Windows model and otherwise use the existing local runtime. An explicitly selected unsupported engine shows an error; cloud answers retain their separate consent. Preview tools run on an explicit press. Local dictation updates the draft and exposes Stop. Windows agent activations fill a browser-task draft that still needs the user's Run action and cloud consent.
 
-The Windows helper is built and verified by `bun run stage:windows-ai`, also included in `stage:sidecars` and release builds. Preview features require their actual Windows runtime, hardware and access prerequisites. Identity-dependent APIs additionally need [the optional signed identity package](packaging/windows/README.md). Aion native preview is ARM64 Snapdragon/QNN only. Edge APIs are detected in the executing browser/WebView2 realm; an installed Edge version does not establish their availability. Availability refresh never downloads models or starts microphone capture.
+The Windows helper is built and verified by `bun run stage:windows-ai`, also included in `stage:sidecars` and release builds. It targets the stable Windows App SDK/runtime 2.5.1. Preview features require their actual Windows runtime, hardware and access prerequisites. Identity-dependent APIs additionally need [the optional signed identity package](packaging/windows/README.md). Stable App Content Search remains blocked until Microsoft issues the feature-specific ID, token and attestation; the helper stops before search/index operations. Native Aion has no verified stable redistributable contract and is unavailable on every architecture; Aion and experimental AI speech artifacts are excluded. Edge APIs are detected in the executing browser/WebView2 realm; an installed Edge version does not establish their availability. Availability refresh never downloads models or starts microphone capture.
 
-App Content Search indexes only the shipped public help/action catalogue. Personal file content stays in the confined SQLite index. Preview SDK provenance and distribution terms are recorded in [the helper notices](workers/windows-ai/THIRD_PARTY.md); local preview build evidence does not establish production redistribution rights.
+The App Content Search catalogue is limited to shipped public help/actions, but indexing and search stay unavailable pending Microsoft's separate activation contract. Personal file content stays in the confined SQLite index. Preview SDK provenance and distribution terms are recorded in [the helper notices](workers/windows-ai/THIRD_PARTY.md); local preview build evidence does not establish production redistribution rights.
 
 The [Windows and Edge verification report](docs/reports/2026-10-04-windows-ai-integrations.md) records the implemented controls, current host availability, local quality gates and remaining checks on eligible preview hardware.
 
@@ -79,6 +79,8 @@ Generated evidence is checked in under `artifacts`:
 - `artifacts/recordings/manifest.json`: six silent WebM interaction studies.
 - `artifacts/performance/profile-summary.json`: machine-readable budgets, measurements, burst guards, browser version, and source SHA.
 - `artifacts/performance/interaction-trace.zip`: Playwright trace for the measured interaction run.
+
+The 86-state browser gallery and six recordings are historical deterministic artifacts, not current native or release acceptance. The [launcher-native appearance report](docs/reports/2026-10-15-launcher-native-appearance.md) links the owned synthetic fixture captures and provenance; it does not establish ordinary-app, packaged, physical-display, or performance acceptance.
 
 The NSIS installer is generated under `src-tauri/target/release/bundle/nsis`. Build outputs are not committed.
 

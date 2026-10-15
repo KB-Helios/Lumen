@@ -1,0 +1,62 @@
+{
+  "html": {
+    "background": "rgba(0, 0, 0, 0)",
+    "colorScheme": "light dark",
+    "radius": "0px",
+    "bounds": {
+      "x": 0,
+      "y": 0,
+      "width": 700,
+      "height": 66,
+      "top": 0,
+      "right": 700,
+      "bottom": 66,
+      "left": 0
+    }
+  },
+  "body": {
+    "background": "rgba(0, 0, 0, 0)",
+    "colorScheme": "light dark",
+    "radius": "0px",
+    "bounds": {
+      "x": 0,
+      "y": 0,
+      "width": 700,
+      "height": 66,
+      "top": 0,
+      "right": 700,
+      "bottom": 66,
+      "left": 0
+    }
+  },
+  "main": {
+    "background": "rgba(0, 0, 0, 0)",
+    "colorScheme": "light dark",
+    "radius": "0px",
+    "bounds": {
+      "x": 0,
+      "y": 0,
+      "width": 700,
+      "height": 66,
+      "top": 0,
+      "right": 700,
+      "bottom": 66,
+      "left": 0
+    }
+  },
+  "[data-einui-layer=\"surface\"]": {
+    "background": "rgba(255, 255, 255, 0.96)",
+    "colorScheme": "light dark",
+    "radius": "999px",
+    "bounds": {
+      "x": 6,
+      "y": 6,
+      "width": 688,
+      "height": 54,
+      "top": 6,
+      "right": 694,
+      "bottom": 60,
+      "left": 6
+    }
+  }
+}

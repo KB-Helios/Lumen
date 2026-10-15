@@ -1,0 +1,87 @@
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Runtime.InteropServices;
+public class OwnedLauncherUnderlay : Form {
+  protected override bool ShowWithoutActivation { get { return true; } }
+  protected override CreateParams CreateParams { get { var c=base.CreateParams; c.ExStyle |= 0x08000080; return c; } }
+  [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left,Top,Right,Bottom; }
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out Rect r);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int z,uint flags);
+  [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+  [StructLayout(LayoutKind.Sequential)] public struct Point { public int X,Y; public Point(int x,int y) {X=x;Y=y;} }
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h,uint flag);
+  [DllImport("dwmapi.dll")] public static extern int DwmFlush();
+  public static string Coverage(Rect r,IntPtr fixture,IntPtr underlay,uint[] owned) {
+    for(int y=r.Top;y<r.Bottom;y++) for(int x=r.Left;x<r.Right;x++) {
+      IntPtr h=WindowFromPoint(new Point(x,y)); uint p; GetWindowThreadProcessId(h,out p);
+      IntPtr root=GetAncestor(h,2);
+      if((root!=fixture && root!=underlay) || Array.IndexOf(owned,p)<0) return "Unowned pixel at "+x+","+y+" HWND "+h+" root "+root+" PID "+p;
+    }
+    return null;
+  }
+}
+'@
+$previousDpi = [OwnedLauncherUnderlay]::SetThreadDpiAwarenessContext([IntPtr](-4))
+if ($previousDpi -eq [IntPtr]::Zero) { throw 'Per-monitor-v2 DPI awareness unavailable' }
+$initial = [OwnedLauncherUnderlay]::GetForegroundWindow()
+$form = New-Object OwnedLauncherUnderlay
+$form.FormBorderStyle = 'None'
+$form.ShowInTaskbar = $false
+$form.TopMost = $true
+[Console]::WriteLine((@{ready=$true;foreground=$initial.ToInt64();pid=$PID} | ConvertTo-Json -Compress))
+try {
+  while ($line = [Console]::ReadLine()) {
+    $request = $line | ConvertFrom-Json
+    if ($request.operation -eq 'exit') { break }
+    if ([OwnedLauncherUnderlay]::GetForegroundWindow() -ne $initial) { throw 'Foreground changed' }
+    $process = Get-Process -Id $request.pid -ErrorAction Stop
+    if ($process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -ne $request.startTime) { throw 'Fixture PID StartTime mismatch' }
+    $handle = $process.MainWindowHandle
+    if ($request.operation -eq 'visibility') {
+      [Console]::WriteLine((@{operation='visibility';mainHandle=$handle.ToInt64();fixtureHandle=$fixtureHandle.ToInt64();win32Visible=[OwnedLauncherUnderlay]::IsWindowVisible($fixtureHandle);foreground=[OwnedLauncherUnderlay]::GetForegroundWindow().ToInt64()} | ConvertTo-Json -Compress)); continue
+    }
+    if ($handle -eq [IntPtr]::Zero) { throw 'No fixture HWND' }
+    [uint32]$owner = 0
+    [void][OwnedLauncherUnderlay]::GetWindowThreadProcessId($handle,[ref]$owner)
+    if ($owner -ne $request.pid) { throw 'Fixture HWND PID mismatch' }
+    $fixtureHandle=$handle
+    $rect = New-Object OwnedLauncherUnderlay+Rect
+    if (-not [OwnedLauncherUnderlay]::GetWindowRect($handle,[ref]$rect)) { throw 'No fixture bounds' }
+    $width=$rect.Right-$rect.Left; $height=$rect.Bottom-$rect.Top
+    if ($width -ne $request.width -or $height -ne $request.height) { throw 'Physical HWND/fixture size mismatch' }
+    if ($width -gt 2000 -or $height -gt 1600 -or $width -lt 100 -or $height -lt 30) { throw 'Unexpected fixture geometry' }
+    $form.BackColor = [Drawing.ColorTranslator]::FromHtml($request.color)
+    $form.Bounds = New-Object Drawing.Rectangle($rect.Left,$rect.Top,$width,$height)
+    $form.Show()
+    if (-not [OwnedLauncherUnderlay]::SetWindowPos($form.Handle,$handle,$rect.Left,$rect.Top,$width,$height,0x0050)) { throw 'Underlay positioning failed' }
+    $form.Refresh(); [Windows.Forms.Application]::DoEvents()
+    [void][OwnedLauncherUnderlay]::DwmFlush()
+    if ($request.operation -eq 'capture') {
+      $underlayRect=New-Object OwnedLauncherUnderlay+Rect
+      [void][OwnedLauncherUnderlay]::GetWindowRect($form.Handle,[ref]$underlayRect)
+      if ($underlayRect.Left -ne $rect.Left -or $underlayRect.Top -ne $rect.Top -or $underlayRect.Right -ne $rect.Right -or $underlayRect.Bottom -ne $rect.Bottom) { throw 'Underlay physical coverage rectangle mismatch' }
+      $coverage=[OwnedLauncherUnderlay]::Coverage($rect,$handle,$form.Handle,[uint32[]](@($request.ownedPids)+@($PID)))
+      if ($coverage) { throw $coverage }
+      $bitmap=New-Object Drawing.Bitmap($width,$height)
+      $graphics=[Drawing.Graphics]::FromImage($bitmap)
+      try {
+        $graphics.CopyFromScreen($rect.Left,$rect.Top,0,0,$bitmap.Size)
+        $bitmap.Save($request.path,[Drawing.Imaging.ImageFormat]::Png)
+        $points=@{}
+        foreach ($point in @(@('corner',0,0),@('padding',2,2),@('left',2,[int]($height/2)),@('right',($width-3),[int]($height/2)),@('surface',30,[int]($height/2)))) {
+          $pixel=$bitmap.GetPixel($point[1],$point[2]); $points[$point[0]]=@($pixel.R,$pixel.G,$pixel.B)
+        }
+      } finally { $graphics.Dispose(); $bitmap.Dispose() }
+    }
+    if ([OwnedLauncherUnderlay]::GetForegroundWindow() -ne $initial) { throw 'Foreground changed' }
+    [Console]::WriteLine((@{operation=$request.operation;foreground=$initial.ToInt64();fixturePid=$owner;fixtureHandle=$handle.ToInt64();underlayPid=$PID;underlayHandle=$form.Handle.ToInt64();color=$request.color;bounds=@{x=$rect.Left;y=$rect.Top;width=$width;height=$height};points=$points;path=$request.path} | ConvertTo-Json -Depth 6 -Compress))
+  }
+} finally { $form.Close(); $form.Dispose() }

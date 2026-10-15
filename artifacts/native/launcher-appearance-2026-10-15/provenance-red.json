@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-15T01:08:57.065Z",
+  "head": "b39d22263b3815928f3b8a30c5f4be76e19dada1",
+  "dirty": "?? docs/superpowers/plans/2026-10-12-production-readiness.md",
+  "diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exe": "D:/CodexBuilds/Lumen/production-readiness/debug/lumen.exe",
+  "exeSha256": "c84882dc820a9c2a3c008fa83cce44edac3a8ea55abf13d1b17912680f456879",
+  "sources": {
+    "src-tauri/src/window.rs": "4611ca88180c38237942f70d451a2053524d70ee46b5dfb3775c2e4e29d8f3cb",
+    "src-tauri/src/lib.rs": "ac5b3afc07bdfe3712057508058c6641932f56a0ba828901621ed64050773cd4",
+    "src-tauri/src/native_performance.rs": "dd9cc0ebac6271a99aa8ece89d08b1b66bcd4983c3e6283d24186c1d5e843e0d",
+    "src-tauri/tauri.conf.json": "e80df057bc73bb90d86dbc95ec2c21c7750efe92ff49b8771a450c3244ad6e1d",
+    "src/design-system/global.css": "379ade0ad7803b1a613736b04265aac77e2ddf50f015c3fdbdd4a5fd78ab7aae",
+    "src/test/NativePerformanceFixture.tsx": "9e68781aeec744b6ac7136097b3eb5a90eebae663423ca0d7047df11f2d5403b",
+    ".superpowers/launcher-native-verify.mjs": "08910ea1d227fd4d3e0fac4ecbaf016eaa9f0596d9db1167a4b6aa36fa977321",
+    ".superpowers/launcher-controlled-underlay.ps1": "df917eafb1fdd01af7658f08cedbf038ac5643188896cad0a0fcb5cb3a7982b9"
+  }
+}

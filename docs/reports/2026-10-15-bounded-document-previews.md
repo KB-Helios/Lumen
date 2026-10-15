@@ -2,6 +2,8 @@
 
 Date: 2026-10-15. Base: `4c30aa0e1539d82ce27d68f9a180ace26629c9cb` on `codex/production-readiness`. This is source/native-fixture and jsdom evidence; packaged/native UI, live-provider, full release and performance/gallery acceptance are not claimed. Docker acceptance remains pending by user instruction. No Docker lifecycle/staging, ordinary app/bootstrap, credentials, provider, focus or installation operations were performed.
 
+Source lineage: the preview byte-cutoff fix is `589c057cdd9824755cc88bfb60731bcc67b39c65`; the bounded-preview implementation is `0315374536ca12afb06aa444de5e406082230ae7`; and the reviewed XLSX value correction is `57d57f1d75c23ed8e475ba0b4070eb06d7f3d861`. This preserves the validated historical report and its source/fix provenance without broadening its acceptance claims.
+
 ## Result and ownership
 
 The existing native preview command now receives `IndexRuntime`, stays on the blocking lane and checks preview privacy before work and again before delivery. PDF/DOCX/PPTX reuse a bounded first indexed excerpt, never a selection-time PDF/Office parse. Missing, pending, metadata-only, legacy-version, changed, oversized or revoked content stays passive. Existing service abort, known-file/root grant and controller selection fences are preserved.
