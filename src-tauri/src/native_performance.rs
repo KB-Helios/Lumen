@@ -1,5 +1,5 @@
 //! Offline developer fixture: this builder has no ordinary runtime/plugin state.
-use crate::window::{WindowMode, WindowStateEvent};
+use crate::window::{WindowMode, WindowStateEvent, WindowStateSource};
 use std::{
     path::Path,
     sync::{
@@ -46,6 +46,37 @@ fn show_lumen_window(
     let result = crate::window::show_for_performance_fixture(&window, mode)?;
     watch.check()?;
     Ok(result)
+}
+
+#[tauri::command]
+fn hide_lumen_window(
+    window: WebviewWindow,
+    watch: tauri::State<'_, Arc<ForegroundWatch>>,
+) -> Result<WindowStateEvent, String> {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{
+            SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
+        },
+    };
+    watch.check()?;
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    // Match the fixture's raw, nonactivating show. Tao's cached visibility remains
+    // false after that show, so its ordinary hide would elide the native call.
+    unsafe {
+        SetWindowPos(
+            HWND(hwnd.0),
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER,
+        )
+    }
+    .map_err(|error| error.to_string())?;
+    watch.check()?;
+    Ok(WindowStateEvent::hidden(WindowStateSource::Command))
 }
 
 #[tauri::command]
@@ -114,7 +145,7 @@ pub fn run(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
         config.focus = false;
         tauri::Builder::default()
             .manage(watch.clone())
-            .invoke_handler(tauri::generate_handler![show_lumen_window, crate::window::hide_lumen_window, focus_lumen_input, native_performance_status])
+            .invoke_handler(tauri::generate_handler![show_lumen_window, hide_lumen_window, focus_lumen_input, native_performance_status])
             .setup(move |app| {
                 let window = WebviewWindowBuilder::from_config(app, &config)?
                     .data_directory(root.join("webview"))
