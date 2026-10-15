@@ -48,7 +48,9 @@ export async function stageImprovement() {
     await run(['tar', '-xzf', archive, '--strip-components=1', '-C', join(context, 'prime')]);
     for (const name of ['Dockerfile', 'requirements.lock', 'bridge.py']) await copyFile(join(runtime, name), join(context, name));
     await normalizeTimes(context);
-    await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'buildx', 'build', '--platform', 'linux/amd64', '--provenance=false', '--sbom=false', '--build-arg', `SOURCE_DATE_EPOCH=${sourceDateEpoch}`, '--output', 'type=docker,rewrite-timestamp=true', '--tag', image, context], undefined, 1_800_000);
+    const exported = join(temporary, 'exported-image.tar');
+    await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'buildx', 'build', '--platform', 'linux/amd64', '--provenance=false', '--sbom=false', '--build-arg', `SOURCE_DATE_EPOCH=${sourceDateEpoch}`, '--output', `type=docker,dest=${exported},rewrite-timestamp=true`, '--tag', image, context], undefined, 1_800_000);
+    await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'image', 'load', '--input', exported]);
     const metadata = JSON.parse(await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'image', 'inspect', image])) as {Id: string; Os: string; Architecture: string; Config: {Labels: Record<string, string>}}[];
     const installed = metadata[0];
     if (!installed || !/^sha256:[a-f0-9]{64}$/.test(installed.Id) || installed.Os !== 'linux' || installed.Architecture !== 'amd64'

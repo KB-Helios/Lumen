@@ -107,6 +107,152 @@ mod tests {
         assert!(strict_json(br#"{"v":1,"v":2,"type":"result"}"#).is_err());
     }
 
+    fn assert_sandbox_configuration(inspected: &Value) {
+        let host = &inspected[0]["HostConfig"];
+        assert_eq!(inspected[0]["Config"]["User"], "10001:10001");
+        assert_eq!(host["ReadonlyRootfs"], true);
+        assert_eq!(host["NetworkMode"], "none");
+        assert_eq!(host["Privileged"], false);
+        assert_eq!(host["NanoCpus"], 2_000_000_000u64);
+        assert_eq!(host["Memory"], 2_147_483_648u64);
+        assert_eq!(host["MemorySwap"], 2_147_483_648u64);
+        assert_eq!(host["PidsLimit"], 128);
+        assert_eq!(host["CapDrop"], json!(["ALL"]));
+        assert!(host["Binds"].is_null() || host["Binds"] == json!([]));
+        assert!(host["Mounts"].is_null() || host["Mounts"] == json!([]));
+        assert!(
+            host["SecurityOpt"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("no-new-privileges=true"))
+        );
+        assert!(
+            host["Ulimits"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|limit| limit["Name"] == "nofile"
+                    && limit["Soft"] == 256
+                    && limit["Hard"] == 256)
+        );
+        assert_eq!(
+            host["Tmpfs"]["/scratch"],
+            "rw,nosuid,nodev,noexec,size=268435456,uid=10001,gid=10001,mode=0700"
+        );
+        assert_eq!(
+            host["Tmpfs"]["/tmp"],
+            "rw,nosuid,nodev,noexec,size=67108864,uid=10001,gid=10001,mode=0700"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires explicit staged assets and healthy Docker; actual diagnostic guest under production sandbox args, no inference"]
+    async fn actual_docker_sandbox_empirical_confinement() {
+        let assets = std::env::var_os("LUMEN_IMPROVEMENT_ASSETS")
+            .expect("Explicit asset directory required");
+        let owner = format!("test-{}", uuid::Uuid::new_v4());
+        let runtime = DockerRuntime::new(owner.clone(), assets.into());
+        assert_eq!(
+            runtime.health().await.state,
+            "ready",
+            "Prepare the pinned image first"
+        );
+        let manifest = runtime.manifest().await.unwrap();
+        let run = uuid::Uuid::new_v4().to_string();
+        let name = format!("lumen-improvement-{run}");
+        let mut guard = ContainerGuard {
+            owner: owner.clone(),
+            name: name.clone(),
+            armed: true,
+        };
+        let canary = std::env::temp_dir().join(format!("lumen-sandbox-canary-{run}"));
+        let token = uuid::Uuid::new_v4().to_string();
+        std::fs::write(&canary, token.as_bytes()).unwrap();
+        let host_path = canary.to_str().unwrap().replace('\\', "/");
+        let host_path = host_path.trim_start_matches("//?/");
+        let mapped = host_path.replacen(':', "", 1);
+        let mapped = format!("{}{}", &mapped[..1].to_lowercase(), &mapped[1..]);
+        let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let route = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+        // Select the host interface without sending a packet to the documentation-only address.
+        route.connect("192.0.2.1:9").unwrap();
+        let host_endpoint = std::net::SocketAddr::new(
+            route.local_addr().unwrap().ip(),
+            listener.local_addr().unwrap().port(),
+        );
+        let host_control =
+            std::net::TcpStream::connect_timeout(&host_endpoint, Duration::from_secs(2)).unwrap();
+        let accepted_control = listener.accept().unwrap();
+        drop(accepted_control);
+        drop(host_control);
+        let config = json!({"hostPaths":[format!("/host_mnt/{mapped}"), format!("/run/desktop/mnt/host/{mapped}")],
+            "hostAddress":route.local_addr().unwrap().ip().to_string(), "hostPort":listener.local_addr().unwrap().port()});
+        let mut args = sandbox_args(&owner, &run, &manifest.image_id);
+        let image_index = args.len() - 1;
+        args.splice(
+            image_index..image_index,
+            ["--entrypoint".into(), "python3".into()],
+        );
+        args.extend([
+            "-c".into(),
+            include_str!("../../../workers/improvement-runtime/sandbox_probe.py").into(),
+            config.to_string(),
+        ]);
+        let created = tokio::time::timeout(
+            Duration::from_secs(30),
+            command()
+                .env("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN", &token)
+                .args(&args)
+                .output(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(created.status.success());
+        let inspected = execute(
+            &["container".into(), "inspect".into(), name.clone()],
+            Duration::from_secs(15),
+        )
+        .await
+        .unwrap();
+        let inspected: Value = serde_json::from_slice(&inspected).unwrap();
+        assert_sandbox_configuration(&inspected);
+
+        let env = inspected[0]["Config"]["Env"].to_string();
+        assert!(!env.contains("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN") && !env.contains(&token));
+        let outcome = execute(
+            &[
+                "container".into(),
+                "start".into(),
+                "--attach".into(),
+                name.clone(),
+            ],
+            Duration::from_secs(30),
+        )
+        .await;
+        let cleanup = remove_exact_owned(&owner, &name).await;
+        std::fs::remove_file(canary).unwrap();
+        cleanup.unwrap();
+        guard.armed = false;
+        let bytes = outcome.unwrap();
+        assert!(!std::str::from_utf8(&bytes).unwrap().contains(&token));
+        let evidence: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(evidence.as_object().unwrap().len(), 9);
+        assert!(
+            evidence
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|value| value == true)
+        );
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        println!("sandboxEmpiricalEvidence={evidence}; liveModel=false");
+    }
+
     #[tokio::test]
     #[ignore = "Requires explicit LUMEN_IMPROVEMENT_ASSETS, staged pinned image and running Docker Desktop Linux engine; synthetic broker, real Prime ACP"]
     async fn actual_docker_prime_acceptance_generation_cancel_and_ownership() {
@@ -168,21 +314,42 @@ mod tests {
         .await
         .unwrap();
         let inspected: Value = serde_json::from_slice(&inspected).unwrap();
-        let host = &inspected[0]["HostConfig"];
-        assert_eq!(inspected[0]["Config"]["User"], "10001:10001");
-        assert_eq!(host["ReadonlyRootfs"], true);
-        assert_eq!(host["NetworkMode"], "none");
-        assert_eq!(host["Privileged"], false);
-        assert_eq!(host["Memory"], 2_147_483_648u64);
-        assert_eq!(host["PidsLimit"], 128);
-        assert_eq!(host["CapDrop"], json!(["ALL"]));
-        assert!(host["Binds"].is_null() || host["Binds"] == json!([]));
+        assert_sandbox_configuration(&inspected);
+
+        // Reopen the same persisted owner; this is not an abrupt process-crash test.
+        let orphan_run = uuid::Uuid::new_v4().to_string();
+        let orphan_name = format!("lumen-improvement-{orphan_run}");
+        let mut orphan_guard = ContainerGuard {
+            owner: owner.clone(),
+            name: orphan_name.clone(),
+            armed: true,
+        };
+        execute(
+            &sandbox_args(&owner, &orphan_run, &manifest.image_id),
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap();
+        let reopened = DockerRuntime::new(owner.clone(), runtime.asset_directory.clone());
+        reopened.cleanup_owned().await.unwrap();
+        orphan_guard.armed = false;
         assert!(
-            host["SecurityOpt"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("no-new-privileges=true"))
+            execute(
+                &["container".into(), "inspect".into(), orphan_name],
+                Duration::from_secs(15)
+            )
+            .await
+            .is_err()
         );
+        assert!(
+            execute(
+                &["container".into(), "inspect".into(), other_name.clone()],
+                Duration::from_secs(15)
+            )
+            .await
+            .is_ok()
+        );
+        println!("sameOwnerReopenCleanup=true; abruptProcessCrash=false; liveModel=false");
 
         let requested = Arc::new(tokio::sync::Notify::new());
         let generated = runtime
@@ -219,6 +386,37 @@ mod tests {
             tokio::time::timeout(Duration::from_secs(60), cancel_requested.notified())
                 .await
                 .is_ok();
+        let running_inspection = if reached_prompt {
+            Some(
+                async {
+                    let owned = execute(
+                        &[
+                            "container".into(),
+                            "ls".into(),
+                            "--quiet".into(),
+                            "--no-trunc".into(),
+                            "--filter".into(),
+                            format!("label={OWNER_LABEL}={owner}"),
+                        ],
+                        Duration::from_secs(15),
+                    )
+                    .await?;
+                    let id = std::str::from_utf8(&owned).map_err(|_| ERROR)?.trim();
+                    if !digest(id) {
+                        return Err(ERROR.to_string());
+                    }
+                    let inspected = execute(
+                        &["container".into(), "inspect".into(), id.into()],
+                        Duration::from_secs(15),
+                    )
+                    .await?;
+                    serde_json::from_slice::<Value>(&inspected).map_err(|_| ERROR.to_string())
+                }
+                .await,
+            )
+        } else {
+            None
+        };
         cancel.cancel();
         let outcome = tokio::time::timeout(Duration::from_secs(45), blocked)
             .await
@@ -230,6 +428,9 @@ mod tests {
         );
         assert_eq!(outcome.err().as_deref(), Some(CANCELLED));
         runtime.cleanup_owned().await.unwrap();
+        let inspected = running_inspection.unwrap().unwrap();
+        assert_eq!(inspected[0]["State"]["Running"], true);
+        assert_sandbox_configuration(&inspected);
         let survived = execute(
             &["container".into(), "inspect".into(), other_name.clone()],
             Duration::from_secs(15),
