@@ -75,7 +75,7 @@ cargo test --all-features
 
 Generated evidence is checked in under `artifacts`:
 
-- `artifacts/screenshots/contact-sheet.png` and `manifest.json`: all 57 deterministic states.
+- `artifacts/screenshots/contact-sheet.png` and `manifest.json`: all 86 deterministic states; this preserved gallery evidence is not production acceptance.
 - `artifacts/recordings/manifest.json`: six silent WebM interaction studies.
 - `artifacts/performance/profile-summary.json`: machine-readable budgets, measurements, burst guards, browser version, and source SHA.
 - `artifacts/performance/interaction-trace.zip`: Playwright trace for the measured interaction run.

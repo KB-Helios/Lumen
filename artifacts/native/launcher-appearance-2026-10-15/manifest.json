@@ -13,8 +13,8 @@
       "originalBytes": 18060,
       "originalSha256": "99c1c1b73cfcba53de7be36e8b5a2f95e6f57c333d97533bc654e59cecae23cf",
       "promoted": "docs/reports/2026-10-15-bounded-document-previews.md",
-      "promotedBytes": 18439,
-      "promotedSha256": "3095a94515bc5b3dc6343a14a16bc7e489412a27c8e793e67d0102d65a53dcdc"
+      "promotedBytes": 18564,
+      "promotedSha256": "21f7137a13d401b0ba024d8a57694be72375763a6360f850702c7201ccd60607"
     },
     {
       "source": ".superpowers/sdd/2026-10-12-production-readiness/launcher-native-verification-report.md",

@@ -43,7 +43,7 @@ src/main.rs, cliproxy_client.rs and file_switch.rs: 0 matching tests (15 and 10 
 exit 0
 ```
 
-Full captured stdout/stderr is in the local ignored `task-11-native-frozen.log` alongside this report. It supersedes the earlier 127-pass run (31.58s) before the final direct-production privacy test and additional chunk revision assertion. No source changed after the final run began.
+Full captured stdout/stderr remains in the ignored, local-only scratch file `.superpowers/sdd/2026-10-12-production-readiness/task-11-native-frozen.log`; it is not included with this promoted report and is not durable evidence. It supersedes the earlier 127-pass run (31.58s) before the final direct-production privacy test and additional chunk revision assertion. No source changed after the final run began.
 
 Final strict Clippy ran after that frozen-source native run:
 
