@@ -231,7 +231,7 @@ function useInlinePreview(preview: 'automatic' | 'always' | 'never', allowed: bo
   return {contentRef, showInlinePreview: allowed && preview !== 'never' && hasRoom};
 }
 
-export function ExpandedWorkspace({
+export const ExpandedWorkspace = memo(function ExpandedWorkspace({
   activeFilters,
   announcement,
   answerPanel,
@@ -312,4 +312,4 @@ export function ExpandedWorkspace({
       <SelectionAnnouncement announcement={announcement} results={results} selectedId={selectedId} />
     </section>
   );
-}
+});

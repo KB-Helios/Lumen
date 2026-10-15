@@ -34,9 +34,11 @@ describe('ContextActions', () => {
     const actions = {onDetails: vi.fn(), onOpen: vi.fn(), onOpenContainingFolder: vi.fn(), onPin: vi.fn()};
     const first: SearchResult = {id: 'first', name: 'First', path: 'first', kind: 'document', availability: 'available', match: {source: 'filename', fragment: ''}, metadata: {}, provenance: {fileHash: 'fixture', indexRevision: 1, extractionKind: 'text'}};
     const {rerender} = render(<ContextActions {...actions} result={first} />);
+    const rendered = buttonRender.mock.calls.length;
     const latest = {...first, id: 'second', name: 'Second'};
     const next = {onDetails: vi.fn(), onOpen: vi.fn(), onOpenContainingFolder: vi.fn(), onPin: vi.fn()};
     rerender(<ContextActions {...next} result={latest} />);
+    expect(buttonRender).toHaveBeenCalledTimes(rendered);
     for (const label of ['Open selected result', 'Open containing folder', 'Pin selected result', 'Show file details']) fireEvent.click(screen.getByRole('button', {name: label}));
     for (const handler of Object.values(actions)) expect(handler).not.toHaveBeenCalled();
     for (const handler of Object.values(next)) expect(handler).toHaveBeenCalledOnce();

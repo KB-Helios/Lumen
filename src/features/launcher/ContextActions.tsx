@@ -1,3 +1,5 @@
+import {memo, useLayoutEffect, useMemo, useRef} from 'react';
+
 import {LumenUiIcon} from '../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../design-system/primitives/LumenButton';
 import type {SearchResult} from '../../services/search/search.types';
@@ -19,6 +21,16 @@ export function ContextActions({
   onOpenContainingFolder,
   onPin,
 }: ContextActionsProps) {
+  const actions = useRef({onDetails, onOpen, onOpenContainingFolder, onPin});
+  useLayoutEffect(() => {
+    actions.current = {onDetails, onOpen, onOpenContainingFolder, onPin};
+  }, [onDetails, onOpen, onOpenContainingFolder, onPin]);
+  const stableActions = useMemo(() => ({
+    onDetails: () => actions.current.onDetails(),
+    onOpen: () => actions.current.onOpen(),
+    onOpenContainingFolder: () => actions.current.onOpenContainingFolder(),
+    onPin: () => actions.current.onPin(),
+  }), []);
   return (
     <div
       aria-label="Result actions"
@@ -36,10 +48,7 @@ export function ContextActions({
         isAppContent={result?.kind === 'app-content'}
         canPin={Boolean(result?.provenance)}
         pinned={Boolean(result?.pinned)}
-        onDetails={onDetails}
-        onOpen={onOpen}
-        onOpenContainingFolder={onOpenContainingFolder}
-        onPin={onPin}
+        {...stableActions}
       />
     </div>
   );
@@ -99,4 +108,3 @@ const ActionButtons = memo(function ActionButtons({
       </LumenButton>
     </>;
 });
-import {memo} from 'react';

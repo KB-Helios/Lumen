@@ -179,7 +179,7 @@ export function CollapsedLauncher({
         <LauncherComposer
           inputRef={inputRef}
           intentLocked={intentLocked}
-          onComputerSubmit={onComputerSubmit}
+          onComputerSubmit={intent === 'computer' ? onComputerSubmit : undefined}
           onEscapeEmpty={handleEscapeEmpty}
           onIntentChange={handleIntentChange}
           onVoiceRequest={onVoiceRequest}
