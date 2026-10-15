@@ -21,7 +21,36 @@ The [new hosted run on cef5133](https://github.com/KB-Helios/Lumen/actions/runs/
 | Separate local diagnostic | Untraced input/ordinary sampling measured approximately **4.6 ms** input-to-next-rAF and **11.9 ms** ordinary React p95 at approximately **4.3 ms** observed frame cadence. A separate CPU-profile phase showed React element construction and collection work; these measurements are diagnostic and do not pass either failed full gate. |
 | Narrow grid-retention trial | Preserving the React Aria grid while the query input owned focus passed 20 result-grid/keyboard tests, including a regression observed failing first. A subsequent diagnostic still measured ordinary p95 **12.8 ms**. The trial and its test change were reverted; no product optimization from this trial is published. |
 
-The profile attributes expensive renders across the launcher composer, workspace, result collection, context actions and workspace remounts after clearing. Avoiding one collection reset did not repair the ordinary-query budget. This establishes the need for further rendering investigation; it does not establish a complete optimization or prove that the hosted frame miss has the same cause.
+The profile attributes expensive renders across the launcher composer, workspace, result collection, context actions and workspace remounts after clearing. Avoiding one collection reset did not repair the ordinary-query budget. This does not prove that the hosted frame miss has the same cause.
+
+The subsequent [required run on eebeea0](https://github.com/KB-Helios/Lumen/actions/runs/38800711941) also passed the complete unit suite and failed Edge: input-to-next-rAF p95 **23.8 ms**, above **18.8 ms**. The repeated failure confirms that the first hosted miss cannot be dismissed as a passing qualification.
+
+## Follow-up rendering fix
+
+Commit `8d68e41` retains only three small rendering changes: omit the unused Computer Use submission callback in search mode, memoize the expanded workspace, and keep action-button callbacks stable while forwarding to the latest committed handlers. The action regression was observed failing before the fix and passing afterward; it also verifies eligibility and opening-state changes remain immediate. Independent source review found no correctness issues.
+
+Fresh local verification of this patch:
+
+| Check | Result |
+| --- | --- |
+| Typecheck and zero-warning lint | Passed. Generated diagnostic bundles were moved into the ignored dependency cache before the clean lint run. |
+| Complete unit suite, Python 3.11 selected | **752 passed**, 89 files. |
+| Native answer bridge and tooling | **14 passed**. |
+| Focused Edge search, shell and Computer Use keyboard cases | **12 passed**, including opening/details/folder actions, narrow layouts, intent switching, safety focus order and 10,000-result selection. |
+| Unchanged Edge performance suite | **1 passed / 1 failed / 2 not run**. Ordinary React render p95 improved to **7.7 ms**, still above **<3 ms**. Earlier input and selection assertions passed in this run; that does not replace the failing hosted qualification. |
+| Regenerated evidence | **86 gallery states and six recordings** reference `8d68e41`. The [browser profile](../../../artifacts/performance/profile-summary.json) exits **1** with ordinary React render p95 **8.6 ms vs <3 ms**; `passed` and strict-240-Hz acceptance remain **false**. All other cadence-aware profile checks passed in that observation. Source was marked dirty because the report and generated evidence were being refreshed; the product source matches `8d68e41`. |
+
+Broader workspace retention, collection retention, React Aria hook replacement and selection-observer experiments were removed. No dependency, timing threshold, assertion, retry policy or CI configuration change is retained.
+
+### Measurement boundary and unresolved qualification
+
+The ordinary test records React Profiler `actualDuration` from the Vite development renderer with StrictMode. Despite the existing metric's `reactCommit` name, this is render duration, not total commit or physical presentation time. React documents a separate [production profiling build](https://react.dev/reference/dev-tools/react-performance-tracks#using-profiling-builds).
+
+An isolated local diagnostic used that profiling renderer with the same fixture routes, workload and original assertions. Ordinary-interaction qualification passed, but hover qualification failed: dispatch-to-next-actual-callback p95 **4.8 ms**, versus a **4.3 ms** nominal frame budget; all 80 hover state/color samples were ready. This comparison was an unshipped trial build, included a subsequently removed observer experiment, and is not acceptance of `8d68e41` or a substitute for the required development gate.
+
+The hover sampler compares an actual callback endpoint with a nominal rendering-timestamp budget. Callback offset growth contributes to that result. A separate alternating diagnostic measured no-input callback p95 **6.1 ms** at **4.3 ms** nominal cadence, showing that the bound can be exceeded without an input dispatch. This does not attribute every hover miss to the host or establish physical paint latency. Application work, browser scheduling and host contention remain possible contributors.
+
+The qualification decision remains open: retain the current development-renderer budget, or explicitly qualify production profiling while retaining development functional coverage and all existing limits. The required check is unchanged pending that decision. Hover's actual callback boundary also needs a defined qualification environment; no failure has been normalized into a pass.
 
 The native staging, Rust, compiled-worker and packaging steps after Edge did not run in the new hosted workflow. Their earlier revision-bound reports remain separate evidence. The independently documented compiled enrichment crash and other production release gates remain open.
 
