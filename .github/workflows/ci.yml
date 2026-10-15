@@ -80,6 +80,9 @@ jobs:
       - name: Run native answer bridge tests
         run: bun run test:answer-bridge
 
+      - name: Run native performance and dev server tooling tests
+        run: bun run test:tooling
+
       - name: Run Edge end-to-end tests
         run: bun run test:e2e
         timeout-minutes: 45

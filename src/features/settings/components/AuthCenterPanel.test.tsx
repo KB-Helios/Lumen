@@ -1,4 +1,4 @@
-import {act, render, screen} from '@testing-library/react';
+import {act, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {describe, expect, it, vi} from 'vitest';
 
@@ -69,18 +69,24 @@ describe('auth center', () => {
   it('releases confirmed-absent sessions and permits a fresh sign-in after repeated false acknowledgements', async () => {
     const user = userEvent.setup();
     const api = stubApi();
-    api.oauthCancel.mockResolvedValue(false);
-    api.oauthLinked.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    let phase: 'initial' | 'confirmed-absent' = 'initial';
+    api.oauthCancel.mockImplementation(async () => {
+      phase = 'confirmed-absent';
+      return false;
+    });
+    api.oauthLinked.mockImplementation(async (provider) => provider === 'codex' && phase === 'confirmed-absent');
     api.oauthAuthUrl
       .mockResolvedValueOnce({url: 'https://example.com/oauth/first', state: 'state-123', userCode: 'FIRST'})
       .mockResolvedValueOnce({url: 'https://example.com/oauth/second', state: 'state-456', userCode: 'SECOND'});
     render(<AuthCenterPanel api={api} />);
 
+    const chatgpt = within(screen.getByRole('button', {name: 'Sign in with ChatGPT'}).closest<HTMLElement>('.min-h-16')!);
     await user.click(screen.getByRole('button', {name: 'Sign in with ChatGPT'}));
     await user.click(screen.getByRole('button', {name: 'Cancel sign-in'}));
 
     expect(await screen.findByRole('button', {name: 'Sign in with ChatGPT'})).toBeVisible();
-    expect(await screen.findByText('Signed in')).toBeVisible();
+    expect(await chatgpt.findByText('Signed in')).toBeVisible();
+    expect(screen.getAllByText('Not linked')).toHaveLength(2);
     expect(api.oauthLinked.mock.calls.filter(([linkedProvider]) => linkedProvider === 'codex')).toHaveLength(2);
     expect(api.oauthCancel).toHaveBeenNthCalledWith(1, 'state-123');
 
@@ -92,6 +98,7 @@ describe('auth center', () => {
     await user.click(screen.getByRole('button', {name: 'Cancel sign-in'}));
 
     expect(await screen.findByRole('button', {name: 'Sign in with ChatGPT'})).toBeVisible();
+    expect(chatgpt.getByText('Signed in')).toBeVisible();
     expect(api.oauthCancel).toHaveBeenNthCalledWith(2, 'state-456');
     expect(api.oauthCancel).toHaveBeenCalledTimes(2);
     expect(api.oauthAuthUrl).toHaveBeenCalledTimes(2);

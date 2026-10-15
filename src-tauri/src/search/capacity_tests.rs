@@ -64,6 +64,16 @@ pub(crate) struct Metrics {
 }
 
 impl Metrics {
+    fn scans_on_current_thread(&self) -> usize {
+        let thread = format!("{:?}", std::thread::current().id());
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| event["event"] == "scan_start" && event["thread"] == thread)
+            .count()
+    }
+
     pub fn status_retry_candidates(&self, count: usize) {
         self.status_retry_candidates
             .fetch_add(count as u64, Ordering::Relaxed);
@@ -201,7 +211,8 @@ fn query(
     term: &str,
     filters: &[SearchFilterRequest],
 ) -> HybridSearchResponse {
-    runtime
+    let before = runtime.work.metrics.scans_on_current_thread();
+    let result = runtime
         .hybrid_search_filtered(
             term,
             None,
@@ -211,7 +222,13 @@ fn query(
             "all",
             filters,
         )
-        .unwrap()
+        .unwrap();
+    assert_eq!(
+        runtime.work.metrics.scans_on_current_thread(),
+        before,
+        "queries must not traverse inventory on the query thread"
+    );
+    result
 }
 
 fn watcher_changes(runtime: &IndexRuntime, root: &Path, files: usize, output: &Path) {
@@ -455,6 +472,44 @@ fn constrain(runtime: &IndexRuntime) {
         assert_eq!(effective,pages);
         println!("TASK13 same-native-connection page_count={pages} page_size={size} effective_max={effective}");
     });
+}
+
+#[test]
+fn warm_queries_do_not_traverse_while_worker_maintenance_runs() {
+    let base = owned_base("query-traversal");
+    let root = base.join("root");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("notes.txt"), b"queryquasar").unwrap();
+    let runtime = IndexRuntime::open(
+        &base.join("index.sqlite"),
+        Path::new("missing-vector.dll"),
+        true,
+    )
+    .unwrap();
+    runtime
+        .configure_roots(
+            vec![IndexRootRequest {
+                path: root.to_string_lossy().into_owned(),
+                cloud_enrichment: false,
+                exclusions: vec![],
+                include_hidden: false,
+                max_file_size_mb: 64,
+            }],
+            true,
+        )
+        .unwrap();
+    eventually(|| runtime.work.completed.lock().unwrap().len() == 1);
+    let before = runtime.work.metrics.scans_done.load(Ordering::SeqCst);
+    // Existing test hook makes scheduled maintenance due without changing its30s interval.
+    runtime.work.periodic_due.store(true, Ordering::SeqCst);
+    runtime.worker.as_ref().unwrap().wake();
+    for _ in 0..31 {
+        assert_eq!(query(&runtime, "queryquasar", &[]).items.len(), 1);
+    }
+    eventually(|| runtime.work.metrics.scans_done.load(Ordering::SeqCst) > before);
+    assert_eq!(runtime.work.metrics.scans_on_current_thread(), 0);
+    runtime.stop_index_worker();
+    drop(runtime);
 }
 
 #[test]
@@ -1027,6 +1082,7 @@ fn native_filesystem_capacity() {
             vec![]
         };
         let before = runtime.work.metrics.scans.load(Ordering::SeqCst);
+        let query_scans_before = runtime.work.metrics.scans_on_current_thread();
         let mut samples = Vec::new();
         for sample in 0..31 {
             let clock = Instant::now();
@@ -1059,9 +1115,14 @@ fn native_filesystem_capacity() {
         }
         let mut ordered = samples.clone();
         ordered.sort_by(f64::total_cmp);
+        let query_scan_delta = runtime.work.metrics.scans_on_current_thread() - query_scans_before;
+        assert_eq!(
+            query_scan_delta, 0,
+            "{name}: queries must not traverse inventory"
+        );
         emit(
             &output,
-            json!({"phase":"warm_queries","workload":name,"raw_ms":samples,"p50_ms":ordered[14],"p95_ms":ordered[28],"percentile":"nearest-rank ceil(q*N)-1 N=30","scan_delta_including_maintenance":runtime.work.metrics.scans.load(Ordering::SeqCst)-before,"query_thread":format!("{:?}",std::thread::current().id()),"metrics":runtime.work.metrics.snapshot()}),
+            json!({"phase":"warm_queries","workload":name,"raw_ms":samples,"p50_ms":ordered[14],"p95_ms":ordered[28],"percentile":"nearest-rank ceil(q*N)-1 N=30","scan_delta_including_maintenance":runtime.work.metrics.scans.load(Ordering::SeqCst)-before,"query_thread_scan_delta":query_scan_delta,"query_thread":format!("{:?}",std::thread::current().id()),"metrics":runtime.work.metrics.snapshot()}),
         );
     }
     watcher_changes(&runtime, &root, files, &output);

@@ -384,7 +384,7 @@ impl EnrichmentSupervisor {
         format!("http://127.0.0.1:{}{path}", self.control_port)
     }
 
-    fn record_readiness(&self, generation: u64, ready: bool) -> bool {
+    fn record_readiness(&self, generation: u64, ready: bool, detail: Option<String>) -> bool {
         let _guard = self
             .process
             .lock()
@@ -393,6 +393,12 @@ impl EnrichmentSupervisor {
             return false;
         }
         self.ready.store(ready, Ordering::SeqCst);
+        if let Some(detail) = detail {
+            *self
+                .detail
+                .lock()
+                .unwrap_or_else(|value| value.into_inner()) = Some(detail);
+        }
         true
     }
 
@@ -404,11 +410,7 @@ impl EnrichmentSupervisor {
         let client = match local_http::client(Duration::from_secs(5)) {
             Ok(client) => client,
             Err(error) => {
-                *self
-                    .detail
-                    .lock()
-                    .unwrap_or_else(|value| value.into_inner()) =
-                    Some(error.message("Rivet queue sync"));
+                self.record_readiness(generation, false, Some(error.message("Rivet queue sync")));
                 return false;
             }
         };
@@ -421,15 +423,10 @@ impl EnrichmentSupervisor {
             )
             .await;
             if let Err(error) = response {
-                self.record_readiness(generation, false);
-                *self
-                    .detail
-                    .lock()
-                    .unwrap_or_else(|value| value.into_inner()) =
-                    Some(error.message("Rivet queue sync"));
+                self.record_readiness(generation, false, Some(error.message("Rivet queue sync")));
                 return false;
             }
-            if !self.record_readiness(generation, true) {
+            if !self.record_readiness(generation, true, None) {
                 return false;
             }
         }
@@ -443,7 +440,7 @@ impl EnrichmentSupervisor {
         let result = local_http::json(client.get(self.endpoint("/jobs")).bearer_auth(&self.bearer))
             .await
             .map_err(|error| error.message("Enrichment queue"));
-        if !self.record_readiness(generation, result.is_ok()) {
+        if !self.record_readiness(generation, result.is_ok(), None) {
             return Err("Enrichment runtime changed; retry the request.".into());
         }
         result
@@ -469,7 +466,7 @@ impl EnrichmentSupervisor {
         }
         .await
             == Some(true);
-        self.record_readiness(generation, ready);
+        self.record_readiness(generation, ready, None);
     }
 
     pub(crate) async fn enrichment_request<T: DeserializeOwned>(
@@ -1099,7 +1096,7 @@ mod tests {
     }
     #[test]
     fn enrichment_late_readiness_cannot_mark_a_replaced_runtime_ready() {
-        for operation in ["health", "status", "sync"] {
+        for operation in ["health", "status", "sync", "sync-error"] {
             let fixture = crate::search::test_support::SearchFixture::new("rivet-late-readiness");
             let supervisor = EnrichmentSupervisor::new(
                 PathBuf::from("unused"),
@@ -1112,9 +1109,15 @@ mod tests {
             } else {
                 "[]"
             };
+            let response = if operation == "sync-error" {
+                b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_vec()
+            } else {
+                http::json(reply)
+            };
             let server = http::server_at(
                 TcpListener::bind(("127.0.0.1", supervisor.control_port)).unwrap(),
-                http::json(reply),
+                response,
                 Duration::from_millis(200),
             );
             tauri::async_runtime::block_on(async {
@@ -1147,6 +1150,7 @@ mod tests {
                     let _guard = supervisor.process.lock().unwrap();
                     supervisor.process_generation.fetch_add(1, Ordering::SeqCst);
                     supervisor.ready.store(false, Ordering::SeqCst);
+                    *supervisor.detail.lock().unwrap() = Some("replacement runtime".into());
                 };
                 tokio::join!(request, replaced);
             });
@@ -1154,6 +1158,11 @@ mod tests {
             assert!(
                 !supervisor.ready.load(Ordering::SeqCst),
                 "{operation}: old actor response must not mark the replacement ready"
+            );
+            assert_eq!(
+                supervisor.detail.lock().unwrap().as_deref(),
+                Some("replacement runtime"),
+                "{operation}: old actor response must not replace the new runtime diagnostic"
             );
         }
     }

@@ -32,6 +32,12 @@ async function normalizeTimes(directory: string) {
   await utimes(directory, sourceDateEpoch, sourceDateEpoch);
 }
 
+export async function buildAndLoadImprovementImage(context: string, exported: string, execute = run) {
+  await execute(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'buildx', 'build', '--platform', 'linux/amd64', '--provenance=false', '--sbom=false', '--build-arg', `SOURCE_DATE_EPOCH=${sourceDateEpoch}`, '--output', `type=docker,dest=${exported},rewrite-timestamp=true`, '--tag', image, context], undefined, 1_800_000);
+  await execute(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'image', 'load', '--input', exported]);
+  return execute(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'image', 'inspect', image]);
+}
+
 export async function stageImprovement() {
   const engine = JSON.parse(await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'version', '--format', '{{json .Server}}'], undefined, 20_000)) as {Os?: string; Arch?: string};
   if (engine.Os !== 'linux' || engine.Arch !== 'amd64') throw new Error('Start the installed Docker Desktop Linux engine explicitly before staging.');
@@ -49,9 +55,7 @@ export async function stageImprovement() {
     for (const name of ['Dockerfile', 'requirements.lock', 'bridge.py']) await copyFile(join(runtime, name), join(context, name));
     await normalizeTimes(context);
     const exported = join(temporary, 'exported-image.tar');
-    await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'buildx', 'build', '--platform', 'linux/amd64', '--provenance=false', '--sbom=false', '--build-arg', `SOURCE_DATE_EPOCH=${sourceDateEpoch}`, '--output', `type=docker,dest=${exported},rewrite-timestamp=true`, '--tag', image, context], undefined, 1_800_000);
-    await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'image', 'load', '--input', exported]);
-    const metadata = JSON.parse(await run(['docker', '--host', 'npipe:////./pipe/dockerDesktopLinuxEngine', 'image', 'inspect', image])) as {Id: string; Os: string; Architecture: string; Config: {Labels: Record<string, string>}}[];
+    const metadata = JSON.parse(await buildAndLoadImprovementImage(context, exported)) as {Id: string; Os: string; Architecture: string; Config: {Labels: Record<string, string>}}[];
     const installed = metadata[0];
     if (!installed || !/^sha256:[a-f0-9]{64}$/.test(installed.Id) || installed.Os !== 'linux' || installed.Architecture !== 'amd64'
       || installed.Config.Labels['dev.lumen.improvement.revision'] !== revision || installed.Config.Labels['dev.lumen.improvement.protocol'] !== '1') throw new Error('Built image failed identity checks');
