@@ -1,5 +1,7 @@
 {
-  "recordedAt": "2026-10-15T15:22:20Z",
+  "recordedAt": "2026-10-15T15:34:58Z",
+  "uniquePayloadFiles": 124,
+  "archiveFilesIncludingManifest": 125,
   "productSource": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
   "releaseMarker": null,
   "fullEdgePassed": false,
@@ -995,10 +997,15 @@
     },
     {
       "path": "tauri-build-unsigned.stderr.log",
-      "originalBytes": 11911,
-      "originalSha256": "3a6d8bab4aee5d8bbd754d44df57f0da7e3b1c7347b035b8482ee547e0675e1e",
-      "publishedBytes": 11911,
-      "publishedSha256": "3a6d8bab4aee5d8bbd754d44df57f0da7e3b1c7347b035b8482ee547e0675e1e"
+      "originalPath": "[ignored]/task14c-evidence/tauri-build-unsigned.stderr.log",
+      "originalBytes": 16878,
+      "originalSha256": "15130260464b80a5f571a0a6c2edd5b233c397a2985ffacc27749da64484db15",
+      "publishedBytes": 16743,
+      "publishedSha256": "5494a09ac97cbb2c4ca59c5aec7b4eb1a8466bdfc8ac7e9bff124d9b82b88bdb",
+      "redactions": [
+        "C:\\Users\\kevin\\.codex\\worktrees\\3505\\Lumen\\src-tauri -> [workspace]/src-tauri (1 occurrence)",
+        "D:\\CodexBuilds\\Lumen\\production-readiness -> [native-target] (4 occurrences)"
+      ]
     },
     {
       "path": "tauri-build-unsigned.json",
@@ -1334,11 +1341,6 @@
       "path": "tauri-build-unsigned.resources.json",
       "publishedBytes": 484,
       "publishedSha256": "8ff41978da00a6c0cc3204367c14622f176da544a393a4af5328ad95a957c9ce"
-    },
-    {
-      "path": "tauri-build-unsigned.json",
-      "publishedBytes": 1035,
-      "publishedSha256": "ec4485417da27d5b075f9d4dff9db05c7415b9651404de4daa1d2b4827454f9c"
     },
     {
       "path": "vendor-signature-negative.resources.json",
