@@ -1,0 +1,20 @@
+130 |   const name = path === sdk ? 'sdk' : 'glue';
+131 |   writeFileSync(resolve(evidence, name + '.original.js'), originals.get(path)!);
+132 |   writeFileSync(resolve(evidence, name + '.diagnostic.js'), transformed);
+133 |   const patch = spawnSync('rtk', ['proxy', 'git', 'diff', '--no-index', '--', resolve(evidence, name + '.original.js'), resolve(evidence, name + '.diagnostic.js')], {windowsHide: true});
+134 |   assert.equal(patch.status, 1, 'missing exact source patch');
+135 |   assert.equal(patch.stderr.length, 0, 'source patch command emitted error');
+               ^
+AssertionError: source patch command emitted error
+
+384 !== 0
+
+ generatedMessage: false,
+     actual: 384,
+   expected: 0,
+   operator: "strictEqual",
+       code: "ERR_ASSERTION"
+
+      at [workspace]\.superpowers\callback-recovery\build.ts:135:10
+
+Bun v1.3.14 (Windows x64)

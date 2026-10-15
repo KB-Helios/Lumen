@@ -1,0 +1,491 @@
+diff --git "a/[workspace]\\.superpowers\\callback-recovery\\evidence\\sdk.original.js" "b/[workspace]\\.superpowers\\callback-recovery\\evidence\\sdk.diagnostic.js"
+index bab41d8..1233856 100644
+--- "a/[workspace]\\.superpowers\\callback-recovery\\evidence\\sdk.original.js"
++++ "b/[workspace]\\.superpowers\\callback-recovery\\evidence\\sdk.diagnostic.js"
+@@ -3114,7 +3114,9 @@ function decodeValue(value) {
+   return decodeCborCompat(value);
+ }
+ function encodeValue(value) {
+-  return encodeCborCompat(value);
++  const __ownedEncoded = encodeCborCompat(value);
++  globalThis.__ownedRecovery?.note("encode-complete", __ownedEncoded);
++  return __ownedEncoded;
+ }
+ function normalizeArgs(value) {
+   return Array.isArray(value) ? value : value === void 0 || value === null ? [] : [value];
+@@ -3378,10 +3380,12 @@ function queryRows(result) {
+   }
+   return [];
+ }
+-function wrapNativeCallback(callback) {
++function wrapNativeCallback(callback, __ownedName) {
+   return async (...args) => {
+     try {
+-      return await callback(...args);
++      const __ownedResult = await callback(...args);
++      globalThis.__ownedRecovery.resolved(__ownedName, __ownedResult);
++      return __ownedResult;
+     } catch (error) {
+       throw encodeNativeCallbackError(error);
+     }
+@@ -5670,6 +5674,8 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+   const callbacks = {
+     createState: hasStaticState || typeof config.createState === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("createState");
++
+         const { ctx, input } = unwrapTsfnPayload(
+           error,
+           payload
+@@ -5687,14 +5693,16 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             durationMs: performance.now() - startedAt
+           });
+           actorCtx.initializeState(state);
+-          return encodeValue(state);
++          return globalThis.__ownedRecovery.capture(__ownedCall, (encodeValue(state)));
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "createState") : void 0,
+     onCreate: typeof config.onCreate === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onCreate");
++
+         const { ctx, input } = unwrapTsfnPayload(
+           error,
+           payload
+@@ -5706,12 +5714,14 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             decodeValue(input)
+           );
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onCreate") : void 0,
+     createVars: hasStaticVars || typeof config.createVars === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("createVars");
++
+         const { ctx } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(ctx);
+         try {
+@@ -5726,12 +5736,14 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+           });
+           actorCtx.vars = vars;
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "createVars") : void 0,
+     onMigrate: typeof config.onMigrate === "function" || databaseProvider !== void 0 ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onMigrate");
++
+         const { ctx, isNew } = unwrapTsfnPayload(
+           error,
+           payload
+@@ -5749,12 +5761,14 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+           await actorCtx.closeDatabase();
+           throw error2;
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onMigrate") : void 0,
+     onWake: typeof config.onWake === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onWake");
++
+         const { ctx } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(ctx);
+         try {
+@@ -5765,23 +5779,27 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             durationMs: performance.now() - startedAt
+           });
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onWake") : void 0,
+     onBeforeActorStart: typeof config.onBeforeActorStart === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onBeforeActorStart");
++
+         const { ctx } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(ctx);
+         try {
+           await config.onBeforeActorStart(actorCtx);
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onBeforeActorStart") : void 0,
+     onSleep: wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onSleep");
++
+         const { ctx } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(ctx);
+         const saveActorState = async () => {
+@@ -5809,13 +5827,15 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+               saveActorState
+             );
+           } finally {
+-            await actorCtx.dispose();
++            (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+           }
+         }
+       }
+-    ),
++    , "onSleep"),
+     onDestroy: wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onDestroy");
++
+         const { ctx } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(ctx);
+         try {
+@@ -5829,12 +5849,14 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+           resolveNativeDestroy(runtime, ctx);
+           await actorCtx.closeDatabase();
+           clearNativeRuntimeState(runtime, ctx);
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ),
++    , "onDestroy"),
+     onBeforeConnect: typeof config.onBeforeConnect === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onBeforeConnect");
++
+         const { ctx, params, request } = unwrapTsfnPayload(
+           error,
+           payload
+@@ -5852,12 +5874,14 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             )
+           );
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onBeforeConnect") : void 0,
+     createConnState: hasStaticConnState || hasDynamicConnState ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("createConnState");
++
+         const { ctx, conn, params, request } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(
+           ctx,
+@@ -5884,14 +5908,16 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             )
+           );
+           connAdapter.initializeState(nextConnState);
+-          return encodeValue(nextConnState);
++          return globalThis.__ownedRecovery.capture(__ownedCall, (encodeValue(nextConnState)));
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "createConnState") : void 0,
+     onConnect: typeof config.onConnect === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onConnect");
++
+         const { ctx, conn, request } = unwrapTsfnPayload(
+           error,
+           payload
+@@ -5920,12 +5946,14 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             connAdapter
+           );
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onConnect") : void 0,
+     onDisconnectFinal: needsDisconnectCallback ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onDisconnectFinal");
++
+         const { ctx, conn } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeConnCtx(ctx, conn);
+         try {
+@@ -5947,14 +5975,16 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             );
+           }
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onDisconnectFinal") : void 0,
+     onBeforeSubscribe: schemaConfig.events && Object.values(schemaConfig.events).some(
+       (schema) => typeof schema.canSubscribe === "function"
+     ) ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onBeforeSubscribe");
++
+         const { ctx, conn, eventName } = unwrapTsfnPayload(
+           error,
+           payload
+@@ -5978,30 +6008,34 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             throw forbiddenError();
+           }
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onBeforeSubscribe") : void 0,
+     onBeforeActionResponse: typeof config.onBeforeActionResponse === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onBeforeActionResponse");
++
+         const { ctx, name, args, output } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(ctx);
+         try {
+-          return encodeValue(
++          return globalThis.__ownedRecovery.capture(__ownedCall, (encodeValue(
+             await config.onBeforeActionResponse(
+               actorCtx,
+               name,
+               decodeArgs(args),
+               decodeValue(output)
+             )
+-          );
++          )));
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onBeforeActionResponse") : void 0,
+     onRequest: wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onRequest");
++
+         try {
+           const { ctx, request, cancelToken } = unwrapTsfnPayload(
+             error,
+@@ -6014,12 +6048,12 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             jsRequest
+           );
+           if (inspectorResponse) {
+-            return await toRuntimeHttpResponse(inspectorResponse);
++            return globalThis.__ownedRecovery.capture(__ownedCall, (await toRuntimeHttpResponse(inspectorResponse)));
+           }
+           if (typeof config.onRequest !== "function") {
+-            return await toRuntimeHttpResponse(
++            return globalThis.__ownedRecovery.capture(__ownedCall, (await toRuntimeHttpResponse(
+               new Response(null, { status: 404 })
+-            );
++            )));
+           }
+           const rawConnParams = jsRequest.headers.get(HEADER_CONN_PARAMS);
+           let requestCtx;
+@@ -6051,9 +6085,9 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+                 "onRequest handler must return a Response"
+               );
+             }
+-            return await toRuntimeHttpResponse(response);
++            return globalThis.__ownedRecovery.capture(__ownedCall, (await toRuntimeHttpResponse(response)));
+           } finally {
+-            await (requestCtx == null ? void 0 : requestCtx.dispose());
++            (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await (requestCtx == null ? void 0 : requestCtx.dispose()), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+             if (conn) {
+               await runtime.connDisconnect(conn);
+             }
+@@ -6066,9 +6100,11 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+           throw error2;
+         }
+       }
+-    ),
++    , "onRequest"),
+     onWebSocket: typeof config.onWebSocket === "function" ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onWebSocket");
++
+         const { ctx, conn, ws, request } = unwrapTsfnPayload(error, payload);
+         const jsRequest = request ? buildRequest(request) : void 0;
+         const actorCtx = makeConnCtx(ctx, conn, jsRequest);
+@@ -6081,10 +6117,10 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             )
+           );
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ) : void 0,
++    , "onWebSocket") : void 0,
+     run: (() => {
+       const run = getRunFunction(config.run);
+       if (!run) {
+@@ -6092,6 +6128,8 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+       }
+       return wrapNativeCallback(
+         async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("run");
++
+           const { ctx } = unwrapTsfnPayload(error, payload);
+           const actorId = callNativeSync(() => runtime.actorId(ctx));
+           const actorCtx = makeActorCtx(ctx);
+@@ -6100,44 +6138,50 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+             await run(actorCtx);
+           } finally {
+             nativeRunHandlerActiveByActorId.delete(actorId);
+-            await actorCtx.dispose();
++            (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+           }
+         }
+-      );
++      , "run");
+     })(),
+     getWorkflowHistory: getRunInspectorConfig(config.run) !== void 0 ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("getWorkflowHistory");
++
+         var _a2;
+         const { ctx } = unwrapTsfnPayload(error, payload);
+         const history = (_a2 = getNativeWorkflowInspector(ctx)) == null ? void 0 : _a2.getHistory();
+-        return history == null ? void 0 : encodeValue(history);
++        return globalThis.__ownedRecovery.capture(__ownedCall, (history == null ? void 0 : encodeValue(history)));
+       }
+-    ) : void 0,
++    , "getWorkflowHistory") : void 0,
+     replayWorkflow: getRunInspectorConfig(config.run) !== void 0 ? wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("replayWorkflow");
++
+         const { ctx, entryId } = unwrapTsfnPayload(
+           error,
+           payload
+         );
+         const workflowInspector = getNativeWorkflowInspector(ctx);
+         if (!(workflowInspector == null ? void 0 : workflowInspector.replayFromStep)) {
+-          return void 0;
++          return globalThis.__ownedRecovery.capture(__ownedCall, (void 0));
+         }
+         const history = await workflowInspector.replayFromStep(
+           entryId
+         ) ?? null;
+-        return history == null ? void 0 : encodeValue(history);
++        return globalThis.__ownedRecovery.capture(__ownedCall, (history == null ? void 0 : encodeValue(history)));
+       }
+-    ) : void 0,
++    , "replayWorkflow") : void 0,
+     actions: Object.fromEntries(
+       Object.entries(actionHandlers).map(([name, handler]) => [
+         name,
+         wrapNativeCallback(
+           async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("actions." + name);
++
+             const { ctx, conn, args, scheduledFire, cancelToken } = unwrapTsfnPayload(error, payload);
+             const actorCtx = conn != null ? makeConnCtx(ctx, conn, void 0, cancelToken) : makeActorCtx(ctx, void 0, cancelToken);
+             try {
+-              return encodeValue(
++              return globalThis.__ownedRecovery.capture(__ownedCall, (encodeValue(
+                 await handler(
+                   actorCtx,
+                   ...validateActionArgs(
+@@ -6147,16 +6191,18 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+                   ),
+                   ...scheduledFire ? [scheduledFire] : []
+                 )
+-              );
++              )));
+             } finally {
+-              await actorCtx.dispose();
++              (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+             }
+           }
+-        )
++        , "actions." + name)
+       ])
+     ),
+     onQueueSend: wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("onQueueSend");
++
+         const {
+           ctx,
+           conn,
+@@ -6182,7 +6228,7 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+         );
+         try {
+           if (!schemaConfig.queues || !hasSchemaConfigKey(schemaConfig.queues, name)) {
+-            return { status: "completed" };
++            return globalThis.__ownedRecovery.capture(__ownedCall, ({ status: "completed" }));
+           }
+           const canPublish = getQueueCanPublish(
+             schemaConfig.queues,
+@@ -6201,35 +6247,37 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+                   timeout: timeoutMs === void 0 || timeoutMs === null ? void 0 : Number(timeoutMs)
+                 }
+               );
+-              return {
++              return globalThis.__ownedRecovery.capture(__ownedCall, ({
+                 status: "completed",
+                 response: response === void 0 ? void 0 : encodeValue(response)
+-              };
++              }));
+             } catch (error2) {
+               if (error2.group === "queue" && error2.code === "timed_out") {
+-                return { status: "timedOut" };
++                return globalThis.__ownedRecovery.capture(__ownedCall, ({ status: "timedOut" }));
+               }
+               throw error2;
+             }
+           }
+           await actorCtx.queue.send(name, decodedBody);
+-          return { status: "completed" };
++          return globalThis.__ownedRecovery.capture(__ownedCall, ({ status: "completed" }));
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    ),
++    , "onQueueSend"),
+     serializeState: wrapNativeCallback(
+       async (error, payload) => {
++const __ownedCall = globalThis.__ownedRecovery.begin("serializeState");
++
+         const { ctx, reason } = unwrapTsfnPayload(error, payload);
+         const actorCtx = makeActorCtx(ctx);
+         try {
+-          return actorCtx.serializeForTick(reason);
++          return globalThis.__ownedRecovery.capture(__ownedCall, (actorCtx.serializeForTick(reason)));
+         } finally {
+-          await actorCtx.dispose();
++          (globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), await actorCtx.dispose(), globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"));
+         }
+       }
+-    )
++    , "serializeState")
+   };
+   return runtime.createActorFactory(
+     callbacks,

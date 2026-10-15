@@ -21,6 +21,24 @@ The normal Tauri application always uses the real local-file adapter. Determinis
 
 The answer path is provider-neutral at the React boundary and routes typed requests through native services. The native AgentGateway provider/model registry and MCP services, plus local vector-backed semantic search and ranking, have implemented paths behind typed services. Their use still depends on host availability, local runtime/vector support, configuration and consent. `FutureProductionSearchService` remains an intentionally unavailable adapter stub; the normal Tauri application uses the real local-file/index adapter. These source paths do not establish broad live-provider or release acceptance.
 
+## Production readiness
+
+**Not production-ready yet.** The 2026-10-15 checkpoint verifies implemented source and owned fixtures, not complete release acceptance. Typecheck, lint, 751 frontend tests, 383 Rust library tests, 26 Rust integration tests, staging and an **unsigned** installer build passed on product source `8a337eb`. The full Edge run failed (129 passed, 3 failed, 2 not run); 26 Rust tests were ignored and are tracked individually. See the [Windows gate report](docs/reports/2026-10-15-final-windows-gates.md).
+
+Work still required before production:
+
+- **Enrichment runtime:** diagnose and repair the intermittent compiled-worker ArrayBuffer crash, add a reproducing regression, then pass the original staged recovery gate. Instrumented diagnostic passes do not establish a fix; the original caller and invalidating operation remain unknown.
+- **Performance and browser acceptance:** meet the unchanged ordinary-query React p95 <3 ms and strict refresh budgets, resolve/revalidate cold-start accessibility failures, and pass the complete Edge suite. Current ordinary p95 is 10.4 ms. Refresh native WebView2 measurements, the 86-state gallery, six recordings and final performance evidence. See [performance evidence](docs/reports/2026-10-15-performance-continuation.md).
+- **Native capacity and recovery:** complete 50,000-file and traversal-cap workloads with actual completion/normal joins, cold indexing, warm queries, edit/delete propagation, cancellation, settled resources and restart. The 1,000-file run completed; the later 50,000-file run is **UNCLOSED**, not a pass. Extend large-document resource and disk-full/interrupted-migration acceptance. See [capacity evidence](docs/reports/2026-10-15-native-search-capacity.md).
+- **Real Prime:** run pinned Docker/Prime execution, ACP delivery, isolation/resource limits, recovery, promotion/rejection, cancellation and rollback. Docker acceptance is explicitly deferred by the owner; deterministic fixtures are separate.
+- **Live AI and providers:** exercise supported local/cloud routes and all five real tool clients, authentication/expiry, unavailable models, rate limits, fallback, Stop/Retry, restart and OAuth cancellation. See [provider acceptance](docs/reports/2026-10-15-provider-workflow-source-validation.md).
+- **Installed Computer Use:** validate both providers through the installed app, approval denial/retry, target loss/reuse, Background restrictions, revoked consent, native emergency Stop and owned-process cleanup. See [Computer Use acceptance](docs/reports/2026-10-15-computer-use-acceptance.md).
+- **Signed distribution:** provision the owner's existing Windows signing certificate, verify final signed payloads, and test clean installation, state-preserving upgrade, interrupted upgrade, uninstall and process cleanup. The successful unsigned build does not establish these outcomes. See [release acceptance](docs/reports/signed-release-and-upgrade-acceptance.md).
+- **Physical Windows accessibility/lifecycle:** complete Narrator, real IME, text scaling, high contrast, mixed-DPI monitors, sleep/resume and shortcut-conflict testing. See [physical acceptance](docs/reports/2026-10-15-windows-physical-acceptance.md).
+- **Final release evidence:** obtain a passing complete hosted `Verify and package` run for the release commit and reconcile all failed, ignored and pending gates. Local, browser, native, installed, live-provider and physical evidence remain separate.
+
+Optional Windows capabilities retain explicit unavailable states until their prerequisites exist: App Content Search needs Microsoft's feature ID, token and attestation; eligible hardware/runtime checks and signed optional identity acceptance remain outstanding. Aion remains excluded pending a stable redistributable contract. Automatic updating is optional follow-up; the first release uses signed installer updates.
+
 ## Requirements
 
 - Windows 11 with the Microsoft Edge WebView2 Runtime.

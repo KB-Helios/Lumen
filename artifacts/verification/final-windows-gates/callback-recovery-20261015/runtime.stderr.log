@@ -1,0 +1,8 @@
+
+.superpowers\callback-recovery\diagnostic-runtime.test.ts:
+(pass) compiled worker authenticates and persists fenced enrichment leases through crash [43195.99ms]
+
+ 1 pass
+ 0 fail
+ 186 expect() calls
+Ran 1 test across 1 file. [43.38s]

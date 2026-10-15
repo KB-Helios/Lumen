@@ -1,0 +1,854 @@
+{
+  "callbacks": 22,
+  "returns": 15,
+  "cleanups": 20,
+  "changes": [
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187531,
+      "end": 187531,
+      "before": "",
+      "after": ", \"serializeState\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187507,
+      "end": 187507,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187483,
+      "end": 187483,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187451,
+      "end": 187451,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187418,
+      "end": 187418,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187275,
+      "end": 187275,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"serializeState\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187199,
+      "end": 187199,
+      "before": "",
+      "after": ", \"onQueueSend\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187175,
+      "end": 187175,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187151,
+      "end": 187151,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187119,
+      "end": 187119,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 187096,
+      "end": 187096,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 186951,
+      "end": 186951,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 186929,
+      "end": 186929,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 186796,
+      "end": 186796,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 186663,
+      "end": 186663,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 186049,
+      "end": 186049,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 186026,
+      "end": 186026,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 185380,
+      "end": 185380,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onQueueSend\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 185292,
+      "end": 185292,
+      "before": "",
+      "after": ", \"actions.\" + name"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 185256,
+      "end": 185256,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 185232,
+      "end": 185232,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 185192,
+      "end": 185192,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 184851,
+      "end": 184851,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 184578,
+      "end": 184578,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"actions.\" + name);\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 184390,
+      "end": 184390,
+      "before": "",
+      "after": ", \"replayWorkflow\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 184376,
+      "end": 184376,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 184329,
+      "end": 184329,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 184201,
+      "end": 184201,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 184195,
+      "end": 184195,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183924,
+      "end": 183924,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"replayWorkflow\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183792,
+      "end": 183792,
+      "before": "",
+      "after": ", \"getWorkflowHistory\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183778,
+      "end": 183778,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183731,
+      "end": 183731,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183538,
+      "end": 183538,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"getWorkflowHistory\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183401,
+      "end": 183401,
+      "before": "",
+      "after": ", \"run\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183371,
+      "end": 183371,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 183347,
+      "end": 183347,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 182963,
+      "end": 182963,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"run\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 182770,
+      "end": 182770,
+      "before": "",
+      "after": ", \"onWebSocket\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 182746,
+      "end": 182746,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 182722,
+      "end": 182722,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 182261,
+      "end": 182261,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onWebSocket\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 182145,
+      "end": 182145,
+      "before": "",
+      "after": ", \"onRequest\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 181858,
+      "end": 181858,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 181800,
+      "end": 181800,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 181764,
+      "end": 181764,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 181727,
+      "end": 181727,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180748,
+      "end": 180748,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180656,
+      "end": 180656,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180567,
+      "end": 180567,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180521,
+      "end": 180521,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180132,
+      "end": 180132,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onRequest\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180052,
+      "end": 180052,
+      "before": "",
+      "after": ", \"onBeforeActionResponse\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180028,
+      "end": 180028,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 180004,
+      "end": 180004,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 179972,
+      "end": 179972,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 179775,
+      "end": 179775,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 179620,
+      "end": 179620,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onBeforeActionResponse\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 179473,
+      "end": 179473,
+      "before": "",
+      "after": ", \"onBeforeSubscribe\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 179449,
+      "end": 179449,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 179425,
+      "end": 179425,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 178761,
+      "end": 178761,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onBeforeSubscribe\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 178541,
+      "end": 178541,
+      "before": "",
+      "after": ", \"onDisconnectFinal\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 178517,
+      "end": 178517,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 178493,
+      "end": 178493,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 177838,
+      "end": 177838,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onDisconnectFinal\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 177724,
+      "end": 177724,
+      "before": "",
+      "after": ", \"onConnect\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 177700,
+      "end": 177700,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 177676,
+      "end": 177676,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 176958,
+      "end": 176958,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onConnect\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 176837,
+      "end": 176837,
+      "before": "",
+      "after": ", \"createConnState\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 176813,
+      "end": 176813,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 176789,
+      "end": 176789,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 176757,
+      "end": 176757,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 176731,
+      "end": 176731,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175872,
+      "end": 175872,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"createConnState\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175742,
+      "end": 175742,
+      "before": "",
+      "after": ", \"onBeforeConnect\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175718,
+      "end": 175718,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175694,
+      "end": 175694,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175227,
+      "end": 175227,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onBeforeConnect\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175103,
+      "end": 175103,
+      "before": "",
+      "after": ", \"onDestroy\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175079,
+      "end": 175079,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 175055,
+      "end": 175055,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 174475,
+      "end": 174475,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onDestroy\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 174404,
+      "end": 174404,
+      "before": "",
+      "after": ", \"onSleep\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 174368,
+      "end": 174368,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 174344,
+      "end": 174344,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173575,
+      "end": 173575,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onSleep\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173497,
+      "end": 173497,
+      "before": "",
+      "after": ", \"onBeforeActorStart\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173473,
+      "end": 173473,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173449,
+      "end": 173449,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173248,
+      "end": 173248,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onBeforeActorStart\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173109,
+      "end": 173109,
+      "before": "",
+      "after": ", \"onWake\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173085,
+      "end": 173085,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 173061,
+      "end": 173061,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 172689,
+      "end": 172689,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onWake\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 172574,
+      "end": 172574,
+      "before": "",
+      "after": ", \"onMigrate\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 172550,
+      "end": 172550,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 172526,
+      "end": 172526,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171997,
+      "end": 171997,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onMigrate\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171845,
+      "end": 171845,
+      "before": "",
+      "after": ", \"createVars\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171821,
+      "end": 171821,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171797,
+      "end": 171797,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171281,
+      "end": 171281,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"createVars\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171141,
+      "end": 171141,
+      "before": "",
+      "after": ", \"onCreate\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171117,
+      "end": 171117,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 171093,
+      "end": 171093,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 170809,
+      "end": 170809,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"onCreate\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 170690,
+      "end": 170690,
+      "before": "",
+      "after": ", \"createState\""
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 170666,
+      "end": 170666,
+      "before": "",
+      "after": ", globalThis.__ownedRecovery.check(__ownedCall, \"after-cleanup\"))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 170642,
+      "end": 170642,
+      "before": "",
+      "after": "(globalThis.__ownedRecovery.check(__ownedCall, \"before-cleanup\"), "
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 170610,
+      "end": 170610,
+      "before": "",
+      "after": "))"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 170592,
+      "end": 170592,
+      "before": "",
+      "after": "globalThis.__ownedRecovery.capture(__ownedCall, ("
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 169979,
+      "end": 169979,
+      "before": "",
+      "after": "\nconst __ownedCall = globalThis.__ownedRecovery.begin(\"createState\");\n"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 103268,
+      "end": 103307,
+      "before": "function wrapNativeCallback(callback) {",
+      "after": "function wrapNativeCallback(callback, __ownedName) {"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 103367,
+      "end": 103398,
+      "before": "return await callback(...args);",
+      "after": "const __ownedResult = await callback(...args);\n      globalThis.__ownedRecovery.resolved(__ownedName, __ownedResult);\n      return __ownedResult;"
+    },
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "start": 95850,
+      "end": 95881,
+      "before": "return encodeCborCompat(value);",
+      "after": "const __ownedEncoded = encodeCborCompat(value);\n  globalThis.__ownedRecovery?.note(\"encode-complete\", __ownedEncoded);\n  return __ownedEncoded;"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js",
+      "start": 54933,
+      "end": 54966,
+      "before": "const ret = new Uint8Array(arg0);",
+      "after": "globalThis.__ownedRecovery.wasm(wasm.memory.buffer);\n        globalThis.__ownedRecovery.note(\"constructor-entry\", arg0);\n        let ret;\n        try { ret = new Uint8Array(arg0); } catch (error) {\n            globalThis.__ownedRecovery.note(\"constructor-threw\", arg0);\n            throw error;\n        }"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js",
+      "start": 204,
+      "end": 265,
+      "before": "cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);",
+      "after": "globalThis.__ownedRecovery.wasm(wasm.memory.buffer);\n        cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js",
+      "start": 67499,
+      "end": 67523,
+      "before": "wasm = instance.exports;",
+      "after": "wasm = instance.exports;\n    globalThis.__ownedRecovery.wasm(wasm.memory.buffer);"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js",
+      "start": 0,
+      "end": 0,
+      "before": "",
+      "after": "// Disposable metadata-only diagnostic. No payload bytes or strong buffer history.\n(() => {\n  const ids = new WeakMap(), origins = new WeakMap(), histories = new WeakMap();\n  let nextId = 0, sequence = 0, invocation = 0, currentWasmId = null;\n  const object = value => value !== null && (typeof value === 'object' || typeof value === 'function');\n  const id = value => {\n    if (!object(value)) return null;\n    if (!ids.has(value)) ids.set(value, ++nextId);\n    return ids.get(value);\n  };\n  const guarded = operation => {\n    try { return operation(); } catch (error) { return {error: error?.name ?? 'unknown'}; }\n  };\n  const intrinsic = value => guarded(() => Object.prototype.toString.call(value));\n  function wasm(buffer) {\n    if (!object(buffer)) return;\n    const bufferId = id(buffer);\n    if (!histories.has(buffer)) histories.set(buffer, {firstSeen: sequence + 1});\n    if (currentWasmId !== bufferId) {\n      emit('wasm-buffer-observed', {previousId: currentWasmId, bufferId});\n      currentWasmId = bufferId;\n    }\n  }\n  function snapshot(value) {\n    const result = {resultId: id(value), intrinsic: intrinsic(value), valueType: typeof value};\n    if (!object(value)) return result;\n    const isView = ArrayBuffer.isView(value);\n    const buffer = isView ? guarded(() => value.buffer) : value;\n    if (!object(buffer) || !['[object ArrayBuffer]', '[object SharedArrayBuffer]'].includes(intrinsic(buffer))) return result;\n    Object.assign(result, {\n      bufferId: id(buffer), isView,\n      byteOffset: isView ? guarded(() => value.byteOffset) : 0,\n      byteLength: guarded(() => value.byteLength),\n      bufferByteLength: guarded(() => buffer.byteLength),\n      detached: guarded(() => {\n        const getter = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached')?.get;\n        if (getter) return getter.call(buffer);\n        if (intrinsic(buffer) === '[object SharedArrayBuffer]') return false;\n        ArrayBuffer.prototype.slice.call(buffer, 0, 0);\n        return false;\n      }),\n      viewValid: isView ? guarded(() => { Uint8Array.prototype.subarray.call(value, 0, 0); return true; }) : null,\n      currentWasm: id(buffer) === currentWasmId,\n      historicalWasm: histories.has(buffer),\n      origin: origins.get(value) ?? origins.get(buffer) ?? null,\n    });\n    return result;\n  }\n  function emit(stage, fields) {\n    console.error('OWNED_CALLBACK_METADATA ' + JSON.stringify({sequence: ++sequence, stage, ...fields}));\n  }\n  function visit(stage, value, fields, depth = 0, path = 'result') {\n    if (stage === 'return-created' && object(value)) {\n      const origin = {callback: fields.callback, invocation: fields.invocation, path};\n      origins.set(value, origin);\n      if (ArrayBuffer.isView(value)) origins.set(value.buffer, origin);\n    }\n    emit(stage, {...fields, path, ...snapshot(value)});\n    if (!object(value) || depth >= 3 || ArrayBuffer.isView(value)) return;\n    // Only the native callback contract's known byte-bearing fields; no generic keys/values.\n    for (const key of ['body', 'state', 'response', 'bytes']) {\n      const descriptor = Object.getOwnPropertyDescriptor(value, key);\n      if (descriptor && 'value' in descriptor && object(descriptor.value)) visit(stage, descriptor.value, fields, depth + 1, path + '.' + key);\n    }\n    const entries = Object.getOwnPropertyDescriptor(value, 'connHibernation')?.value;\n    if (Array.isArray(entries)) {\n      for (let index = 0; index < Math.min(entries.length, 64); index++) visit(stage, entries[index], fields, depth + 1, path + '.connHibernation[' + index + ']');\n      if (entries.length > 64) emit('nested-coverage-limit', {...fields, path, count: entries.length});\n    }\n  }\n  const safe = operation => (...args) => guarded(() => operation(...args));\n  globalThis.__ownedRecovery = {\n    wasm: safe(wasm),\n    begin: safe(callback => ({callback, invocation: ++invocation, result: null})),\n    capture(token, value) {\n      guarded(() => {\n        if (token && object(value)) {\n          token.result = new WeakRef(value);\n          origins.set(value, {callback: token.callback, invocation: token.invocation});\n          if (ArrayBuffer.isView(value)) origins.set(value.buffer, {callback: token.callback, invocation: token.invocation});\n        }\n        visit('return-created', value, {callback: token?.callback, invocation: token?.invocation});\n      });\n      return value;\n    },\n    check: safe((token, stage) => visit(stage, token?.result?.deref(), {callback: token?.callback, invocation: token?.invocation})),\n    note: safe((stage, value) => visit(stage, value, {})),\n    resolved: safe((callback, value) => visit('callback-resolved', value, {callback})),\n  };\n})();\n\n"
+    }
+  ]
+}

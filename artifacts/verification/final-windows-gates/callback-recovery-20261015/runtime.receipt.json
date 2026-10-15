@@ -1,0 +1,16 @@
+{
+    "mode":  "runtime",
+    "at":  "2026-10-15T15:42:25.0182893Z",
+    "head":  "ae412fb5587f87aa4914ff429cf0abf8e11dbee1",
+    "command":  [
+                    "bun",
+                    "test",
+                    "./.superpowers/callback-recovery/diagnostic-runtime.test.ts"
+                ],
+    "releaseMarker":  null,
+    "diagnosticOnly":  true,
+    "runnerPid":  28816,
+    "pid":  35432,
+    "ended":  "2026-10-15T15:43:08.5527758Z",
+    "exitCode":  0
+}

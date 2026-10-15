@@ -1,0 +1,90 @@
+// Disposable metadata-only diagnostic. No payload bytes or strong buffer history.
+(() => {
+  const ids = new WeakMap(), origins = new WeakMap(), histories = new WeakMap();
+  let nextId = 0, sequence = 0, invocation = 0, currentWasmId = null;
+  const object = value => value !== null && (typeof value === 'object' || typeof value === 'function');
+  const id = value => {
+    if (!object(value)) return null;
+    if (!ids.has(value)) ids.set(value, ++nextId);
+    return ids.get(value);
+  };
+  const guarded = operation => {
+    try { return operation(); } catch (error) { return {error: error?.name ?? 'unknown'}; }
+  };
+  const intrinsic = value => guarded(() => Object.prototype.toString.call(value));
+  function wasm(buffer) {
+    if (!object(buffer)) return;
+    const bufferId = id(buffer);
+    if (!histories.has(buffer)) histories.set(buffer, {firstSeen: sequence + 1});
+    if (currentWasmId !== bufferId) {
+      emit('wasm-buffer-observed', {previousId: currentWasmId, bufferId});
+      currentWasmId = bufferId;
+    }
+  }
+  function snapshot(value) {
+    const result = {resultId: id(value), intrinsic: intrinsic(value), valueType: typeof value};
+    if (!object(value)) return result;
+    const isView = ArrayBuffer.isView(value);
+    const buffer = isView ? guarded(() => value.buffer) : value;
+    if (!object(buffer) || !['[object ArrayBuffer]', '[object SharedArrayBuffer]'].includes(intrinsic(buffer))) return result;
+    Object.assign(result, {
+      bufferId: id(buffer), isView,
+      byteOffset: isView ? guarded(() => value.byteOffset) : 0,
+      byteLength: guarded(() => value.byteLength),
+      bufferByteLength: guarded(() => buffer.byteLength),
+      detached: guarded(() => {
+        const getter = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached')?.get;
+        if (getter) return getter.call(buffer);
+        if (intrinsic(buffer) === '[object SharedArrayBuffer]') return false;
+        ArrayBuffer.prototype.slice.call(buffer, 0, 0);
+        return false;
+      }),
+      viewValid: isView ? guarded(() => { Uint8Array.prototype.subarray.call(value, 0, 0); return true; }) : null,
+      currentWasm: id(buffer) === currentWasmId,
+      historicalWasm: histories.has(buffer),
+      origin: origins.get(value) ?? origins.get(buffer) ?? null,
+    });
+    return result;
+  }
+  function emit(stage, fields) {
+    console.error('OWNED_CALLBACK_METADATA ' + JSON.stringify({sequence: ++sequence, stage, ...fields}));
+  }
+  function visit(stage, value, fields, depth = 0, path = 'result') {
+    if (stage === 'return-created' && object(value)) {
+      const origin = {callback: fields.callback, invocation: fields.invocation, path};
+      origins.set(value, origin);
+      if (ArrayBuffer.isView(value)) origins.set(value.buffer, origin);
+    }
+    emit(stage, {...fields, path, ...snapshot(value)});
+    if (!object(value) || depth >= 3 || ArrayBuffer.isView(value)) return;
+    // Only the native callback contract's known byte-bearing fields; no generic keys/values.
+    for (const key of ['body', 'state', 'response', 'bytes']) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor && 'value' in descriptor && object(descriptor.value)) visit(stage, descriptor.value, fields, depth + 1, path + '.' + key);
+    }
+    const entries = Object.getOwnPropertyDescriptor(value, 'connHibernation')?.value;
+    if (Array.isArray(entries)) {
+      for (let index = 0; index < Math.min(entries.length, 64); index++) visit(stage, entries[index], fields, depth + 1, path + '.connHibernation[' + index + ']');
+      if (entries.length > 64) emit('nested-coverage-limit', {...fields, path, count: entries.length});
+    }
+  }
+  const safe = operation => (...args) => guarded(() => operation(...args));
+  globalThis.__ownedRecovery = {
+    wasm: safe(wasm),
+    begin: safe(callback => ({callback, invocation: ++invocation, result: null})),
+    capture(token, value) {
+      guarded(() => {
+        if (token && object(value)) {
+          token.result = new WeakRef(value);
+          origins.set(value, {callback: token.callback, invocation: token.invocation});
+          if (ArrayBuffer.isView(value)) origins.set(value.buffer, {callback: token.callback, invocation: token.invocation});
+        }
+        visit('return-created', value, {callback: token?.callback, invocation: token?.invocation});
+      });
+      return value;
+    },
+    check: safe((token, stage) => visit(stage, token?.result?.deref(), {callback: token?.callback, invocation: token?.invocation})),
+    note: safe((stage, value) => visit(stage, value, {})),
+    resolved: safe((callback, value) => visit('callback-resolved', value, {callback})),
+  };
+})();

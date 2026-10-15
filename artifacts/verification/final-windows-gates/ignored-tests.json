@@ -41,7 +41,8 @@
     },
     {
       "path": "gateway::enrichment::tests::improvement_worker_recovers_crash_and_fences_old_generation",
-      "status": "pending_runtime_diagnosis"
+      "status": "owned_fixture_passed",
+      "gate": "native-improvement"
     },
     {
       "path": "gateway::enrichment::tests::local_http_proxy_probe_enrichment",
@@ -50,15 +51,18 @@
     },
     {
       "path": "gateway::enrichment::tests::rivet_worker_replaces_dead_engine_and_stops_owned_children",
-      "status": "pending_runtime_diagnosis"
+      "status": "owned_fixture_passed",
+      "gate": "native-dead"
     },
     {
       "path": "gateway::enrichment::tests::rivet_worker_replaces_hung_owned_engine_without_false_readiness",
-      "status": "pending_runtime_diagnosis"
+      "status": "owned_fixture_passed",
+      "gate": "native-hung"
     },
     {
       "path": "gateway::enrichment::tests::rivet_worker_resumes_without_duplicate_jobs",
-      "status": "pending_runtime_diagnosis"
+      "status": "owned_fixture_passed",
+      "gate": "native-resume"
     },
     {
       "path": "gateway::local_runtime::answer_preparation_tests::probe_child",
@@ -113,11 +117,25 @@
     },
     {
       "path": "search::indexing::freshness_tests::compiled_enrichment_consumer_indexes_scanned_pdf_image_audio_video_and_cancels_stop",
-      "status": "pending_runtime_diagnosis"
+      "status": "owned_fixture_passed",
+      "gate": "native-consumer"
     },
     {
       "path": "windows_ai::supervisor::tests::real_staged_helper_status_probe",
       "status": "excluded_fixed_ordinary_credential_read"
     }
-  ]
+  ],
+  "latestNativeFixtureEvidence": {
+    "source": "ae412fb5587f87aa4914ff429cf0abf8e11dbee1",
+    "compiledSource": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+    "normalStagedWorkerUnchanged": true,
+    "standaloneCompiledRuntimeGate": "FAILED_OPEN",
+    "receipts": [
+      "callback-recovery-20261015/native-resume.receipt.json",
+      "callback-recovery-20261015/native-dead.receipt.json",
+      "callback-recovery-20261015/native-hung.receipt.json",
+      "callback-recovery-20261015/native-improvement.receipt.json",
+      "callback-recovery-20261015/native-consumer.receipt.json"
+    ]
+  }
 }

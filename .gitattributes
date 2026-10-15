@@ -8,3 +8,5 @@ patches/rivetkit@2.3.10.patch -text
 # Preserve the raw performance evidence hashes and original log encodings.
 artifacts/performance/production-readiness-2026-10-15/** -text
 artifacts/native/launcher-appearance-2026-10-15/** -text
+# Preserve exact portable verification bytes across Windows checkouts.
+artifacts/verification/final-windows-gates/** -text

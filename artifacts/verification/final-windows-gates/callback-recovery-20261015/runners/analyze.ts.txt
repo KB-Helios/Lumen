@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from 'node:fs';
+import {join, resolve} from 'node:path';
+import {spawnSync} from 'node:child_process';
+
+const root = resolve('.superpowers/callback-recovery');
+const evidence = join(root, 'evidence');
+const output = join(evidence, 'analysis.json');
+assert.ok(!existsSync(output), 'refusing analysis receipt overwrite');
+const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const stdout = readFileSync(join(evidence, 'runtime.stdout.log'), 'utf8');
+const receipt = JSON.parse(readFileSync(join(evidence, 'runtime.receipt.json'), 'utf8').replace(/^\uFEFF/, ''));
+assert.equal(receipt.exitCode, 0);
+const match = stdout.match(/Owned compiled fixture directory: (.+); engine PID (\d+)/);
+assert.ok(match);
+const fixture = resolve(match[1]);
+assert.ok(fixture.toLowerCase().startsWith(resolve(process.env.TEMP!, 'lumen-task2b-').toLowerCase()));
+const logs = join(evidence, 'fixture');
+mkdirSync(logs);
+const files = [];
+const summaries = [];
+for (const name of readdirSync(fixture).filter(name => /^(engine|worker)-\d+(?:-error)?\.log$/.test(name))) {
+  const source = join(fixture, name);
+  const target = join(logs, name);
+  copyFileSync(source, target);
+  const bytes = readFileSync(target);
+  files.push({path: 'fixture/' + name, bytes: bytes.length, sha256: digest(bytes)});
+  const text = bytes.toString();
+  if (!name.startsWith('worker-')) continue;
+  const records = text.split(/\r?\n/).filter(line => line.startsWith('OWNED_CALLBACK_METADATA ')).map(line => JSON.parse(line.slice('OWNED_CALLBACK_METADATA '.length)));
+  const stages: Record<string, number> = {}, callbacks = new Set<string>(), intrinsicTypes = new Set<string>();
+  const seen = new Map<number, any>(), invalid = [], transitions = [], firstKnownConstructors = [];
+  const valid = (record: any) => record.bufferId != null && record.detached === false && (record.isView ? record.viewValid === true : true);
+  const invalidStorage = (record: any) => record.bufferId != null && (record.detached === true || record.detached?.error || record.viewValid?.error);
+  for (const record of records) {
+    stages[record.stage] = (stages[record.stage] ?? 0) + 1;
+    if (record.callback) callbacks.add(record.callback);
+    if (record.intrinsic) intrinsicTypes.add(record.intrinsic);
+    if (invalidStorage(record)) invalid.push(record);
+    if (record.bufferId != null) {
+      const previous = seen.get(record.resultId);
+      if (previous && valid(previous) && invalidStorage(record)) transitions.push({from: previous, to: record});
+      seen.set(record.resultId, record);
+      if (record.stage === 'constructor-entry' && record.origin && firstKnownConstructors.length < 10) firstKnownConstructors.push(record);
+    }
+  }
+  summaries.push({name, records: records.length, stages, callbacks: [...callbacks].sort(), intrinsicTypes: [...intrinsicTypes].sort(), invalidStorage: invalid, validToInvalid: transitions, wasmObservations: records.filter(record => record.stage === 'wasm-buffer-observed'), wasmOwnedAtConstructor: records.filter(record => record.stage === 'constructor-entry' && record.historicalWasm), attributedConstructors: records.filter(record => record.stage === 'constructor-entry' && record.origin).length, unattributedConstructors: records.filter(record => record.stage === 'constructor-entry' && !record.origin).length, coverageLimits: records.filter(record => record.stage === 'nested-coverage-limit'), firstKnownConstructors});
+}
+const preflight = spawnSync('powershell.exe', ['-NoProfile', '-File', '.superpowers/callback-recovery/preflight.ps1'], {windowsHide: true});
+writeFileSync(join(evidence, 'cleanup.preflight.json'), preflight.stdout);
+writeFileSync(join(evidence, 'cleanup.preflight.stderr.log'), preflight.stderr);
+assert.equal(preflight.status, 0);
+const cleanup = JSON.parse(preflight.stdout.toString().replace(/^\uFEFF/, ''));
+assert.deepEqual(cleanup.owned, []);
+// This analyzer is the sole Bun process and is not a fixture resource.
+assert.deepEqual(cleanup.heavy.filter((entry: any) => entry.ProcessId !== process.pid), []);
+assert.deepEqual(cleanup.listeners, []);
+const originals = JSON.parse(readFileSync(join(root, 'preparation-preflight.json'), 'utf8').replace(/^\uFEFF/, '')).files;
+for (const file of originals) assert.equal(cleanup.files.find((current: any) => current.path === file.path)?.sha256, file.sha256, 'final identity mismatch: ' + file.path);
+const test = readFileSync('workers/enrichment-runtime.test.ts', 'utf8');
+const diagnosticTest = readFileSync(join(root, 'diagnostic-runtime.test.ts'), 'utf8');
+const reversed = diagnosticTest.replace("const worker = resolve('.superpowers/callback-recovery/diagnostic-worker.exe');", "const worker = join(binaries, 'lumen-enrichment-x86_64-pc-windows-msvc.exe');");
+assert.equal(reversed, test, 'fixture changed beyond worker path');
+const sourceFiles = ['metadata.js', 'build.ts', 'run.ps1', 'preflight.ps1', 'analyze.ts'].map(path => {
+  const bytes = readFileSync(join(root, path)); return {path, bytes: bytes.length, sha256: digest(bytes)};
+});
+const result = {at: new Date().toISOString(), diagnosticOnly: true, originalStagedQualification: 'FAILED_OPEN', cause: 'unproved', oneDiagnosticExecution: true, fixture, receipt, diagnosticTestPathOnlyDifference: true, sourceFiles, files, summaries, finalIdentitiesMatchOriginals: true, cleanup: {owned: cleanup.owned, heavy: cleanup.heavy, listeners: cleanup.listeners}};
+writeFileSync(output, JSON.stringify(result, null, 2));
+console.log(JSON.stringify({diagnosticOnly: true, files: files.length, records: summaries.reduce((sum, item) => sum + item.records, 0), invalidStorage: summaries.reduce((sum, item) => sum + item.invalidStorage.length, 0), validToInvalid: summaries.reduce((sum, item) => sum + item.validToInvalid.length, 0), attributedConstructors: summaries.reduce((sum, item) => sum + item.attributedConstructors, 0), unattributedConstructors: summaries.reduce((sum, item) => sum + item.unattributedConstructors, 0), summaryPath: output, cleanup: 'verified except own analyzer process', finalIdentitiesMatchOriginals: true}));
