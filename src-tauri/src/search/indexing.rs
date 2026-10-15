@@ -38,6 +38,10 @@ mod freshness_tests;
 #[path = "document_preview_tests.rs"]
 mod document_preview_tests;
 
+#[cfg(test)]
+#[path = "capacity_tests.rs"]
+pub(super) mod capacity_tests;
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexRootRequest {
@@ -1308,10 +1312,14 @@ impl IndexRuntime {
         if let Some(gate) = self.work.inventory_record_gate.lock().unwrap().clone() {
             gate(&path);
         }
+        #[cfg(test)]
+        let metadata_clock = Instant::now();
         if let Err(error) = self
             .database
             .upsert_metadata(&root_path, &id, &path, &signature)
         {
+            #[cfg(test)]
+            self.work.metrics.database_error("inventory", &error);
             // Only a filesystem policy failure on this now-vanished path is
             // skippable. Database errors and safety/permission refusals propagate.
             if matches!(&error, super::index::IndexError::Policy(failure) if failure.code == "search-failed" && failure.path.as_deref() == Some(path.to_string_lossy().as_ref()))
@@ -1322,6 +1330,8 @@ impl IndexRuntime {
             }
             return Err(search_failure("update inventory", error));
         }
+        #[cfg(test)]
+        self.work.metrics.inventory_record(metadata_clock.elapsed());
         if force_content && record.kind != FileKind::Folder {
             self.work
                 .completed
@@ -1402,6 +1412,10 @@ impl IndexRuntime {
 
     // False leaves the worker's refresh obligation outstanding after deferral/cancellation.
     pub(super) fn reconcile_inventory(&self, force_content: bool) -> Result<bool, SearchFailure> {
+        // Directory-delegated attempts anchor the same unchanged30s maintenance interval.
+        let _deadline = index_worker::ReconcileClock(&self.work.reconcile_finished);
+        #[cfg(test)]
+        let inventory_clock = self.work.metrics.start_scan(force_content);
         let (generation, roots) = {
             let _admission = self
                 .synchronization
@@ -1434,6 +1448,8 @@ impl IndexRuntime {
                 continue;
             }
             #[cfg(test)]
+            let traversal_clock = Instant::now();
+            #[cfg(test)]
             let outcome = traversal::traverse_with_policy_until_limit(
                 &root_path,
                 &Self::root_traversal_policy(root)?,
@@ -1446,6 +1462,10 @@ impl IndexRuntime {
                     limit => limit as usize,
                 },
             )?;
+            #[cfg(test)]
+            self.work
+                .metrics
+                .traversal(&outcome, traversal_clock.elapsed());
             #[cfg(not(test))]
             let outcome = traversal::traverse_with_policy_until(
                 &root_path,
@@ -1529,15 +1549,15 @@ impl IndexRuntime {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .retain(|id, _| current.contains(id));
-        if truncated {
-            self.work.watcher_degraded.store(true, Ordering::SeqCst);
-        }
         self.work
             .inventory_incomplete
             .store(truncated, Ordering::SeqCst);
         self.work.inventory_running.store(false, Ordering::SeqCst);
         self.work.inventory_failed.store(false, Ordering::SeqCst);
-        self.refresh_worker_status().map(|()| true)
+        let result = self.refresh_worker_status().map(|()| true);
+        #[cfg(test)]
+        self.work.metrics.finish_scan(inventory_clock);
+        result
     }
 
     pub(super) fn refresh_paths(&self, paths: Vec<PathBuf>) -> Result<bool, SearchFailure> {
@@ -1663,18 +1683,20 @@ impl IndexRuntime {
             || path == format!("{owned}-journal")
     }
 
-    pub(super) fn extract_pending(&self) -> Result<(), SearchFailure> {
-        let next = self
-            .work
-            .pending
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .iter()
-            .filter(|(_, item)| item.retry_at <= Instant::now())
-            .min_by(|a, b| a.1.path.cmp(&b.1.path))
-            .map(|(id, item)| (id.clone(), item.clone()));
+    pub(super) fn extract_pending(&self) -> Result<bool, SearchFailure> {
+        #[cfg(test)]
+        let selection_clock = Instant::now();
+        let pending_jobs = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let (next, examined) = pending_jobs.next_due();
+        #[cfg(test)]
+        self.work.metrics.candidates(examined);
+        #[cfg(not(test))]
+        let _ = examined;
+        drop(pending_jobs);
+        #[cfg(test)]
+        self.work.metrics.selection(selection_clock.elapsed());
         let Some((id, pending)) = next else {
-            return Ok(());
+            return Ok(false);
         };
         {
             let _admission = self
@@ -1686,14 +1708,14 @@ impl IndexRuntime {
                 || !self.work.content_enabled.load(Ordering::SeqCst)
                 || self.work.stop.load(Ordering::SeqCst)
             {
-                return Ok(());
+                return Ok(false);
             }
             let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
             let Some(root) = roots
                 .iter()
                 .find(|root| Path::new(&root.path) == pending.root)
             else {
-                return Ok(());
+                return Ok(false);
             };
             if traversal::policy_record(
                 &pending.root,
@@ -1707,7 +1729,7 @@ impl IndexRuntime {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .remove(&id);
-                return Ok(());
+                return Ok(false);
             }
         }
         #[cfg(test)]
@@ -1716,7 +1738,11 @@ impl IndexRuntime {
         if let Some(gate) = gate {
             gate(&pending.path);
         }
+        #[cfg(test)]
+        let extraction_clock = Instant::now();
         let extracted = extract_document(&pending.path);
+        #[cfg(test)]
+        self.work.metrics.extraction(extraction_clock.elapsed());
         #[cfg(test)]
         let gate = self.commit_gate.lock().unwrap().clone();
         #[cfg(test)]
@@ -1731,14 +1757,14 @@ impl IndexRuntime {
             || !self.work.content_enabled.load(Ordering::SeqCst)
             || self.work.stop.load(Ordering::SeqCst)
         {
-            return Ok(());
+            return Ok(false);
         }
         let roots = self.work.roots.lock().unwrap_or_else(|e| e.into_inner());
         let Some(root) = roots
             .iter()
             .find(|root| Path::new(&root.path) == pending.root)
         else {
-            return Ok(());
+            return Ok(false);
         };
         let Some(record) = traversal::policy_record(
             &pending.root,
@@ -1746,12 +1772,12 @@ impl IndexRuntime {
             &Self::root_traversal_policy(root)?,
         )?
         else {
-            return Ok(());
+            return Ok(false);
         };
         let signature = format!("{}:{}", record.size_bytes, record.modified_ms.unwrap_or(0));
         if signature != pending.signature {
             self.work.reconcile.store(true, Ordering::SeqCst);
-            return Ok(());
+            return Ok(false);
         }
         let mut jobs = self.work.pending.lock().unwrap_or_else(|e| e.into_inner());
         if !jobs.get(&id).is_some_and(|item| {
@@ -1759,14 +1785,14 @@ impl IndexRuntime {
                 && item.signature == pending.signature
                 && item.admission == pending.admission
         }) {
-            return Ok(());
+            return Ok(false);
         }
         let extracted = match extracted {
             Ok(extracted) => extracted,
             Err(_) => {
-                if let Some(job) = jobs.get_mut(&id) {
-                    job.attempts += 1;
-                    if job.attempts >= 3 {
+                if let Some(job) = jobs.get(&id) {
+                    let attempts = job.attempts + 1;
+                    if attempts >= 3 {
                         self.work
                             .failed
                             .lock()
@@ -1774,13 +1800,16 @@ impl IndexRuntime {
                             .insert(id.clone(), job.signature.clone());
                         jobs.remove(&id);
                     } else {
-                        job.retry_at = Instant::now()
-                            + std::time::Duration::from_secs(5 * (1 << (job.attempts - 1)));
+                        jobs.retry(
+                            &id,
+                            Instant::now()
+                                + std::time::Duration::from_secs(5 * (1 << (attempts - 1))),
+                        );
                     }
                 }
                 drop(jobs);
                 drop(roots);
-                return self.refresh_worker_status();
+                return self.refresh_worker_status().map(|()| true);
             }
         };
         let document = IndexedDocument {
@@ -1790,9 +1819,17 @@ impl IndexRuntime {
             extraction_version: extracted.extraction_version,
             chunks: extracted.chunks,
         };
+        #[cfg(test)]
+        let commit_clock = Instant::now();
         self.database
             .upsert_document(&pending.root, &document)
-            .map_err(|e| search_failure("store content", e))?;
+            .map_err(|e| {
+                #[cfg(test)]
+                self.work.metrics.database_error("content", &e);
+                search_failure("store content", e)
+            })?;
+        #[cfg(test)]
+        self.work.metrics.commit(commit_clock.elapsed());
         if pending.cloud_enrichment
             && let Some(kind) = extracted.pending_enrichment
         {
@@ -1816,7 +1853,7 @@ impl IndexRuntime {
         jobs.remove(&id);
         drop(jobs);
         drop(roots);
-        self.refresh_worker_status()
+        self.refresh_worker_status().map(|()| true)
     }
 
     #[cfg(test)]

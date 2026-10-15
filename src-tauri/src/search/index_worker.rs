@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -32,7 +32,120 @@ pub(super) struct PendingContent {
 }
 
 #[derive(Default)]
+pub(super) struct PendingQueue {
+    jobs: HashMap<String, PendingContent>,
+    ordered: BTreeSet<(PathBuf, String)>,
+}
+
+impl std::ops::Deref for PendingQueue {
+    type Target = HashMap<String, PendingContent>;
+    fn deref(&self) -> &Self::Target {
+        &self.jobs
+    }
+}
+
+impl PendingQueue {
+    #[cfg(test)]
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut PendingContent> {
+        self.jobs.values_mut()
+    }
+
+    pub fn insert(&mut self, id: String, item: PendingContent) {
+        if let Some(previous) = self.jobs.insert(id.clone(), item.clone()) {
+            self.ordered.remove(&(previous.path, id.clone()));
+        }
+        self.ordered.insert((item.path, id));
+    }
+
+    pub fn remove(&mut self, id: &str) -> Option<PendingContent> {
+        let item = self.jobs.remove(id)?;
+        self.ordered.remove(&(item.path.clone(), id.to_owned()));
+        Some(item)
+    }
+
+    pub fn clear(&mut self) {
+        self.jobs.clear();
+        self.ordered.clear();
+    }
+
+    pub fn retain(&mut self, mut keep: impl FnMut(&String, &PendingContent) -> bool) {
+        let ordered = &mut self.ordered;
+        self.jobs.retain(|id, item| {
+            if keep(id, item) {
+                true
+            } else {
+                ordered.remove(&(item.path.clone(), id.clone()));
+                false
+            }
+        });
+    }
+
+    // Retry mutations cannot change the path used by the ordered index.
+    pub fn retry(&mut self, id: &str, retry_at: Instant) {
+        if let Some(item) = self.jobs.get_mut(id) {
+            item.attempts = item.attempts.saturating_add(1);
+            item.retry_at = retry_at;
+        }
+    }
+
+    pub fn next_due(&self) -> (Option<(String, PendingContent)>, usize) {
+        let now = Instant::now();
+        let mut examined = 0;
+        for (_, id) in &self.ordered {
+            examined += 1;
+            let item = &self.jobs[id];
+            if item.retry_at <= now {
+                return (Some((id.clone(), item.clone())), examined);
+            }
+        }
+        (None, examined)
+    }
+}
+
+#[cfg(test)]
+mod pending_queue_tests {
+    use super::*;
+
+    fn item(path: &str) -> PendingContent {
+        PendingContent {
+            root: PathBuf::from("root"),
+            path: PathBuf::from(path),
+            signature: "hash".into(),
+            generation: 7,
+            admission: 9,
+            cloud_enrichment: false,
+            retry_at: Instant::now(),
+            attempts: 0,
+        }
+    }
+
+    #[test]
+    fn ordered_pending_keeps_retry_replacement_and_removal_consistent() {
+        let mut queue = PendingQueue::default();
+        queue.insert("a".into(), item("a.txt"));
+        queue.insert("b".into(), item("b.txt"));
+        queue.retry("a", Instant::now() + Duration::from_secs(5));
+        assert_eq!(queue.next_due().0.unwrap().0, "b");
+        assert_eq!(queue["a"].attempts, 1);
+        queue.insert("a".into(), item("c.txt"));
+        assert_eq!(queue.remove("b").unwrap().path, Path::new("b.txt"));
+        assert_eq!(queue.next_due().0.unwrap().1.path, Path::new("c.txt"));
+        queue.insert("overlap".into(), item("c.txt"));
+        queue.retain(|id, _| id == "overlap");
+        assert_eq!(queue.next_due().0.unwrap().0, "overlap");
+        queue.remove("overlap");
+        assert!(queue.next_due().0.is_none());
+        queue.insert("a".into(), item("a.txt"));
+        queue.clear();
+        assert_eq!(queue.next_due().1, 0);
+    }
+}
+
+#[derive(Default)]
 pub(super) struct WorkState {
+    pub reconcile_finished: Mutex<Option<Instant>>,
+    #[cfg(test)]
+    pub metrics: super::indexing::capacity_tests::Metrics,
     #[cfg(test)]
     pub inventory_cycle_gate: Mutex<Option<InventoryCycleGate>>,
     #[cfg(test)]
@@ -45,7 +158,7 @@ pub(super) struct WorkState {
     pub inventory_record_gate: Mutex<Option<InventoryRecordGate>>,
     pub roots: Mutex<Vec<IndexRootRequest>>,
     pub configured: AtomicBool,
-    pub pending: Mutex<HashMap<String, PendingContent>>,
+    pub pending: Mutex<PendingQueue>,
     pub completed: Mutex<HashMap<String, String>>,
     pub failed: Mutex<HashMap<String, String>>,
     pub next_admission: AtomicU64,
@@ -56,6 +169,14 @@ pub(super) struct WorkState {
     pub watcher_degraded: AtomicBool,
     pub inventory_failed: AtomicBool,
     pub inventory_incomplete: AtomicBool,
+}
+
+pub(super) struct ReconcileClock<'a>(pub &'a Mutex<Option<Instant>>);
+
+impl Drop for ReconcileClock<'_> {
+    fn drop(&mut self) {
+        *self.0.lock().unwrap_or_else(|error| error.into_inner()) = Some(Instant::now());
+    }
 }
 
 pub(super) struct IndexWorker {
@@ -98,13 +219,28 @@ impl IndexWorker {
         });
         let content_thread = std::thread::spawn(move || {
             while !runtime.work.stop.load(Ordering::SeqCst) {
-                if runtime.work.content_enabled.load(Ordering::SeqCst)
-                    && !runtime.work.inventory_running.load(Ordering::SeqCst)
-                    && let Err(error) = runtime.extract_pending()
-                {
-                    runtime.worker_failed(&error.message);
+                // Amortize the measured per-document polling delay, retaining bounded rests.
+                for _ in 0..8 {
+                    if runtime.work.stop.load(Ordering::SeqCst)
+                        || !runtime.work.content_enabled.load(Ordering::SeqCst)
+                        || runtime.work.inventory_running.load(Ordering::SeqCst)
+                    {
+                        break;
+                    }
+                    match runtime.extract_pending() {
+                        Ok(true) => {}
+                        Ok(false) => break,
+                        Err(error) => {
+                            runtime.worker_failed(&error.message);
+                            break;
+                        }
+                    }
                 }
+                #[cfg(test)]
+                let sleep_clock = Instant::now();
                 std::thread::sleep(Duration::from_millis(25));
+                #[cfg(test)]
+                runtime.work.metrics.sleep(sleep_clock.elapsed());
             }
         });
         worker
@@ -169,7 +305,7 @@ fn inventory_loop(
     let mut watched = Vec::<PathBuf>::new();
     let mut dirty = HashSet::new();
     let mut due = Instant::now();
-    let mut last_reconcile = Instant::now();
+    let started = Instant::now();
     let mut retry_at = None;
     let mut forced_retry = false;
     while !runtime.work.stop.load(Ordering::SeqCst) {
@@ -201,6 +337,12 @@ fn inventory_loop(
             }
             continue;
         }
+        let last_reconcile = runtime
+            .work
+            .reconcile_finished
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .unwrap_or(started);
         let periodic_reconcile = last_reconcile.elapsed() >= RECONCILE_INTERVAL;
         #[cfg(test)]
         let periodic_reconcile =
@@ -271,7 +413,6 @@ fn inventory_loop(
             if missed_events {
                 dirty.clear();
             }
-            last_reconcile = Instant::now();
         }
         // Metadata reconciliation does not establish content freshness for delivered events.
         if !dirty.is_empty() && (reconcile || Instant::now() >= due) {
@@ -286,6 +427,9 @@ fn inventory_loop(
                 Ok(false) => {}
                 Err(error) => {
                     dirty.clear();
+                    // Failed dirty writes still owe a freshness reconciliation.
+                    forced_retry = true;
+                    retry_at = Some(Instant::now() + RECONCILE_RETRY);
                     runtime.work.inventory_failed.store(true, Ordering::SeqCst);
                     runtime.worker_failed(&error.message);
                 }

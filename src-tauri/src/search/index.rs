@@ -23,6 +23,10 @@ mod cleanup_tests;
 #[path = "enrichment_tests.rs"]
 mod enrichment_tests;
 
+#[cfg(test)]
+#[path = "recovery_tests.rs"]
+mod recovery_tests;
+
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
     #[error(transparent)]
@@ -324,6 +328,27 @@ fn migrate_content(connection: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+fn file_fts_scope(
+    transaction: &rusqlite::Transaction<'_>,
+    file_id: i64,
+) -> rusqlite::Result<&'static str> {
+    // Use point deletes only when each live chunk has the matching FTS rowid.
+    let aligned = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM chunks WHERE file_id=?1)
+         AND NOT EXISTS(SELECT 1 FROM chunks WHERE file_id=?1 AND NOT EXISTS(
+           SELECT 1 FROM search_fts WHERE rowid=chunks.id
+             AND CAST(search_fts.file_id AS INTEGER)=?1
+             AND CAST(search_fts.chunk_id AS INTEGER)=chunks.id))",
+        [file_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    Ok(if aligned {
+        "rowid IN (SELECT id FROM chunks WHERE file_id=?1)"
+    } else {
+        "file_id=?1"
+    })
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct IndexedChunk {
     pub text: String,
@@ -455,6 +480,10 @@ fn store_inventory(connection: &Connection, file_id: i64, metadata: &str) -> Ind
 }
 
 impl IndexDatabase {
+    #[cfg(test)]
+    pub(super) fn inspect_connection<T>(&self, operation: impl FnOnce(&mut Connection) -> T) -> T {
+        operation(&mut self.connection.lock().unwrap())
+    }
     pub(super) fn policy_inventory(&self) -> IndexResult<Vec<PolicyInventoryItem>> {
         let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
         let mut statement = connection.prepare("SELECT files.stable_id, files.root_path, files.path, file_inventory.metadata FROM files LEFT JOIN file_inventory ON file_inventory.file_id = files.id")?;
@@ -634,7 +663,8 @@ impl IndexDatabase {
                     "the verified vector runtime path is missing".to_owned(),
                 )
             })?;
-            connection.execute_batch(
+            let reset = connection.transaction()?;
+            reset.execute_batch(
                 "DROP TABLE vector_embeddings;
                  CREATE TABLE vector_embeddings (
                    chunk_id INTEGER PRIMARY KEY REFERENCES chunks(id) ON DELETE CASCADE,
@@ -646,6 +676,7 @@ impl IndexDatabase {
                    index_revision INTEGER NOT NULL
                  );",
             )?;
+            reset.commit()?;
             let replacement = Connection::open(database_path)?;
             register_or_load_sqlite_vector(&replacement, extension)?;
             configure(&replacement)?;
@@ -1134,7 +1165,13 @@ impl IndexDatabase {
                  WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)",
                 [file_id],
             )?;
-            transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
+            transaction.execute(
+                &format!(
+                    "DELETE FROM search_fts WHERE {}",
+                    file_fts_scope(&transaction, file_id)?
+                ),
+                [file_id],
+            )?;
             transaction.execute(
                 "DELETE FROM enrichment_artifacts WHERE file_id = ?1",
                 [file_id],
@@ -1247,12 +1284,20 @@ impl IndexDatabase {
         let transaction = connection.transaction()?;
         let existing = transaction
             .query_row(
-                "SELECT id, index_revision FROM files WHERE stable_id = ?1",
+                "SELECT id, index_revision, root_path, path, name FROM files WHERE stable_id = ?1",
                 [stable_id],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                },
             )
             .optional()?;
-        if let Some((file_id, revision)) = existing {
+        if let Some((file_id, revision, old_root, old_path, old_name)) = existing {
             let previous: Option<String> = transaction
                 .query_row(
                     "SELECT metadata FROM file_inventory WHERE file_id = ?1",
@@ -1260,6 +1305,17 @@ impl IndexDatabase {
                     |row| row.get(0),
                 )
                 .optional()?;
+            // Unchanged maintenance must not rewrite every unindexed FTS row.
+            if previous.as_deref() == Some(metadata.as_str())
+                && old_root == root_path
+                && old_path == path
+                && old_name == name
+            {
+                transaction.commit()?;
+                return Ok(UpsertOutcome::Unchanged {
+                    revision: u64::try_from(revision).map_err(|_| IndexError::IntegerOverflow)?,
+                });
+            }
             // Missing inventory is a schema backfill, not evidence of a file change.
             let changed = previous
                 .as_deref()
@@ -1272,7 +1328,13 @@ impl IndexDatabase {
                     [file_id],
                 )?;
                 transaction.execute("DELETE FROM answer_cache WHERE file_id = ?1", [file_id])?;
-                transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
+                transaction.execute(
+                    &format!(
+                        "DELETE FROM search_fts WHERE {}",
+                        file_fts_scope(&transaction, file_id)?
+                    ),
+                    [file_id],
+                )?;
                 transaction.execute("DELETE FROM chunks WHERE file_id = ?1", [file_id])?;
                 transaction.execute("UPDATE files SET content_hash = ?2, extraction_version = 'metadata-v1', index_revision = index_revision + 1 WHERE id = ?1", params![file_id, metadata_hash])?;
                 transaction.execute("INSERT INTO chunks (file_id, ordinal, text, extraction_kind, content_hash, index_revision) VALUES (?1, 0, '', 'metadata', ?2, ?3)", params![file_id, metadata_hash, revision + 1])?;
