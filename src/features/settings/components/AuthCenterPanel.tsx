@@ -117,10 +117,11 @@ function OAuthAccountSection({
     setBusy(true);
     setError('');
     try {
-      if (await api.oauthCancel(session.state) !== true) {
-        throw new Error('Sign-in cancellation was not confirmed. Try again.');
-      }
+      const cancelled = await api.oauthCancel(session.state);
       setSession(null);
+      if (!cancelled) {
+        setLinked(await api.oauthLinked(provider));
+      }
     } catch (caught) {
       setError(toProviderErrorMessage(caught));
     } finally {

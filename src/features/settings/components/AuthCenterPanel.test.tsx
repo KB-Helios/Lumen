@@ -2,11 +2,11 @@ import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {describe, expect, it, vi} from 'vitest';
 
-import {AuthCenterPanel} from './AuthCenterPanel';
+import {AuthCenterPanel, type AuthCenterApi} from './AuthCenterPanel';
 
 function stubApi() {
   return {
-    oauthLinked: vi.fn(async () => false),
+    oauthLinked: vi.fn<AuthCenterApi['oauthLinked']>(async () => false),
     oauthAuthUrl: vi.fn(async () => ({
       url: 'https://example.com/oauth/authorize',
       state: 'state-123',
@@ -66,19 +66,47 @@ describe('auth center', () => {
     expect(api.oauthPoll).toHaveBeenCalledWith('state-123');
   });
 
-  it.each([false, new Error('Cancel request failed')])('retains a failed cancellation for retry (%s)', async (failure) => {
+  it('releases confirmed-absent sessions and permits a fresh sign-in after repeated false acknowledgements', async () => {
     const user = userEvent.setup();
     const api = stubApi();
-    if (failure instanceof Error) api.oauthCancel.mockRejectedValueOnce(failure);
-    else api.oauthCancel.mockResolvedValueOnce(failure);
+    api.oauthCancel.mockResolvedValue(false);
+    api.oauthLinked.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    api.oauthAuthUrl
+      .mockResolvedValueOnce({url: 'https://example.com/oauth/first', state: 'state-123', userCode: 'FIRST'})
+      .mockResolvedValueOnce({url: 'https://example.com/oauth/second', state: 'state-456', userCode: 'SECOND'});
     render(<AuthCenterPanel api={api} />);
 
     await user.click(screen.getByRole('button', {name: 'Sign in with ChatGPT'}));
     await user.click(screen.getByRole('button', {name: 'Cancel sign-in'}));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      failure instanceof Error ? 'Cancel request failed' : 'Sign-in cancellation was not confirmed. Try again.',
+    expect(await screen.findByRole('button', {name: 'Sign in with ChatGPT'})).toBeVisible();
+    expect(await screen.findByText('Signed in')).toBeVisible();
+    expect(api.oauthLinked.mock.calls.filter(([linkedProvider]) => linkedProvider === 'codex')).toHaveLength(2);
+    expect(api.oauthCancel).toHaveBeenNthCalledWith(1, 'state-123');
+
+    await user.click(screen.getByRole('button', {name: 'Sign in with ChatGPT'}));
+    expect(await screen.findByRole('link', {name: 'Open authorization page'})).toHaveAttribute(
+      'href',
+      'https://example.com/oauth/second',
     );
+    await user.click(screen.getByRole('button', {name: 'Cancel sign-in'}));
+
+    expect(await screen.findByRole('button', {name: 'Sign in with ChatGPT'})).toBeVisible();
+    expect(api.oauthCancel).toHaveBeenNthCalledWith(2, 'state-456');
+    expect(api.oauthCancel).toHaveBeenCalledTimes(2);
+    expect(api.oauthAuthUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains unconfirmed cancellation ownership for retry', async () => {
+    const user = userEvent.setup();
+    const api = stubApi();
+    api.oauthCancel.mockRejectedValueOnce(new Error('Cancel request failed'));
+    render(<AuthCenterPanel api={api} />);
+
+    await user.click(screen.getByRole('button', {name: 'Sign in with ChatGPT'}));
+    await user.click(screen.getByRole('button', {name: 'Cancel sign-in'}));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cancel request failed');
     expect(screen.getByRole('link', {name: 'Open authorization page'})).toBeVisible();
     expect(screen.queryByRole('button', {name: 'Sign in with ChatGPT'})).toBeNull();
 
@@ -104,7 +132,8 @@ describe('auth center', () => {
     expect(screen.queryByText('Signed in')).toBeNull();
     expect(screen.getByRole('button', {name: 'Cancel sign-in'})).toBeDisabled();
     await act(async () => { resolveCancel(false); });
-    expect(screen.getByRole('button', {name: 'Cancel sign-in'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Sign in with ChatGPT'})).toBeEnabled();
+    expect(screen.queryByText('Signed in')).toBeNull();
   });
 
   it('reports status as a boolean and never renders secrets', async () => {
