@@ -2,7 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {assertCompiledBinding, assertInventory, assertSignature, assertSigningMutation, checkVersions, inventory, isPortableExecutable, preparePayload, validateArchivePaths} from './release';
+import {assertCompiledBinding, assertIdentityMetadata, assertInventory, assertSignature, assertSigningMutation, checkVersions, inventory, isPortableExecutable, preparePayload, validateArchivePaths} from './release';
 
 describe('release trust boundaries', () => {
   it('requires package, Tauri, Cargo and optional tag to agree', () => {
@@ -10,6 +10,14 @@ describe('release trust boundaries', () => {
     expect(() => checkVersions('0.1.0', '0.1.0', '[package]\nversion = "0.2.0"')).toThrow(/version/i);
     expect(() => checkVersions('0.1.0', '0.2.0', '[package]\nversion = "0.1.0"')).toThrow(/version/i);
     expect(() => checkVersions('0.1.0', '0.1.0', '[package]\nversion = "0.1.0"', 'v0.2.0')).toThrow(/tag/i);
+  });
+
+  it('requires the optional artifact to identify the Lumen package as well as its version and publisher', () => {
+    const current = {packageName:'Bridgehammer.Lumen',packageVersion:'0.1.0.0',packagePublisher:'CN=Bridgehammer'};
+    expect(() => assertIdentityMetadata(current,'0.1.0','CN=Bridgehammer')).not.toThrow();
+    for (const changed of [{packageName:'Bridgehammer.Other'},{packageName:undefined},{packageVersion:'0.2.0.0'},{packagePublisher:'CN=Other'}]) {
+      expect(() => assertIdentityMetadata({...current,...changed},'0.1.0','CN=Bridgehammer')).toThrow(/identity/i);
+    }
   });
 
   it('detects PE bytes including PYD and refuses a DOS stub alone', () => {

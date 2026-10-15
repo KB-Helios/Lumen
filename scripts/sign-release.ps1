@@ -105,6 +105,7 @@ function Get-CmsPolicy($Cms,[int]$Depth=0) {
 }
 
 function Get-SignatureReport([string]$File,[switch]$Verify) {
+    $identity = if ([IO.Path]::GetExtension($File) -eq '.msix') { Get-IdentityMetadata $File } else { $null }
     $cmsBytes = Get-EmbeddedCms $File
     if (-not $cmsBytes) { return @{status='NotSigned';subject='';thumbprint='';sha256=$false;timestamped=$false} }
     $cms = [Security.Cryptography.Pkcs.SignedCms]::new(); $cms.Decode($cmsBytes)
@@ -116,31 +117,18 @@ function Get-SignatureReport([string]$File,[switch]$Verify) {
         if ($LASTEXITCODE -ne 0) { $verification | ForEach-Object { [Console]::Error.WriteLine($_) }; throw 'SignTool rejected signature/trust/timestamp (warnings fail).' }
     }
     $report = @{status=$(if ($Verify) {'Valid'} else {'Unverified'});subject=$signer.Certificate.Subject;thumbprint=$signer.Certificate.Thumbprint;sha256=$policy.sha256;timestamped=$policy.timestamped;signers=$policy.signers}
-    if ([IO.Path]::GetExtension($File) -eq '.msix') {
-        $zip = [IO.Compression.ZipFile]::OpenRead($File)
-        try {
-            $entry = $zip.GetEntry('AppxManifest.xml')
-            if (-not $entry -or $entry.Length -gt 1048576) { throw 'Missing or oversized actual MSIX manifest.' }
-            $reader = [IO.StreamReader]::new($entry.Open())
-            try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
-            $report.packageVersion = [string]$manifest.Package.Identity.Version
-            $report.packagePublisher = [string]$manifest.Package.Identity.Publisher
-            foreach ($item in $zip.Entries) {
-                if ($item.FullName.EndsWith('/')) { continue }
-                $stream = $item.Open()
-                try {
-                    if ($stream.ReadByte() -eq 77 -and $stream.ReadByte() -eq 90) { throw 'Sparse identity must reference signed external executables, not contain hidden PE payloads.' }
-                } finally { $stream.Dispose() }
-            }
-            [xml]$source = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../packaging/windows/AppxManifest.xml') -Raw
-            if ($source.Package.Identity.Version -cne $report.packageVersion -or $source.Package.Identity.Publisher -cne $report.packagePublisher) { throw 'Actual MSIX identity differs from its source manifest.' }
-            foreach ($name in @('lumen.manifest','helper.manifest')) {
-                [xml]$fusion = Get-Content -LiteralPath (Join-Path $PSScriptRoot ('../packaging/windows/'+$name)) -Raw
-                if ($fusion.assembly.msix.publisher -cne $report.packagePublisher -or $fusion.assembly.assemblyIdentity.version -cne $report.packageVersion) { throw 'Fusion identity publisher/version mismatch; rebuild both executables before signing.' }
-            }
-        } finally { $zip.Dispose() }
+    if ($identity) {
+        $report.packageName = $identity.packageName
+        $report.packageVersion = $identity.packageVersion
+        $report.packagePublisher = $identity.packagePublisher
     }
     return $report
+}
+
+function Get-IdentityMetadata([string]$File) {
+    $metadata = & powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'assert-identity-package.ps1') -PackagePath $File
+    if ($LASTEXITCODE -ne 0) { throw 'Actual Lumen identity metadata contract validation failed.' }
+    return $metadata | ConvertFrom-Json
 }
 
 if ($Action -eq 'Preflight') {
@@ -151,6 +139,7 @@ if ($Action -eq 'Preflight') {
 $file = (Resolve-Path -LiteralPath $Path).Path
 if ((Get-Item -LiteralPath $file).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Refusing to sign/verify a reparse point.' }
 if ($Action -eq 'Sign') {
+    if ([IO.Path]::GetExtension($file) -eq '.msix') { $null = Get-IdentityMetadata $file }
     Assert-Owner; $tool = Get-SigningTool
     $arguments = @('sign','/fd','SHA256','/sha1',$env:LUMEN_SIGN_CERT_SHA1,'/s','My','/tr',$env:LUMEN_SIGN_TIMESTAMP_URL,'/td','SHA256')
     if ($env:LUMEN_SIGN_CERT_STORE -eq 'LocalMachine') { $arguments += '/sm' }

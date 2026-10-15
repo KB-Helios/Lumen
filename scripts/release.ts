@@ -5,7 +5,7 @@ import {basename, dirname, extname, isAbsolute, join, relative, resolve} from 'n
 import {AGENTGATEWAY_UPSTREAM_SHA256} from './stage-sidecars';
 
 type Identity = {subject:string; thumbprint:string};
-type Signature = Identity & {status:string; sha256:boolean; timestamped:boolean; signers?:Identity[]; packageVersion?:string; packagePublisher?:string};
+type Signature = Identity & {status:string; sha256:boolean; timestamped:boolean; signers?:Identity[]; packageName?:string; packageVersion?:string; packagePublisher?:string};
 type Inventory = Record<string, {sha256:string; size:number}>;
 type Mapping = Record<string,string>;
 type Seal = {version:1; productVersion:string; original:Inventory; final:Inventory; signatures:Record<string,Signature>};
@@ -60,6 +60,10 @@ export function assertSignature(signature:Signature, approved:Identity[]) {
     || ![signature,...(signature.signers??[])].every(signer => approved.some(identity => identity.subject === signer.subject && identity.thumbprint === signer.thumbprint))) {
     throw new Error(`Unapproved, invalid, non-SHA256 or untimestamped signature: ${signature.subject}`);
   }
+}
+
+export function assertIdentityMetadata(metadata:Pick<Signature,'packageName'|'packageVersion'|'packagePublisher'>, version:string, publisher:string) {
+  if (metadata.packageName !== 'Bridgehammer.Lumen' || metadata.packageVersion !== `${version}.0` || metadata.packagePublisher !== publisher) throw new Error('Actual optional Lumen identity package name/publisher/version mismatch');
 }
 
 async function regularFile(path:string) {
@@ -150,8 +154,8 @@ function run(args:string[], capture = false, env:Record<string,string|undefined>
 }
 
 function signature(action:string,path?:string): Signature {
-  const {subject,thumbprint,status,sha256,timestamped,signers,packageVersion,packagePublisher} = JSON.parse(run(['powershell.exe','-NoProfile','-File',join(root,'scripts/sign-release.ps1'),'-Action',action,...(path?['-Path',path]:[])],true));
-  return {subject,thumbprint,status,sha256,timestamped,signers:signers?.map(({subject,thumbprint}:Identity) => ({subject,thumbprint})),packageVersion,packagePublisher};
+  const {subject,thumbprint,status,sha256,timestamped,signers,packageName,packageVersion,packagePublisher} = JSON.parse(run(['powershell.exe','-NoProfile','-File',join(root,'scripts/sign-release.ps1'),'-Action',action,...(path?['-Path',path]:[])],true));
+  return {subject,thumbprint,status,sha256,timestamped,signers:signers?.map(({subject,thumbprint}:Identity) => ({subject,thumbprint})),packageName,packageVersion,packagePublisher};
 }
 
 async function vendors(name:string): Promise<Identity[]> {
@@ -290,7 +294,7 @@ async function verifyRelease() {
   if (hasIdentity) {
     const report = signature('Verify',optionalIdentity);
     assertSignature(report,[owner()]);
-    if (report.packageVersion !== `${seal.productVersion}.0` || report.packagePublisher !== owner().subject) throw new Error('Actual optional identity package publisher/version mismatch');
+    assertIdentityMetadata(report,seal.productVersion,owner().subject);
     identity = {sha256:hash(await regularFile(optionalIdentity)),signature:report};
   }
   const report = {version:1,productVersion:seal.productVersion,filename,sha256:hash(await regularFile(installer)),binding,

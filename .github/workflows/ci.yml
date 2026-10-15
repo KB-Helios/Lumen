@@ -90,6 +90,9 @@ jobs:
       - name: Verify real vendor signatures and reject modified PE bytes
         run: powershell.exe -NoProfile -File scripts/test-release-signatures.ps1
 
+      - name: Verify actual sparse identity metadata and signing admission
+        run: powershell.exe -NoProfile -File scripts/test-identity-package.ps1
+
       - name: Verify pinned Gateway matches compiled native admission
         working-directory: src-tauri
         run: cargo test --all-features -j 1 pinned_gateway_digest_matches_compiled_admission -- --ignored --test-threads=1
