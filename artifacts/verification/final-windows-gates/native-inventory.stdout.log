@@ -1,0 +1,28 @@
+computer_use::coordinator::tests::native_stop_twenty_blocked_worker_samples: test
+computer_use::executor::tests::rust_executor_wire_and_warm_pool_verify_real_edge_state: test
+computer_use::provider::tests::live_provider_availability: test
+computer_use::windows::tests::a_lost_window_instance_marker_invalidates_selection_without_process_changes: test
+computer_use::windows::tests::pruning_stale_metadata_preserves_the_current_window_marker: test
+computer_use::windows::tests::unmarked_windows_are_never_admitted: test
+gateway::answer::transport_tests::native_bridge: test
+gateway::config::tests::pinned_binary_accepts_generated_config: test
+gateway::enrichment::tests::improvement_worker_recovers_crash_and_fences_old_generation: test
+gateway::enrichment::tests::local_http_proxy_probe_enrichment: test
+gateway::enrichment::tests::rivet_worker_replaces_dead_engine_and_stops_owned_children: test
+gateway::enrichment::tests::rivet_worker_replaces_hung_owned_engine_without_false_readiness: test
+gateway::enrichment::tests::rivet_worker_resumes_without_duplicate_jobs: test
+gateway::local_runtime::answer_preparation_tests::probe_child: test
+gateway::local_runtime::answer_preparation_tests::server_child: test
+gateway::supervisor::tests::pinned_gateway_digest_matches_compiled_admission: test
+gateway::supervisor::tests::pinned_gateway_starts_restarts_and_stops_both_lanes: test
+improvement::docker::tests::actual_docker_prime_acceptance_generation_cancel_and_ownership: test
+improvement::docker::tests::actual_docker_sandbox_empirical_confinement: test
+provider_switcher::client::tests::local_http_proxy_probe_management: test
+provider_switcher::profiles::tests::windows_credentials_owned_slot_round_trip: test
+provider_switcher::supervisor::tests::local_http_proxy_probe_health: test
+search::embedding::tests::local_http_proxy_probe_embedding: test
+search::indexing::capacity_tests::native_filesystem_capacity: test
+search::indexing::freshness_tests::compiled_enrichment_consumer_indexes_scanned_pdf_image_audio_video_and_cancels_stop: test
+windows_ai::supervisor::tests::real_staged_helper_status_probe: test
+
+26 tests, 0 benchmarks

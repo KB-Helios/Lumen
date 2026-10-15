@@ -1,0 +1,274 @@
+$ tauri build
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `bun scripts/release.ts before-build`
+$ bun scripts/stage-sidecars.ts && bun run stage:windows-ai && bun run stage:clipproxy
+$ bun scripts/stage-windows-ai.ts
+
+workers\windows-ai\stable-package.test.ts:
+(pass) both architecture locks and identity require only the stable runtime [3.90ms]
+(pass) fresh published and staged artifacts have no experimental package or speech/Aion DLL [10.89ms]
+
+ 2 pass
+ 0 fail
+ 14 expect() calls
+Ran 2 tests across 1 file. [54.00ms]
+
+workers\windows-ai\protocol.test.ts:
+(pass) malformed JSON and unknown operations return bounded errors and recover [1519.41ms]
+(pass) passive status reports the actual architecture without downloads [1085.44ms]
+(pass) operation consent rejects preparation and private content before SDK access [182.81ms]
+(pass) request byte bounds reject oversize UTF-8 and image payloads [213.71ms]
+(pass) cancel unknown request is an idempotent bounded result [183.30ms]
+(pass) trusted catalogue rejects caller-created content before indexing [192.62ms]
+(pass) queued cancellation returns one terminal cancellation without model work [1975.30ms]
+(pass) answer consent is independent of preview text-tool consent [184.32ms]
+(pass) stable search requires its own grant even when language access is configured [1085.38ms]
+
+ 9 pass
+ 0 fail
+ 36 expect() calls
+Ran 9 tests across 1 file. [6.65s]
+
+workers\windows-ai\stable-package.test.ts:
+(pass) both architecture locks and identity require only the stable runtime [3.26ms]
+(pass) fresh published and staged artifacts have no experimental package or speech/Aion DLL [13.50ms]
+
+ 2 pass
+ 0 fail
+ 14 expect() calls
+Ran 2 tests across 1 file. [58.00ms]
+$ bun scripts/stage-clipproxy.ts
+$ tsc --noEmit && vite build
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/lottie-web/build/player/lottie_svg.js:11559:33 [38;5;246m][0m
+       [38;5;246m│[0m
+ [38;5;246m11559 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m_[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m'[0m[38;5;249m[[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m_[0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m_[0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m{[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249m;[0m[38;5;249ms[0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249md[0m[38;5;249m_[0m[38;5;249mb[0m[38;5;249mm[0m[38;5;249m_[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m=[0m[38;5;249m$[0m[38;5;249mb[0m[38;5;249mm[0m[38;5;249m_[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m}[0m[38;5;249m][0m[38;5;249m'[0m[38;5;249m)[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m/[0m[38;5;249m/[0m[38;5;249m [0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m-[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249ma[0m[38;5;249mb[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m-[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249m-[0m[38;5;249me[0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m
+ [38;5;240m      │[0m                                 ──┬─  
+ [38;5;240m      │[0m                                   ╰─── Use of direct `eval` here.
+ [38;5;240m      │[0m 
+ [38;5;240m      │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m───────╯[0m
+
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling cfg-if v1.0.4
+   Compiling synstructure v0.13.2
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling getrandom v0.4.3
+   Compiling serde_core v1.0.229
+   Compiling serde_derive v1.0.229
+   Compiling displaydoc v0.2.7
+   Compiling icu_normalizer_data v2.2.0
+   Compiling icu_properties_data v2.2.0
+   Compiling siphasher v1.0.3
+   Compiling phf_shared v0.13.1
+   Compiling fastrand v2.5.0
+   Compiling phf_generator v0.13.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling thiserror v2.0.19
+   Compiling zmij v1.0.23
+   Compiling zerofrom v0.1.8
+   Compiling thiserror-impl v2.0.19
+   Compiling smallvec v1.15.2
+   Compiling windows-link v0.2.1
+   Compiling yoke v0.8.3
+   Compiling dunce v1.0.5
+   Compiling parking_lot_core v0.9.12
+   Compiling zerovec v0.11.6
+   Compiling jobserver v0.1.35
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v2.0.1
+   Compiling serde v1.0.229
+   Compiling cc v1.4.0
+   Compiling phf_macros v0.13.1
+   Compiling typeid v1.0.3
+   Compiling memchr v2.8.3
+   Compiling time-core v0.1.9
+   Compiling thiserror v1.0.69
+   Compiling num-conv v0.2.2
+   Compiling tinystr v0.8.3
+   Compiling phf_codegen v0.13.1
+   Compiling erased-serde v0.4.10
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling litemap v0.8.2
+   Compiling itoa v1.0.18
+   Compiling autocfg v1.5.1
+   Compiling writeable v0.6.3
+   Compiling icu_locale_core v2.2.0
+   Compiling darling_core v0.23.0
+   Compiling potential_utf v0.1.5
+   Compiling zerotrie v0.2.4
+   Compiling thiserror-impl v1.0.69
+   Compiling utf8_iter v1.0.4
+   Compiling icu_collections v2.2.0
+   Compiling icu_provider v2.2.0
+   Compiling darling_macro v0.23.0
+   Compiling anyhow v1.0.104
+   Compiling scopeguard v1.2.0
+   Compiling new_debug_unreachable v1.0.6
+   Compiling lock_api v0.4.14
+   Compiling darling v0.23.0
+   Compiling phf v0.13.1
+   Compiling string_cache_codegen v0.6.1
+   Compiling precomputed-hash v0.1.1
+   Compiling winnow v1.0.4
+   Compiling serde_json v1.0.151
+   Compiling toml_parser v1.1.3+spec-1.1.0
+   Compiling web_atoms v0.2.5
+   Compiling serde_with_macros v3.21.0
+   Compiling parking_lot v0.12.5
+   Compiling icu_properties v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling windows-sys v0.61.2
+   Compiling serde_spanned v1.1.1
+   Compiling ctor-proc-macro v0.0.7
+   Compiling toml_writer v1.1.2+spec-1.1.0
+   Compiling version_check v0.9.5
+   Compiling idna_adapter v1.2.2
+   Compiling string_cache v0.9.0
+   Compiling semver v1.0.28
+   Compiling percent-encoding v2.3.2
+   Compiling dtoa v1.0.11
+   Compiling log v0.4.33
+   Compiling dtoa-short v0.3.5
+   Compiling form_urlencoded v1.2.2
+   Compiling idna v1.1.0
+   Compiling tendril v0.5.1
+   Compiling indexmap v1.9.3
+   Compiling selectors v0.36.1
+   Compiling aho-corasick v1.1.4
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling uuid v1.24.0
+   Compiling cssparser-macros v0.6.1
+   Compiling derive_more-impl v2.1.1
+   Compiling unic-common v0.9.0
+   Compiling camino v1.2.5
+   Compiling unic-char-range v0.9.0
+   Compiling alloc-no-stdlib v2.0.4
+   Compiling regex-syntax v0.8.11
+   Compiling byteorder v1.5.0
+   Compiling regex-automata v0.4.16
+   Compiling alloc-stdlib v0.2.4
+   Compiling unic-char-property v0.9.0
+   Compiling unic-ucd-version v0.9.0
+   Compiling derive_more v2.1.1
+   Compiling cssparser v0.36.0
+   Compiling toml v1.1.4+spec-1.1.0
+   Compiling markup5ever v0.38.0
+   Compiling url v2.5.8
+   Compiling winapi-util v0.1.11
+   Compiling servo_arc v0.4.3
+   Compiling serde_derive_internals v0.29.1
+   Compiling bit-vec v0.8.0
+   Compiling schemars v0.8.22
+   Compiling rustc-hash v2.1.3
+   Compiling powerfmt v0.2.0
+   Compiling hashbrown v0.17.1
+   Compiling bitflags v2.13.1
+   Compiling deranged v0.5.8
+   Compiling libc v0.2.189
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.12.3
+   Compiling fnv v1.0.7
+   Compiling cfb v0.7.3
+   Compiling indexmap v2.14.0
+   Compiling time v0.3.54
+   Compiling bit-set v0.8.0
+   Compiling schemars_derive v0.8.22
+   Compiling same-file v1.0.6
+   Compiling html5ever v0.38.0
+   Compiling unic-ucd-ident v0.9.0
+   Compiling brotli-decompressor v5.0.3
+   Compiling regex v1.13.1
+   Compiling jsonptr v0.6.3
+   Compiling cargo-platform v0.1.9
+   Compiling quick-xml v0.41.0
+   Compiling foldhash v0.2.0
+   Compiling dyn-clone v1.0.20
+   Compiling bytes v1.12.1
+   Compiling windows_x86_64_msvc v0.52.6
+   Compiling base64 v0.22.1
+   Compiling plist v1.10.0
+   Compiling http v1.5.0
+   Compiling dom_query v0.27.0
+   Compiling cargo_metadata v0.19.2
+   Compiling json-patch v3.0.1
+   Compiling urlpattern v0.3.0
+   Compiling brotli v8.0.4
+   Compiling walkdir v2.5.0
+   Compiling serde-untagged v0.1.9
+   Compiling infer v0.19.0
+   Compiling ctor v0.8.0
+   Compiling serde_with v3.21.0
+   Compiling glob v0.3.4
+   Compiling tauri-utils v2.9.3
+   Compiling generic-array v0.14.7
+   Compiling vswhom-sys v0.1.3
+   Compiling windows-targets v0.52.6
+   Compiling windows-sys v0.59.0
+   Compiling windows-implement v0.60.2
+   Compiling windows-interface v0.59.3
+   Compiling vswhom v0.1.0
+   Compiling winreg v0.55.0
+   Compiling tauri-plugin v2.6.3
+   Compiling rustc_version v0.4.1
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling option-ext v0.2.0
+   Compiling winnow v0.7.15
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling dirs-sys v0.5.0
+   Compiling embed-resource v3.0.11
+   Compiling pin-project-lite v0.2.17
+   Compiling crc32fast v1.5.0
+   Compiling windows-link v0.1.3
+   Compiling heck v0.5.0
+   Compiling once_cell v1.21.4
+   Compiling tauri-winres v0.3.6
+   Compiling dirs v6.0.0
+   Compiling cargo_toml v0.22.3
+   Compiling tauri-build v2.6.3
+   Compiling windows-strings v0.4.2
+   Compiling windows-result v0.3.4
+   Compiling rand_core v0.10.1
+   Compiling windows-core v0.61.2
+   Compiling tauri v2.11.5
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling tokio-macros v2.7.2
+   Compiling typenum v1.20.1
+   Compiling tokio v1.53.1
+   Compiling windows-threading v0.1.0
+   Compiling windows-future v0.2.1
+   Compiling windows-numerics v0.2.0
+   Compiling windows-collections v0.2.0
+   Compiling time-macros v0.2.32
+   Compiling simd-adler32 v0.3.10
+   Compiling raw-window-handle v0.6.2
+   Compiling crossbeam-utils v0.8.22
+   Compiling windows v0.61.3
+   Compiling tracing-core v0.1.36
+   Compiling webview2-com-sys v0.38.2
+   Compiling tracing-attributes v0.1.31
+   Compiling adler2 v2.0.1
+   Compiling miniz_oxide v0.8.9
+   Compiling tracing v0.1.44
+   Compiling dpi v0.1.2
+   Compiling cookie v0.18.1
+   Compiling unicode-segmentation v1.13.3
+   Compiling crossbeam-channel v0.5.16
+   Compiling flate2 v1.1.9
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling fdeflate v0.3.7
+   Compiling windows-version v0.1.7
+   Compiling webview2-com-macros v0.8.1
+   Compiling bitflags v1.3.2
+   Compiling png v0.17.16
+   Compiling webview2-com v0.38.2
+   Compiling digest v0.10.7

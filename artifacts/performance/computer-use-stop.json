@@ -5,44 +5,36 @@
   "repetitions": 20,
   "samples": [
     {
-      "gateMicros": 2,
-      "teardownMicros": 3057
+      "gateMicros": 1,
+      "teardownMicros": 4349
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3214
+      "teardownMicros": 3171
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 2721
+      "teardownMicros": 4213
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3182
+      "teardownMicros": 4294
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3148
+      "teardownMicros": 3671
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3241
+      "teardownMicros": 2814
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3213
+      "teardownMicros": 4201
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 4221
-    },
-    {
-      "gateMicros": 0,
-      "teardownMicros": 2663
-    },
-    {
-      "gateMicros": 0,
-      "teardownMicros": 3168
+      "teardownMicros": 4286
     },
     {
       "gateMicros": 0,
@@ -50,40 +42,48 @@
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 2714
+      "teardownMicros": 3214
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3157
+      "teardownMicros": 3216
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3154
+      "teardownMicros": 4224
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3150
+      "teardownMicros": 4214
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3178
+      "teardownMicros": 3218
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 2676
+      "teardownMicros": 4302
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3141
+      "teardownMicros": 2731
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3145
+      "teardownMicros": 3164
     },
     {
       "gateMicros": 0,
-      "teardownMicros": 3142
+      "teardownMicros": 4251
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 2737
+    },
+    {
+      "gateMicros": 0,
+      "teardownMicros": 3207
     }
   ],
-  "teardownP95Micros": 3241
+  "teardownP95Micros": 4302
 }

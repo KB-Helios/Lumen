@@ -1,0 +1,21 @@
+{
+  "label": "identity-metadata-negative",
+  "command": "powershell.exe",
+  "args": [
+    "-NoProfile",
+    "-File",
+    "scripts/test-identity-package.ps1",
+    "-EvidenceDirectory",
+    ".superpowers/sdd/2026-10-12-production-readiness/task14c-evidence"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T14:15:45.043Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "2790f30123d0de2a873d80db53e94351fcc5687df006de652c9efc9e40f6b88f",
+  "releaseMarker": null,
+  "runnerPid": 18256,
+  "pid": 39648,
+  "ended": "2026-10-15T14:16:36.134Z",
+  "code": 0,
+  "signal": null
+}

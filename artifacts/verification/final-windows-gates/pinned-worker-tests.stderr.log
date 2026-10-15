@@ -1,0 +1,38 @@
+
+workers\enrichment-queue.test.ts:
+(pass) enrichment leases recover only on expiry and fence duplicates and old acknowledgments [3.19ms]
+(pass) retries have bounded backoff and exhaustion survives consumer crashes [0.36ms]
+(pass) queue admits only bounded hashes and fixed vision/audio routes, without payload or credentials [1.67ms]
+(pass) activity pause releases a lease without consuming its retry budget [0.29ms]
+(pass) third crashed lease becomes a bounded failure batch for native status reconciliation [0.40ms]
+
+workers\improvement-queue.test.ts:
+(pass) independent improvement queue validates allowlisted metadata and is idempotent [0.88ms]
+(pass) leases are atomic, fenced and only expired work is resumed [0.30ms]
+
+workers\lease-deadline.test.ts:
+(pass) lease starts a valid lease with the refreshed clock after cleanup [68.55ms]
+(pass) lease cannot acquire or consume a generation after delayed cleanup crosses its deadline [164.03ms]
+(pass) lease cannot acquire or consume a generation after delayed acquisition crosses its deadline [167.41ms]
+(pass) leaseImprovement starts a valid lease with the refreshed clock after cleanup [65.39ms]
+(pass) leaseImprovement cannot acquire or consume a generation after delayed cleanup crosses its deadline [167.97ms]
+(pass) leaseImprovement cannot acquire or consume a generation after delayed acquisition crosses its deadline [166.25ms]
+
+workers\rivet-wasm.test.ts:
+(pass) pinned mod.js serves WASM metadata without resolving a spawn path [61.72ms]
+(pass) pinned mod.cjs serves WASM metadata without resolving a spawn path [93.83ms]
+
+scripts\stage-rivet-engine.test.ts:
+(pass) stages only the checked-in pinned engine and refuses a corrupted compressed input [830.02ms]
+
+scripts\stage-windows-ai.test.ts:
+(pass) verified replacement removes stale DLLs and uses the fresh candidate [10.80ms]
+(pass) staging rejects outside paths and reparse directories before replacing anything [13.04ms]
+(pass) an absent destination outside the owned root is rejected before moving the candidate [3.32ms]
+(pass) retained build siblings do not consume the bound for a new stage [5050.18ms]
+(pass) ancestor and selected-tree reparse escapes are rejected before replacement [13.40ms]
+
+ 21 pass
+ 0 fail
+ 81 expect() calls
+Ran 21 tests across 6 files. [7.29s]

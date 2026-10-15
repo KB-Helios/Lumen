@@ -1,0 +1,68 @@
+**********************************************************************
+** Visual Studio 2026 Developer PowerShell v18.10.4
+** Copyright (c) 2026 Microsoft Corporation
+**********************************************************************
+{
+    "vs":  "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools",
+    "target":  "[native-target]",
+    "incremental":  "0",
+    "devDebug":  "0",
+    "testDebug":  "0",
+    "jobs":  "1",
+    "releaseMarker":  null,
+    "temp":  "[user-home]\\AppData\\Local\\Temp",
+    "tmp":  "[user-home]\\AppData\\Local\\Temp"
+}
+AgentGateway v1.4.1 already staged and verified.
+Staged the compiled Rivet enrichment worker.
+Staged the provenance-verified static Rivet 2.3.10 engine.
+Fixed Computer Use executor is already staged.
+Staged sqlite-vector 1.0.0 (58ac4a99ff6904fd709f01b366cf0477c405b5bda45b96cf00e13d500aa60c6a).
+Verified 6 packaged runtime files.
+  Determining projects to restore...
+  Restored [workspace]\workers\windows-ai\Lumen.WindowsAi.csproj (in 276 ms).
+  Lumen.WindowsAi -> [workspace]\workers\windows-ai\.build\stable-win-x64-dEATYn\artifacts\bin\Lumen.WindowsAi\release_win-x64\lumen-windows-ai.dll
+  Lumen.WindowsAi -> [workspace]\workers\windows-ai\.build\stable-win-x64-dEATYn\publish\
+bun test v1.3.14 (0d9b296a)
+PASS stable app content search cannot run without its feature-specific activation contract
+PASS missing runtime errors name the stable runtime
+PASS request ids reject spaces and protocol delimiters
+PASS request ids reject empty and overlong values
+PASS request ids permit the shared bounded ASCII alphabet
+PASS text limits count UTF-8 bytes
+PASS text permits the exact UTF-8 boundary
+PASS request parser rejects duplicate protocol fields
+PASS request parser rejects arbitrary process operations
+PASS request parser rejects non-object payloads
+PASS native cancellation cancels an actual async wait
+11/11 tests passed.
+bun test v1.3.14 (0d9b296a)
+bun test v1.3.14 (0d9b296a)
+Staged Windows AI helper (win-x64) from [workspace]\workers\windows-ai\.build\stable-win-x64-dEATYn\publish; no model, execution provider, identity package, or certificate was installed.
+CLIProxyAPI v8.0.21 already staged and verified.
+vite v8.2.0 building client environment for production...
+[2Ktransforming...✓ 2681 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                   1.50 kB │ gzip:  0.57 kB
+dist/assets/index-C4XoHZ55.css                   63.02 kB │ gzip: 11.46 kB
+dist/assets/root-selection-service-eof-Uh4-.js    0.35 kB │ gzip:  0.26 kB
+dist/assets/rolldown-runtime-B0Z9INg1.js          0.90 kB │ gzip:  0.51 kB
+dist/assets/diagnostics.metrics-BSF17cgf.js       0.96 kB │ gzip:  0.50 kB
+dist/assets/DiagnosticsOverlay-CvMl3Uq6.js        2.50 kB │ gzip:  1.08 kB
+dist/assets/tauri-CVWoFdDw.js                     5.38 kB │ gzip:  1.78 kB
+dist/assets/diagnostics.store-DByAzIFj.js         6.01 kB │ gzip:  2.63 kB
+dist/assets/OnboardingFlow-CJYZ0jNO.js            7.92 kB │ gzip:  3.05 kB
+dist/assets/MotionProvider-BOgUmeP9.js           12.24 kB │ gzip:  4.47 kB
+dist/assets/PreviewPane-BrUqhf0J.js              17.43 kB │ gzip:  5.42 kB
+dist/assets/search.types-VuXA_4HS.js             40.53 kB │ gzip: 12.69 kB
+dist/assets/LumenUiIcon-BJIxFuhY.js              80.94 kB │ gzip: 27.16 kB
+dist/assets/data-state-DtgTkagA.js               98.05 kB │ gzip: 26.85 kB
+dist/assets/motion-BEKgtDhx.js                  123.21 kB │ gzip: 39.86 kB
+dist/assets/SettingsShell-CYNoY6jQ.js           149.79 kB │ gzip: 40.06 kB
+dist/assets/react-core-DVoh6Tdv.js              178.62 kB │ gzip: 56.46 kB
+dist/assets/index-CSE4mnbx.js                   212.90 kB │ gzip: 72.52 kB
+dist/assets/lottie_svg-DvETgvxg.js              243.36 kB │ gzip: 63.65 kB
+dist/assets/react-aria-CNPPvd_H.js              251.52 kB │ gzip: 77.02 kB
+
+✓ built in 1.19s

@@ -1,0 +1,18 @@
+{
+  "label": "edge-full",
+  "command": "bun",
+  "args": [
+    "run",
+    "test:e2e"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T13:00:34.075Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "releaseMarker": null,
+  "runnerPid": 25304,
+  "pid": 30912,
+  "ended": "2026-10-15T13:31:17.770Z",
+  "code": 1,
+  "signal": null
+}

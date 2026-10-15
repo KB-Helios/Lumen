@@ -1,0 +1,29 @@
+{
+  "label": "tauri-build-unsigned",
+  "command": "bun run tauri build",
+  "runner": "PowerShell x64 Visual Studio Developer Shell",
+  "startedAt": "2026-10-15T14:17:45.854Z",
+  "endedAt": "2026-10-15T14:41:01.671Z",
+  "exitCode": 0,
+  "sourceRevision": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "workingTreePatchSha256": "2790f30123d0de2a873d80db53e94351fcc5687df006de652c9efc9e40f6b88f",
+  "releaseMarkerPresent": false,
+  "buildEnvironment": {
+    "targetDirectory": "[native-target]",
+    "cargoIncremental": "0",
+    "cargoBuildJobs": "1"
+  },
+  "qualification": "Unsigned build artifacts only; not executed, signed, installed, or accepted as runtime evidence.",
+  "artifacts": [
+    {
+      "path": "release/lumen.exe",
+      "bytes": 27414016,
+      "sha256": "ed2535636c0374347784460928be93651a9f327f5c4bd1d4d4f355c86d0fa38e"
+    },
+    {
+      "path": "release/bundle/nsis/Lumen_0.1.0_x64-setup.exe",
+      "bytes": 194826625,
+      "sha256": "53587e50fecac388ea17e1ec2d331a75f55301f204b925bd888d31bf7295bb3a"
+    }
+  ]
+}

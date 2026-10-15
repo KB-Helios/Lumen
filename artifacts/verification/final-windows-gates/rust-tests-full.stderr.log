@@ -1,0 +1,7 @@
+   Compiling lumen v0.1.0 ([workspace]\src-tauri)
+    Finished `test` profile [unoptimized] target(s) in 53.58s
+     Running unittests src\lib.rs ([native-target]\debug\deps\lumen_lib-4843514622e33193.exe)
+     Running unittests src\main.rs ([native-target]\debug\deps\lumen-2173b01b9fb9f510.exe)
+     Running tests\cliproxy_client.rs ([native-target]\debug\deps\cliproxy_client-71b76ba38a529b59.exe)
+     Running tests\file_switch.rs ([native-target]\debug\deps\file_switch-60a7714b8ac54cdd.exe)
+   Doc-tests lumen_lib

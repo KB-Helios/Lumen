@@ -1,0 +1,86 @@
+{
+  "at": "2026-10-15T14:02:38.174Z",
+  "fixture": "[user-home]/AppData/Local/Temp/lumen-task2b-8uPGWW",
+  "files": [
+    {
+      "path": "workers/enrichment-worker.ts",
+      "bytes": 9801,
+      "sha256": "dad4be068891fbb95791be56f3f20a1bedd7b22bb13d10560ebb3949bc8273b9"
+    },
+    {
+      "path": "workers/enrichment-runtime.test.ts",
+      "bytes": 14407,
+      "sha256": "aac01683857c37d129e7d9420e0133b7b68e98ded201863962b7103615c684a6"
+    },
+    {
+      "path": "patches/rivetkit@2.3.10.patch",
+      "bytes": 3554,
+      "sha256": "b5698c0d3eaa3089eaeec6793259f8694a2ade23c8bf0d2882b686c08176e797"
+    },
+    {
+      "path": "bun.lock",
+      "bytes": 218881,
+      "sha256": "ff023558cb4372bd5a4b0a564e37ad61384dcf2eee37697edede7fe6894ec650"
+    },
+    {
+      "path": "src-tauri/binaries/lumen-enrichment-x86_64-pc-windows-msvc.exe",
+      "bytes": 103296512,
+      "sha256": "4a02bdfe85051badd0d98e52067c4dad0b16c20bfe237cf0d21b6a34727d7dc0"
+    },
+    {
+      "path": "src-tauri/binaries/lumen-rivet-engine-x86_64-pc-windows-msvc.exe",
+      "bytes": 86179438,
+      "sha256": "6ec17d878a0800962e5c88ca05e6e58665b2ba693fa86dac3077ee5d9d89d089"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js",
+      "bytes": 69045,
+      "sha256": "c82a029ca57f10b0e7e136efcb4e895fa28df89d2d4ac1b59aade3e7e780b24d"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm_bg.wasm",
+      "bytes": 4113323,
+      "sha256": "120f20bbec82ba1cd18834c5924aa4605998580af65ee55fe13d804234b6f8f9"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\engine-0-error.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\engine-0.log",
+      "bytes": 13903,
+      "sha256": "5b35bc5b88483762d01a7c41b64cded00a6dbd46238116ff2e040940e9643410"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\engine-1-error.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\engine-1.log",
+      "bytes": 43005,
+      "sha256": "3d6b27c6a3764571939a509c86d787b92fd9d26964fb37d5a8441c5315691974"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\worker-0-error.log",
+      "bytes": 362,
+      "sha256": "cfa623e9f9984c0b9afdf7c3639cfa1e9405af065a87f54581635f3a20696e59"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\worker-0.log",
+      "bytes": 176,
+      "sha256": "7c173aaf24804ed8efbf907106e632f872235807f9f45860e463bf6f4b3a6568"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\worker-1-error.log",
+      "bytes": 3458,
+      "sha256": "70c7d32d121b75b17f0cce0cc1a3b925ef8b6b42a5fe0e1d08112d7a61f54b5d"
+    },
+    {
+      "path": "[workspace]\\.superpowers\\sdd\\2026-10-12-production-readiness\\task14c-evidence\\compiled-runtime-first-failure\\worker-1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

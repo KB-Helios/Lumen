@@ -1,0 +1,19 @@
+{
+  "label": "executor-python",
+  "command": "powershell.exe",
+  "args": [
+    "-NoProfile",
+    "-File",
+    ".superpowers/task14c-executor.ps1"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T14:16:46.556Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "2790f30123d0de2a873d80db53e94351fcc5687df006de652c9efc9e40f6b88f",
+  "releaseMarker": null,
+  "runnerPid": 35420,
+  "pid": 17956,
+  "ended": "2026-10-15T14:17:15.289Z",
+  "code": 0,
+  "signal": null
+}

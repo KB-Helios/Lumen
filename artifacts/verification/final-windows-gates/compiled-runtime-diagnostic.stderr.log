@@ -1,0 +1,8 @@
+The following filters did not match any test files:
+ .superpowers/task14c-diagnostic-runtime.test.ts
+1902 files were searched [34.00ms]
+
+note: Tests need ".test", "_test_", ".spec" or "_spec_" in the filename (ex: "MyApp.test.ts")
+note: To treat the ".superpowers/task14c-diagnostic-runtime.test.ts" filter as a path, run "bun test ./.superpowers/task14c-diagnostic-runtime.test.ts"
+
+Learn more about bun test: https://bun.com/docs/cli/test

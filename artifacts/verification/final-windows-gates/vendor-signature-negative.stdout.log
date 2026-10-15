@@ -1,0 +1,19 @@
+{
+    "vendor":  {
+                   "signers":  [
+                                   {
+                                       "thumbprint":  "BB793DB742624269BB5F4515BBE9A3DF418F588D",
+                                       "subject":  "CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+                                   }
+                               ],
+                   "thumbprint":  "BB793DB742624269BB5F4515BBE9A3DF418F588D",
+                   "timestamped":  true,
+                   "subject":  "CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                   "sha256":  true,
+                   "status":  "Valid"
+               },
+    "sourceSha256":  "363B481C110ED2657D93211D52199955098D46655F50CA09473CC04A546F175F",
+    "tamperedRejected":  true,
+    "negativeOutput":  "powershell.exe : signtool.exe : SignTool Error: WinVerifyTrust returned error: 0x80096010\r\nAt [workspace]\\scripts\\test-release-signatures.ps1:24 char:17\r\n+ ... $negative = \u0026 powershell.exe -NoProfile -File $verifier -Action Verif ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (signtool.exe : ...ror: 0x80096010:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nAt [workspace]\\scripts\\sign-release.ps1:116 char:25\r\n+         $verification = \u0026 $tool verify /pa /all /tw /v $File 2\u003e\u00261\r\n+                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (SignTool Error:...ror: 0x80096010:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\n",
+    "signingAttempted":  false
+}

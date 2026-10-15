@@ -1,0 +1,18 @@
+{
+  "label": "native-wire",
+  "command": "node",
+  "args": [
+    ".superpowers/task14c-native-exact.mjs",
+    "wire"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T14:14:02.337Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "releaseMarker": null,
+  "runnerPid": 39436,
+  "pid": 14296,
+  "ended": "2026-10-15T14:14:04.964Z",
+  "code": 0,
+  "signal": null
+}

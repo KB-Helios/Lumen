@@ -1,0 +1,50 @@
+# Final Windows gate checkpoint — 2026-10-15
+
+This checkpoint is **not full Task 14 or production acceptance**. The full Edge gate failed, and the freshly staged compiled enrichment worker crashed during its recovery qualification. The independent native and fixture gates below passed. The unsigned release build is still running at this draft checkpoint.
+
+Product source: `8a337eb960e1aa2274c60c7f7f64b1e2e79336be`. No product source, assertions, deadlines, retry counts, admission rules or performance budgets changed in Task14c. Later dirty patches contain only the regenerated native Stop and native answer evidence. Earlier Task14b frontend qualification remains separately reviewed evidence: typecheck, zero-warning lint, 751 Vitest tests, 14 Node tests, 21 Bun tests and two archive Python tests.
+
+Portable raw evidence, receipts, source/binary hashes and the exact final ignored-test table are indexed in [`artifacts/verification/final-windows-gates/manifest.json`](../../artifacts/verification/final-windows-gates/manifest.json). Private host/process snapshots and original unredacted owned-fixture logs remain in the ignored task evidence directory. Portable copies replace host paths; their original and published SHA256 values are recorded separately. Original failures were not overwritten.
+
+## Gate results
+
+| Gate / raw label | Actual result and limit |
+| --- | --- |
+| Full installed Edge / `edge-full` | **FAILED**, exit1, 129 passed / 3 failed / 2 not run, 13:00:34–13:31:17 UTC. All six-theme/five-scale matrices and functional reversal/provider-focus cases passed. First two cold accessibility startups missed original 5000ms assertions. Ordinary React p95 was 10.4ms against the unchanged 3ms limit; two later performance cases did not run. |
+| Focused startup / `edge-startup-focused` | Exit0, original first two cases passed unchanged on fresh strict1420, 21.6s. Earlier traces show slow cold Vite transforms without a page error. This does not pass the full suite or prove a reproducible source defect. |
+| Actual pinned staging / `stage-sidecars` | Exit0. Compiled enrichment, static provenance-pinned Rivet, fixed Computer Use, vector, Windows AI and Cliproxy assets staged. Windows AI ran 11 core, nine protocol and fresh/staged stable-package checks. No model, identity or certificate installed. |
+| Explicit worker/staging tests / `pinned-worker-tests` | Exit0, 21 passed / six files / 81 assertions. |
+| Compiled recovery / `compiled-enrichment-runtime` | **FAILED**, exit1, zero passed / one failed / 184 assertions / 47.25s. Replacement worker crashed; final original 15000ms lease wait failed. Root cause remains open. |
+| Separate instrumented diagnostic / `compiled-runtime-diagnostic-path` | Exit0, one passed / 196 assertions / 42.09s. Separate executable, original assertion/deadline bytes retained except its worker path. No buffer failure reproduced. This is diagnostic evidence, not staged qualification or a repair. |
+| Rust format / `rust-format` | Exit0, `cargo fmt --all -- --check`. |
+| Strict full Clippy / `rust-clippy-all` | Exit0, `--all-targets --all-features -j 1 -- -D warnings`. |
+| Full native / `rust-tests-full` | Exit0, 383 library tests passed / 26 ignored; integration targets passed 16 and 10 tests. Four proxy child probes ran under their parent and are not additional independent acceptance tests. Library runtime 200.13s; overall 4m22.6s including 53.58s compilation. |
+| Exact staged digest/config / `native-digest`, `native-config` | Each exit0, one actual exact ignored test passed. Config validation uses synthetic environment values. No Gateway application startup or provider credential read. |
+| Owned credential slot / `native-credential` | Exit0, one passed. Fresh UUIDv4 slot absence, own dummy-value readback, same-slot deletion and postdelete absence asserted; RAII cleanup fallback retained. No enumeration or ordinary provider slot access. |
+| Staged CU wire / `native-wire` | Exit0, one passed, 2.50s. Owned fresh headless Edge context, semantic action/readback and warm-pool shutdown; no installed application or physical input acceptance. |
+| Native Stop / `native-stop` | Exit0, one passed, 20 blocked-worker samples, 0.68s. Regenerated direct-core timing evidence; not physical hotkey or installed-app acceptance. |
+| Isolated proxy parent / `native-proxy` | Exit0, one parent passed with four actual child probes. Full module-qualified `--exact`; loopback synthetic proxy only. |
+| Native answer / `answer-native-sha` | Exit0. Explicit freshly compiled D: binary hash checked against final inventory. Real loopback native bridge and installed Edge verified fallback, retry, cancellation, replacement, delivery order, 35 failures and clean native exit. Packaged WebView and live provider remain false. |
+| Vendor signature negative / `vendor-signature-negative` | Exit0. Actual retained Microsoft signature verified; changed PE rejected; source hash unchanged. No signing attempted. Expected negative SignTool output is retained. |
+| Unsigned identity / `identity-metadata-negative` | Exit0, 19 metadata/ordering cases passed. Sign-path cases refuse before owner/key admission; no signing, import, install or trust mutation. |
+| Python executor / `executor-python` | Exit0, 28 explicit `test_executor`/`test_stage` tests, 27.500s. No broad `test_window` discovery. |
+| Python improvement fixtures / `prime-python-pure` | Exit0, 14 tests, 0.823s. Synthetic ACP subprocess, loopback and archive/limit fixtures; no Docker or real Prime execution. |
+| Ordinary unsigned Tauri / `tauri-build-unsigned` | **PASSED**, exit0, 14:17:45.854–14:41:01.671 UTC. `bun run tauri build` ran through the owned x64 Visual Studio Developer Shell wrapper, with D: target, incremental off and one Cargo job; release marker absent. Optimized Rust release compilation took 16m58s and NSIS bundling completed. This proves an unsigned build only. |
+
+The final unsigned-build receipt is [tauri-build-unsigned.json](../../artifacts/verification/final-windows-gates/tauri-build-unsigned.json). It records the source revision, working-tree patch hash, marker state and verified output hashes. The executable is 27,414,016 bytes (SHA256 `ed2535636c0374347784460928be93651a9f327f5c4bd1d4d4f355c86d0fa38e`); the NSIS installer is 194,826,625 bytes (SHA256 `53587e50fecac388ea17e1ec2d331a75f55301f204b925bd888d31bf7295bb3a`). The original receipt and logs remain under the ignored Task14c evidence directory. Neither output was executed, signed, or installed.
+
+The regenerated native answer and Computer Use Stop evidence are preserved in the checked-in performance artifacts. The manifest records each current SHA256 and its BASE Git blob ID. These are native integration measurements and do not replace the separate failed ordinary React/strict240 gate.
+
+## Open compiled-runtime failure
+
+The replacement staged worker emitted `TypeError: Underlying ArrayBuffer has been detached from the view or out-of-bounds` on Bun 1.3.14. Exact minified location 27:20373 maps to `@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js:1803`, `new Uint8Array(arg0)`. The pinned Rust source's corresponding `js_to_bytes` conversion is at lib.rs:2538. This establishes the incoming-byte conversion boundary, not the callback owner or root cause. It must not be dismissed as resource contention.
+
+All original fixture `.log` files and source/staged worker/engine/glue/WASM hashes were preserved before diagnosis; the fixture configuration containing its synthetic bearer is excluded from portable evidence. One separately compiled diagnostic executable records only type, size, ownership, callback name and stack metadata on failure. It did not reproduce the crash. Original dependency bytes were restored and SHA256-verified before the diagnostic run; the normal staged executable was not replaced. No speculative patch, broad runtime upgrade or deadline change followed. Compiled consumer, three Rivet restart/ownership tests and synthetic improvement crash/fencing qualification remain `PENDING_RUNTIME_DIAGNOSIS`.
+
+Two harness-only failed attempts are retained separately: the diagnostic Bun filter matched no test until corrected to an explicit `./` path; the first answer wrapper stopped at unavailable `Get-FileHash` before launching the answer gate. The corrected wrapper uses .NET SHA256 and checks the final binary inventory. Neither failed harness run is counted as a test pass.
+
+## Ignored-test disposition and remaining acceptance
+
+The current binary's actual `--ignored --list` contains exactly 26 paths, recorded in [`ignored-tests.json`](../../artifacts/verification/final-windows-gates/ignored-tests.json). This corrects historical shorthand paths to their real `search::indexing::…` module paths. Six entries have fresh direct-fixture evidence; six are child entrypoints exercised by normal/exact parent tests. Five compiled-runtime entries await diagnosis. Two fixed ordinary-credential-reading integrations (Windows AI status and Gateway start) remain excluded. Three window-marker fixtures remain pending because their discovery enumerates ordinary desktop window titles, outside this phase's privacy boundary. The two user-deferred Docker cases, live-provider case and large-capacity case remain pending. Ignored entries are not ordinary test passes.
+
+Task4 ordinary React/strict240 remains failed with `fullGateMeasured:false`; Task13 large50k remains UNCLOSED at26,421 commits/23,579 pending and original-cap acceptance remains pending. No gallery, recordings, whole performance profile or capacity workload was regenerated here. Final performance source work and a settled-source whole Edge run belong to the later owner. Hosted CI/review, real Docker/Prime, ordinary application startup, accounts/keys/client configuration, live providers, signing, installation and physical hardware acceptance remain unperformed.

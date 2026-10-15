@@ -1,0 +1,19 @@
+{
+  "label": "compiled-enrichment-runtime",
+  "command": "powershell.exe",
+  "args": [
+    "-NoProfile",
+    "-File",
+    ".superpowers/task14c-compiled.ps1"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T13:59:53.203Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "releaseMarker": null,
+  "runnerPid": 3252,
+  "pid": 18140,
+  "ended": "2026-10-15T14:00:41.236Z",
+  "code": 1,
+  "signal": null
+}
