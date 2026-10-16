@@ -118,7 +118,7 @@ async function measureFrameCadence(page: Page, sampleCount = 60) {
   return cadence;
 }
 
-test('warm launcher and ordinary interactions stay inside browser budgets', async ({page}) => {
+test('warm launcher and ordinary interactions stay inside browser budgets', async ({page}, testInfo) => {
   test.setTimeout(60_000);
   await page.setViewportSize({width: 800, height: 540});
   await openPerformancePage(page, '/?onboarded=1&service=memory');
@@ -166,15 +166,22 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
   await resetMetrics(page);
   const ordinaryQueries = ['report', 'design', 'project', ''];
   const ordinaryMetrics: DiagnosticsMetrics = {timings: [], reactCommits: [], browserLongTasks: []};
+  const ordinaryQuerySamples: Array<{query: string; reactCommits: number[]}> = [];
   for (let index = 0; index < 24; index += 1) {
     await resetMetrics(page);
     await search.fill(ordinaryQueries[index % ordinaryQueries.length]);
     await page.waitForTimeout(250);
     const queryMetrics = await readMetrics(page);
+    ordinaryQuerySamples.push({query: ordinaryQueries[index % ordinaryQueries.length], reactCommits: queryMetrics.reactCommits});
     ordinaryMetrics.reactCommits.push(...queryMetrics.reactCommits);
     ordinaryMetrics.browserLongTasks.push(...queryMetrics.browserLongTasks);
   }
   const ordinaryReactCommits = ordinaryMetrics.reactCommits;
+  await testInfo.attach('ordinary-render-samples', {
+    body: JSON.stringify({p95Ms: percentile(ordinaryReactCommits, 0.95), queries: ordinaryQuerySamples,
+      browserLongTasks: ordinaryMetrics.browserLongTasks}, null, 2),
+    contentType: 'application/json',
+  });
   expect(ordinaryReactCommits.length).toBeGreaterThan(0);
   expect(ordinaryMetrics.browserLongTasks).toHaveLength(0);
 

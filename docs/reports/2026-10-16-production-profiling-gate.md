@@ -24,7 +24,7 @@ React's [production profiling documentation](https://react.dev/reference/dev-too
 | Bridge/tooling tests | **14 passed**. |
 | Production performance suite | Initial run: **2 passed / 1 failed / 1 not run**. Ordinary-interaction assertions pass; strict hover fails at **4.7 ms vs 4.3 ms**, all 80 state/color samples ready. |
 | Production browser profile | Clean product revision `a8e8eea`, React **19.2.8**, production renderer `0`. Ordinary render p95 **1.5 ms vs <3 ms**. Hover p95 **4.6 ms vs 4.3 ms** is the only failed cadence-aware check. Overall and strict-240-Hz acceptance remain **false**. Preview listener verified closed afterward. |
-| Full development functional run | In progress at report creation. |
+| Full development functional run | **131 passed**, 32.4 minutes, including all original functional cases and the new mixed-renderer regression. |
 | Hosted qualification before scheduling allowance | All four performance cases passed in the [run on a8e8eea](https://github.com/KB-Helios/Lumen/actions/runs/38889233151): hover p95 **16.0 ms vs 16.7 ms**, all 80 ready. That whole run was superseded by the evidence commit. The [run on 3409bf8](https://github.com/KB-Helios/Lumen/actions/runs/38889949185) then passed ordinary interactions but failed hover: **18.3 ms vs 16.734 ms**, all 80 ready, callback-offset-growth p95 **1.666 ms**. This is a failed required check; the earlier step pass does not erase it. |
 
 The [raw browser profile](../../../artifacts/performance/profile-summary.json) and separate interaction trace preserve the failed result. Earlier development-renderer failures remain in Git history and the [merge blocker report](2026-10-15-pr25-merge-blockers.md). Existing screenshots and recordings at `8d68e41` are visual evidence for the unchanged UI; this follow-up changes qualification and DEV diagnostics, not product layout or motion.
@@ -42,3 +42,13 @@ After the inconsistent hosted hover results, the owner explicitly approved addin
 All 80 fresh hover transitions must still achieve the intended state and token color at the first callback. Synchronous work must still remain below 16 ms, long-task checks remain, and no retries are added. `strict120Hz` and `strict240Hz` diagnostics receive **no** scheduling allowance and remain independent acceptance results. Both the Edge test and evidence profiler use the same approved cadence-aware bound.
 
 The original `testInfo.attach({body})` kept raw samples only in reporter memory; the dot/list console reporters did not save them to the failure directory. A JSON reporter now preserves the attachment body, and CI uploads that report immediately after qualification on success or failure, before functional-test output cleanup can remove it.
+
+## Follow-up local results after the approved allowance
+
+The full production performance run still failed ordinary rendering: **1 passed / 1 failed / 2 not run**, p95 **3.7 ms vs <3 ms**. Adding observation-only per-query attachments reproduced that failure at **3.5 ms**. The [raw 24-query render samples](../../../artifacts/performance/ordinary-render-failure.json) retain the latter result; the largest spikes occur when reopening results after an empty query. These attachments do not change query work, assertions or limits.
+
+The regenerated clean-source [profile on e5b9c05](../../../artifacts/performance/profile-summary.json) also exits **1**: ordinary render p95 **3.9 ms vs <3 ms** and warm launcher p95 **21.3 ms vs <20 ms**. Hover passes its approved cadence-aware bound in that profile, with all 80 ready. Overall and strict-120/240-Hz acceptance remain **false**. These later failures are preserved alongside the earlier 1.5 ms observation; the cause of the local variation is not established.
+
+A separate focused run reached the two cases skipped by the full run: **2 passed**, including hover p95 **6.3 ms vs 6.4 ms**, all 80 ready, bounded idle CPU/heap and the static answer-region check. The JSON report was decoded and verified to contain all 80 raw hover samples. Those focused passes do not erase the failed full workload.
+
+The owner-approved allowance is committed as `e5b9c05`. Final hosted qualification remains necessary; no complete required-check pass is claimed from these local results.
