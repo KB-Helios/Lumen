@@ -209,9 +209,15 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
   }
   await page.waitForTimeout(100);
   const selectionMetrics = await readMetrics(page);
-  expect(selectionMetrics.timings.filter((sample) => sample.name === 'selection-paint')).toHaveLength(120);
+  const selectionSamples = selectionMetrics.timings.filter((sample) => sample.name === 'selection-paint');
+  await testInfo.attach('selection-frame-samples', {
+    body: JSON.stringify({frameCadence, observedFrameBudget, inputFrameSamples, selectionSamples,
+      browserLongTasks: selectionMetrics.browserLongTasks}, null, 2),
+    contentType: 'application/json',
+  });
+  expect(selectionSamples).toHaveLength(120);
   const selectionP95 = percentile(
-    selectionMetrics.timings.filter((sample) => sample.name === 'selection-paint').map((sample) => sample.durationMs),
+    selectionSamples.map((sample) => sample.durationMs),
     0.95,
   );
   const ordinaryCommitP95 = percentile(ordinaryReactCommits, 0.95);
