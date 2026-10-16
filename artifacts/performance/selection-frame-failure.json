@@ -1,0 +1,824 @@
+﻿{
+  "frameCadence": {
+    "intervals": [
+      16.800000000000182,
+      16.59999999999991,
+      16.59999999999991,
+      16.699999999999818,
+      16.700000000000273,
+      16.59999999999991,
+      16.699999999999818,
+      16.700000000000273,
+      16.699999999999818,
+      16.59999999999991,
+      16.700000000000273,
+      16.699999999999818,
+      16.700000000000273,
+      16.59999999999991,
+      16.699999999999818,
+      16.59999999999991,
+      16.700000000000273,
+      16.59999999999991,
+      16.800000000000182,
+      16.5,
+      16.799999999999727,
+      16.59999999999991,
+      16.700000000000273,
+      16.699999999999818,
+      16.700000000000273,
+      16.59999999999991,
+      16.699999999999818,
+      16.700000000000273,
+      16.59999999999991,
+      16.699999999999818,
+      16.59999999999991,
+      16.600000000000364,
+      16.699999999999818,
+      16.699999999999818,
+      16.700000000000273,
+      16.699999999999818,
+      16.59999999999991,
+      16.600000000000364,
+      16.799999999999727,
+      16.59999999999991,
+      16.700000000000273,
+      16.699999999999818,
+      16.59999999999991,
+      16.600000000000364,
+      16.699999999999818,
+      16.699999999999818,
+      16.700000000000273,
+      16.59999999999991,
+      16.800000000000182,
+      16.59999999999991,
+      16.59999999999991,
+      16.699999999999818,
+      16.600000000000364,
+      16.799999999999727,
+      16.59999999999991,
+      16.700000000000273,
+      16.59999999999991,
+      16.699999999999818,
+      16.700000000000273,
+      16.699999999999818
+    ],
+    "medianMs": 16.699999999999818,
+    "p95Ms": 16.800000000000182
+  },
+  "observedFrameBudget": 18.800000000000182,
+  "inputFrameSamples": [
+    {
+      "name": "input-next-frame",
+      "durationMs": 1.099999999976717,
+      "timestamp": 1792151753446
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 9.799999999988358,
+      "timestamp": 1792151753593
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 14.799999999988358,
+      "timestamp": 1792151753661
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 18,
+      "timestamp": 1792151753733
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 9.400000000023283,
+      "timestamp": 1792151753794
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 1.1000000000349246,
+      "timestamp": 1792151753844
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 11.700000000011642,
+      "timestamp": 1792151753911
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 1.2999999999883585,
+      "timestamp": 1792151753962
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 10.699999999953434,
+      "timestamp": 1792151754028
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 17.900000000023283,
+      "timestamp": 1792151754097
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 13,
+      "timestamp": 1792151754161
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 0.29999999998835847,
+      "timestamp": 1792151754211
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 8.099999999976717,
+      "timestamp": 1792151754277
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 2.6000000000349246,
+      "timestamp": 1792151754328
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 13.200000000011642,
+      "timestamp": 1792151754394
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 2.599999999976717,
+      "timestamp": 1792151754446
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 10.599999999976717,
+      "timestamp": 1792151754511
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 0.29999999998835847,
+      "timestamp": 1792151754561
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 9.200000000011642,
+      "timestamp": 1792151754627
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 0.40000000002328306,
+      "timestamp": 1792151754678
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 7,
+      "timestamp": 1792151754744
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 12.700000000011642,
+      "timestamp": 1792151754811
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 1.2999999999883585,
+      "timestamp": 1792151754862
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 10,
+      "timestamp": 1792151754928
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 0.40000000002328306,
+      "timestamp": 1792151754978
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 10.299999999988358,
+      "timestamp": 1792151755045
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 0.5,
+      "timestamp": 1792151755095
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 11.299999999988358,
+      "timestamp": 1792151755161
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 1.3999999999650754,
+      "timestamp": 1792151755211
+    },
+    {
+      "name": "input-next-frame",
+      "durationMs": 12.100000000034925,
+      "timestamp": 1792151755278
+    }
+  ],
+  "selectionSamples": [
+    {
+      "name": "selection-paint",
+      "durationMs": 17.70000000001164,
+      "timestamp": 1792151763267
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.70000000001164,
+      "timestamp": 1792151763287
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.70000000001164,
+      "timestamp": 1792151763308
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.70000000001164,
+      "timestamp": 1792151763328
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 14.799999999988358,
+      "timestamp": 1792151763347
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 14.5,
+      "timestamp": 1792151763364
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17,
+      "timestamp": 1792151763383
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.899999999965075,
+      "timestamp": 1792151763402
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.299999999988358,
+      "timestamp": 1792151763420
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.300000000046566,
+      "timestamp": 1792151763440
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.899999999965075,
+      "timestamp": 1792151763474
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.20000000001164,
+      "timestamp": 1792151763492
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.900000000023283,
+      "timestamp": 1792151763510
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.099999999976717,
+      "timestamp": 1792151763531
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17,
+      "timestamp": 1792151763554
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.100000000034925,
+      "timestamp": 1792151763573
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16,
+      "timestamp": 1792151763591
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17,
+      "timestamp": 1792151763610
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.399999999965075,
+      "timestamp": 1792151763628
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 18.599999999976717,
+      "timestamp": 1792151763649
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 1.8999999999650754,
+      "timestamp": 1792151763649
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.199999999953434,
+      "timestamp": 1792151763687
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.900000000023283,
+      "timestamp": 1792151763707
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.400000000023283,
+      "timestamp": 1792151763728
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.600000000034925,
+      "timestamp": 1792151763749
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.2000000000116415,
+      "timestamp": 1792151763749
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.5,
+      "timestamp": 1792151763787
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.599999999976717,
+      "timestamp": 1792151763808
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 20.400000000023283,
+      "timestamp": 1792151763830
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.2000000000116415,
+      "timestamp": 1792151763830
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 3,
+      "timestamp": 1792151763849
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.7999999999883585,
+      "timestamp": 1792151763867
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.2999999999883585,
+      "timestamp": 1792151763886
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 3.3999999999650754,
+      "timestamp": 1792151763905
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.699999999953434,
+      "timestamp": 1792151763942
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2,
+      "timestamp": 1792151763942
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 3.599999999976717,
+      "timestamp": 1792151763960
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.7000000000116415,
+      "timestamp": 1792151763980
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.7000000000116415,
+      "timestamp": 1792151763999
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.5,
+      "timestamp": 1792151764017
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.20000000001164,
+      "timestamp": 1792151764053
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.20000000001164,
+      "timestamp": 1792151764072
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 25.5,
+      "timestamp": 1792151764100
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.099999999976717,
+      "timestamp": 1792151764119
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.5,
+      "timestamp": 1792151764137
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.5,
+      "timestamp": 1792151764156
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 14.700000000011642,
+      "timestamp": 1792151764174
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 14.400000000023283,
+      "timestamp": 1792151764193
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 13.799999999988358,
+      "timestamp": 1792151764212
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 3,
+      "timestamp": 1792151764232
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.7999999999883585,
+      "timestamp": 1792151764250
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.8999999999650754,
+      "timestamp": 1792151764268
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.7000000000116415,
+      "timestamp": 1792151764286
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.5,
+      "timestamp": 1792151764305
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.5,
+      "timestamp": 1792151764323
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.100000000034925,
+      "timestamp": 1792151764359
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 1.7999999999883585,
+      "timestamp": 1792151764359
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.600000000034925,
+      "timestamp": 1792151764395
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 1.7000000000116415,
+      "timestamp": 1792151764395
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 23.199999999953434,
+      "timestamp": 1792151764439
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 4.5,
+      "timestamp": 1792151764439
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.7999999999883585,
+      "timestamp": 1792151764461
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 3,
+      "timestamp": 1792151764479
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.900000000023283,
+      "timestamp": 1792151764514
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.79999999998836,
+      "timestamp": 1792151764534
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.5,
+      "timestamp": 1792151764552
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.79999999998836,
+      "timestamp": 1792151764571
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.20000000001164,
+      "timestamp": 1792151764590
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.099999999976717,
+      "timestamp": 1792151764608
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.5,
+      "timestamp": 1792151764632
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.70000000001164,
+      "timestamp": 1792151764651
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.200000000011642,
+      "timestamp": 1792151764670
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.099999999976717,
+      "timestamp": 1792151764689
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.599999999976717,
+      "timestamp": 1792151764709
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.399999999965075,
+      "timestamp": 1792151764728
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.400000000023283,
+      "timestamp": 1792151764747
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.800000000046566,
+      "timestamp": 1792151764766
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.199999999953434,
+      "timestamp": 1792151764785
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.799999999988358,
+      "timestamp": 1792151764803
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.699999999953434,
+      "timestamp": 1792151764824
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.699999999953434,
+      "timestamp": 1792151764842
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.6000000000349246,
+      "timestamp": 1792151764860
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 3.3999999999650754,
+      "timestamp": 1792151764879
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.20000000001164,
+      "timestamp": 1792151764916
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.2000000000116415,
+      "timestamp": 1792151764916
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.29999999998836,
+      "timestamp": 1792151764952
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 1.5,
+      "timestamp": 1792151764952
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 1.8000000000465661,
+      "timestamp": 1792151764974
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.2000000000116415,
+      "timestamp": 1792151764995
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.399999999965075,
+      "timestamp": 1792151765035
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.099999999976717,
+      "timestamp": 1792151765035
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 4.199999999953434,
+      "timestamp": 1792151765056
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19,
+      "timestamp": 1792151765094
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.79999999998836,
+      "timestamp": 1792151765116
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.79999999998836,
+      "timestamp": 1792151765137
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.400000000023283,
+      "timestamp": 1792151765137
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 4.599999999976717,
+      "timestamp": 1792151765158
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 8.800000000046566,
+      "timestamp": 1792151765180
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 10.200000000011642,
+      "timestamp": 1792151765200
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 9.900000000023283,
+      "timestamp": 1792151765218
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 18.599999999976717,
+      "timestamp": 1792151765255
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.20000000001164,
+      "timestamp": 1792151765273
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.799999999988358,
+      "timestamp": 1792151765292
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.799999999988358,
+      "timestamp": 1792151765311
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.5,
+      "timestamp": 1792151765330
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.099999999976717,
+      "timestamp": 1792151765348
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 14.099999999976717,
+      "timestamp": 1792151765366
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 15.899999999965075,
+      "timestamp": 1792151765385
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.29999999998836,
+      "timestamp": 1792151765406
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 18.29999999998836,
+      "timestamp": 1792151765426
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 16.29999999998836,
+      "timestamp": 1792151765445
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.599999999976717,
+      "timestamp": 1792151765464
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.900000000023283,
+      "timestamp": 1792151765483
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.099999999976717,
+      "timestamp": 1792151765519
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.099999999976717,
+      "timestamp": 1792151765519
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 18.20000000001164,
+      "timestamp": 1792151765554
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 19.5,
+      "timestamp": 1792151765575
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 1.7000000000116415,
+      "timestamp": 1792151765575
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 2.900000000023283,
+      "timestamp": 1792151765598
+    },
+    {
+      "name": "selection-paint",
+      "durationMs": 17.70000000001164,
+      "timestamp": 1792151765632
+    }
+  ],
+  "browserLongTasks": []
+}
