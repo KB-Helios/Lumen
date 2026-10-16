@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-15T14:08:41.7343004Z",
+  "memory": {
+    "FreePhysicalMemory": 15555000,
+    "TotalVisibleMemorySize": 32629612
+  },
+  "cpu": {
+    "Name": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M           ",
+    "LoadPercentage": 7
+  },
+  "volumes": [
+    {
+      "DriveLetter": "C",
+      "SizeRemaining": 91247976448,
+      "Size": 961296723968
+    },
+    {
+      "DriveLetter": "D",
+      "SizeRemaining": 417177067520,
+      "Size": 1021430460416
+    }
+  ],
+  "listeners": []
+}

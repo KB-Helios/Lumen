@@ -10,7 +10,7 @@ pub const MANAGEMENT_BASE: &str = "http://127.0.0.1:8317/v8/management";
 pub struct CliproxyClient {
     base: String,
     mgmt_key: String,
-    client: reqwest::Client,
+    client: Result<reqwest::Client, String>,
 }
 
 impl CliproxyClient {
@@ -19,7 +19,8 @@ impl CliproxyClient {
         Self {
             base: MANAGEMENT_BASE.to_owned(),
             mgmt_key,
-            client: reqwest::Client::new(),
+            client: crate::local_http::client(std::time::Duration::from_secs(5))
+                .map_err(|_| "Cliproxy HTTP client is unavailable".to_owned()),
         }
     }
 
@@ -29,7 +30,8 @@ impl CliproxyClient {
         Self {
             base,
             mgmt_key,
-            client: reqwest::Client::new(),
+            client: crate::local_http::client(std::time::Duration::from_secs(5))
+                .map_err(|_| "Cliproxy HTTP client is unavailable".to_owned()),
         }
     }
 
@@ -42,11 +44,13 @@ impl CliproxyClient {
     async fn get(&self, path: &str) -> Result<Value, String> {
         let response = self
             .client
+            .as_ref()
+            .map_err(Clone::clone)?
             .get(format!("{}{path}", self.base))
             .bearer_auth(&self.mgmt_key)
             .send()
             .await
-            .map_err(|error| format!("Cliproxy request failed: {error}"))?;
+            .map_err(|_| "Cliproxy request failed".to_owned())?;
         check_status(response).await
     }
 
@@ -60,12 +64,14 @@ impl CliproxyClient {
     pub async fn patch_config(&self, patch: Value) -> Result<PatchResult, String> {
         let response = self
             .client
+            .as_ref()
+            .map_err(Clone::clone)?
             .patch(format!("{}/config", self.base))
             .bearer_auth(&self.mgmt_key)
             .json(&patch)
             .send()
             .await
-            .map_err(|error| format!("Cliproxy request failed: {error}"))?;
+            .map_err(|_| "Cliproxy request failed".to_owned())?;
         let _ = check_status(response).await?;
         Ok(PatchResult { ok: true })
     }
@@ -116,6 +122,8 @@ impl CliproxyClient {
         }
         let response = self
             .client
+            .as_ref()
+            .map_err(Clone::clone)?
             .delete(format!(
                 "{}/oauth/session?state={}",
                 self.base,
@@ -124,12 +132,15 @@ impl CliproxyClient {
             .bearer_auth(&self.mgmt_key)
             .send()
             .await
-            .map_err(|error| format!("Cliproxy request failed: {error}"))?;
+            .map_err(|_| "Cliproxy request failed".to_owned())?;
         let value = check_status(response).await?;
-        Ok(value
-            .get("cancelled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false))
+        match (
+            value.get("status").and_then(Value::as_str),
+            value.get("cancelled").and_then(Value::as_bool),
+        ) {
+            (Some("ok"), Some(cancelled)) => Ok(cancelled),
+            _ => Err("Cliproxy did not confirm OAuth cancellation".to_owned()),
+        }
     }
 
     /// Boolean link status for one OAuth provider, derived from
@@ -473,14 +484,10 @@ fn credentials_linked(payload: &Value, provider: &str) -> bool {
 
 /// Reject unsuccessful HTTP status codes, then decode the response as JSON.
 async fn check_status(response: reqwest::Response) -> Result<Value, String> {
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("Cliproxy returned HTTP {status}"));
-    }
-    response
-        .json::<Value>()
+    let bytes = crate::local_http::body(response)
         .await
-        .map_err(|error| format!("Cliproxy returned invalid JSON: {error}"))
+        .map_err(|error| error.message("Cliproxy"))?;
+    serde_json::from_slice(&bytes).map_err(|_| "Cliproxy returned invalid JSON".to_owned())
 }
 
 /// Resolves the management key without ever exposing it to the webview:
@@ -595,6 +602,107 @@ pub async fn cliproxy_usage(app: tauri::AppHandle) -> Result<Vec<ProviderUsage>,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::local_http_tests as http;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn local_http_management_refuses_redirects() {
+        let (target, target_server) = http::server(http::json("{}"), Duration::ZERO);
+        let (base, server) = http::server(format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {target}/stolen\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").into_bytes(), Duration::ZERO);
+        let result = tauri::async_runtime::block_on(
+            CliproxyClient::with_base(base, "fixture-secret".into())
+                .patch_config(serde_json::json!({"private":"fixture"})),
+        );
+        server.join().unwrap();
+        let redirected = target_server.join().unwrap();
+        assert!(result.is_err(), "redirect status must fail");
+        assert!(
+            redirected.is_empty(),
+            "no bearer or payload may reach redirect target"
+        );
+    }
+
+    #[test]
+    fn local_http_management_bounds_bodies() {
+        let mut bounded = Vec::new();
+        for chunked in [false, true] {
+            let (base, server) = http::server(http::oversized(chunked), Duration::ZERO);
+            let result = tauri::async_runtime::block_on(
+                CliproxyClient::with_base(base, "fixture-secret".into()).get("/config"),
+            );
+            server.join().unwrap();
+            bounded.push(result.is_err());
+        }
+        assert_eq!(
+            bounded,
+            [true, true],
+            "declared and chunked bodies must be bounded"
+        );
+    }
+
+    #[test]
+    fn local_http_management_sanitizes_failures() {
+        let (base, server) = http::server(http::json("{fixture-secret"), Duration::ZERO);
+        let result = tauri::async_runtime::block_on(
+            CliproxyClient::with_base(base.clone(), "fixture-secret".into())
+                .get("/oauth/status?state=private-state"),
+        );
+        server.join().unwrap();
+        assert_eq!(result.unwrap_err(), "Cliproxy returned invalid JSON");
+        let result = tauri::async_runtime::block_on(
+            CliproxyClient::with_base(base, "fixture-secret".into())
+                .get("/oauth/status?state=private-state"),
+        );
+        assert_eq!(result.unwrap_err(), "Cliproxy request failed");
+    }
+
+    #[test]
+    fn local_http_management_has_total_deadline() {
+        let (base, server) = http::server(http::json("{}"), Duration::from_secs(6));
+        let began = Instant::now();
+        let result = tauri::async_runtime::block_on(
+            CliproxyClient::with_base(base, "fixture-secret".into()).get("/config"),
+        );
+        let elapsed = began.elapsed();
+        server.join().unwrap();
+        assert!(result.is_err(), "stalled headers must time out");
+        assert!(elapsed < Duration::from_secs(6));
+    }
+
+    #[test]
+    fn local_http_management_deadline_includes_stalled_body() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = http::server_parts(
+            listener,
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n".to_vec(),
+            b"{}".to_vec(),
+            Duration::from_secs(6),
+        );
+        let began = Instant::now();
+        let result = tauri::async_runtime::block_on(
+            CliproxyClient::with_base(base, "fixture-secret".into()).get("/config"),
+        );
+        let elapsed = began.elapsed();
+        server.join().unwrap();
+        assert!(result.is_err());
+        assert!(elapsed < Duration::from_secs(6));
+    }
+
+    #[test]
+    #[ignore = "invoked only by isolated proxy regression"]
+    fn local_http_proxy_probe_management() {
+        assert_eq!(
+            std::env::var("LUMEN_LOCAL_HTTP_PROXY_PROBE").as_deref(),
+            Ok("1")
+        );
+        let (base, server) = http::server(http::json("{}"), Duration::ZERO);
+        let result = tauri::async_runtime::block_on(
+            CliproxyClient::with_base(base, "fixture-secret".into()).get_config(),
+        );
+        assert!(result.is_ok());
+        assert!(!server.join().unwrap().is_empty());
+    }
 
     #[test]
     fn base_is_loopback_v8() {

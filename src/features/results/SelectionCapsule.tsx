@@ -39,6 +39,7 @@ export function SelectionCapsule({
     let observer: ResizeObserver | undefined;
     let styleObserver: MutationObserver | undefined;
     let observedRow: HTMLElement | null = null;
+    let measuredSize: {width: number; height: number} | undefined;
     let movement: ReturnType<typeof animate> | undefined;
     let lastTransform: string | undefined;
     let selectionFrame: number | undefined;
@@ -50,6 +51,7 @@ export function SelectionCapsule({
       styleObserver?.disconnect();
       styleObserver = undefined;
       observedRow = null;
+      measuredSize = undefined;
     };
     const updateSelection = (fileId: string | null) => {
       selectionRef.current = fileId;
@@ -75,6 +77,7 @@ export function SelectionCapsule({
         if (selected.dataset.resultId !== selectionRef.current) return;
         // Rects include virtual-row transforms; offsetTop alone does not.
         const bounds = selected.getBoundingClientRect();
+        measuredSize = {width: bounds.width, height: bounds.height};
         const top = bounds.top - container.getBoundingClientRect().top +
           container.scrollTop - container.clientTop;
         const transform = `translateY(${top}px)`;
@@ -101,7 +104,13 @@ export function SelectionCapsule({
       if (selected === observedRow) return;
       observedRow = selected;
       if (typeof ResizeObserver === 'function') {
-        observer = new ResizeObserver(() => scheduleSelection(selectionRef.current));
+        observer = new ResizeObserver((entries) => {
+          const size = entries.find((entry) => entry.target === observedRow)?.borderBoxSize?.[0];
+          // observe() also emits an initial notification. The row was just
+          // measured; queue work only if its reported size actually differs.
+          if (size && measuredSize && size.inlineSize === measuredSize.width && size.blockSize === measuredSize.height) return;
+          scheduleSelection(selectionRef.current);
+        });
         observer.observe(selected);
       }
       // Virtualization can move a mounted row without changing its dimensions.

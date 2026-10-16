@@ -1,0 +1,51 @@
+import {fireEvent, render, screen} from '@testing-library/react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import type {LumenButton as ButtonComponent} from '../../design-system/primitives/LumenButton';
+import {BrowserWindowService} from '../../platform/window/browser-window-service';
+import {CollapsedLauncher} from './CollapsedLauncher';
+import {useLauncherStore} from './launcher.store';
+import {useQueryStore} from './query.store';
+
+const {buttonRender} = vi.hoisted(() => ({buttonRender: vi.fn()}));
+vi.mock('../../design-system/primitives/LumenButton', async (original) => {
+  const {LumenButton} = await original<{LumenButton: typeof ButtonComponent}>();
+  return {LumenButton: (props: React.ComponentProps<typeof LumenButton>) => {
+    buttonRender();
+    return <LumenButton {...props} />;
+  }};
+});
+
+afterEach(() => {
+  useLauncherStore.getState().reset();
+  useQueryStore.getState().reset();
+});
+
+describe('CollapsedLauncher composer', () => {
+  it('keeps file-search input stable when the unused computer callback changes and uses the latest computer callback', () => {
+    const service = new BrowserWindowService();
+    const first = vi.fn();
+    const latest = vi.fn();
+    const {rerender} = render(<CollapsedLauncher windowService={service} onComputerSubmit={first} />);
+    const input = screen.getByRole('searchbox') as HTMLInputElement;
+    input.value = 'report';
+    input.setSelectionRange(2, 4);
+    const rendered = buttonRender.mock.calls.length;
+
+    rerender(<CollapsedLauncher windowService={service} onComputerSubmit={latest} />);
+    expect(buttonRender).toHaveBeenCalledTimes(rendered);
+    expect(screen.getByRole('searchbox')).toBe(input);
+    expect(input.selectionStart).toBe(2);
+    expect(input.selectionEnd).toBe(4);
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(useQueryStore.getState().submitted).toBe('report');
+    expect(first).not.toHaveBeenCalled();
+    expect(latest).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Switch to Computer Use'}));
+    const computerInput = screen.getByRole('searchbox', {name: 'Describe a computer task'});
+    fireEvent.input(computerInput, {target: {value: 'fixture task'}});
+    fireEvent.keyDown(computerInput, {key: 'Enter'});
+    expect(first).not.toHaveBeenCalled();
+    expect(latest).toHaveBeenCalledExactlyOnceWith('fixture task');
+  });
+});

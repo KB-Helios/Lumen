@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-15T01:12:51.818Z",
+  "ownedFixturePid": 5880,
+  "underlayPid": 36828,
+  "anyOwnedPidPresent": [],
+  "underlayPidPresent": false,
+  "port1420": "server helper stopped owned Vite process in finally",
+  "cleanup": {
+    "root": "C:\\Users\\kevin\\AppData\\Local\\Temp\\lumen-native-performance-nYrIk1",
+    "rootPid": 5880,
+    "childExit": 1,
+    "childSignal": null,
+    "underlayPid": 36828,
+    "underlayExit": 0
+  }
+}

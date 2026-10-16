@@ -1,0 +1,19 @@
+test_cancel_uses_acp_notification_and_never_returns_manifest (test_acp_integration.AcpIntegrationTests.test_cancel_uses_acp_notification_and_never_returns_manifest) ... ok
+test_real_subprocess_frames_and_loopback_proxy_deliver_bounded_manifest (test_acp_integration.AcpIntegrationTests.test_real_subprocess_frames_and_loopback_proxy_deliver_bounded_manifest) ... ok
+test_wrong_acp_version_never_emits_healthy_state (test_acp_integration.AcpIntegrationTests.test_wrong_acp_version_never_emits_healthy_state) ... ok
+test_archive_rejects_traversal_and_links_instead_of_extracting (test_archive.ArchiveTests.test_archive_rejects_traversal_and_links_instead_of_extracting) ... ok
+test_outer_archive_ignores_order_ownership_and_timestamps_preserving_blob_bytes (test_archive.ArchiveTests.test_outer_archive_ignores_order_ownership_and_timestamps_preserving_blob_bytes) ... ok
+test_duplicate_keys_cannot_shadow_protocol_fields (test_bridge.BoundaryTests.test_duplicate_keys_cannot_shadow_protocol_fields) ... ok
+test_first_candidate_can_use_initial_version_zero (test_bridge.BoundaryTests.test_first_candidate_can_use_initial_version_zero) ... ok
+test_input_refuses_held_out_files_and_keeps_supplied_metadata_only (test_bridge.BoundaryTests.test_input_refuses_held_out_files_and_keeps_supplied_metadata_only) ... ok
+test_oversized_frame_is_rejected_before_json_decode (test_bridge.BoundaryTests.test_oversized_frame_is_rejected_before_json_decode) ... ok
+test_stream_adapter_preserves_tools_finish_reason_and_usage (test_bridge.BoundaryTests.test_stream_adapter_preserves_tools_finish_reason_and_usage) ... ok
+test_valid_manifest_survives_and_unknown_field_is_rejected (test_bridge.BoundaryTests.test_valid_manifest_survives_and_unknown_field_is_rejected) ... ok
+test_workflow_cannot_embed_arguments_or_continue_after_desktop_draft (test_bridge.BoundaryTests.test_workflow_cannot_embed_arguments_or_continue_after_desktop_draft) ... ok
+test_exact_cgroup_limits_and_alternative_cpu_period (test_sandbox_probe.SandboxProbeTests.test_exact_cgroup_limits_and_alternative_cpu_period) ... ok
+test_unbounded_or_changed_resources_are_refused (test_sandbox_probe.SandboxProbeTests.test_unbounded_or_changed_resources_are_refused) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.823s
+
+OK

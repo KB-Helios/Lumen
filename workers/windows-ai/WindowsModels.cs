@@ -61,7 +61,7 @@ internal sealed class WindowsModels : IDisposable
             if (result.Status != LanguageModelResponseStatus.Complete || result.ExtendedError is not null)
                 throw new HelperFault(result.Status switch { LanguageModelResponseStatus.PromptLargerThanContext => "context_limit", LanguageModelResponseStatus.BlockedByPolicy or LanguageModelResponseStatus.PromptBlockedByContentModeration or LanguageModelResponseStatus.ResponseBlockedByContentModeration => "blocked_by_policy", _ => "generation_failed" });
             if (Encoding.UTF8.GetByteCount(result.Text) > Protocol.MaximumResponseBytes) throw new HelperFault("output_limit");
-            return new(result.Text, "windows", string.IsNullOrEmpty(language.ModelName) ? null : language.ModelName[..Math.Min(language.ModelName.Length, 160)], []);
+            return new(result.Text, "windows", null, []);
         }
         finally { operation.Progress = null; bounded.Close(); Touch(warm); }
     }

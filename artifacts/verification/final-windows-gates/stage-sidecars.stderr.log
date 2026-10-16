@@ -1,0 +1,37 @@
+$ bun scripts/stage-sidecars.ts && bun run stage:windows-ai && bun run stage:clipproxy
+$ bun scripts/stage-windows-ai.ts
+
+workers\windows-ai\stable-package.test.ts:
+(pass) both architecture locks and identity require only the stable runtime [3.53ms]
+(pass) fresh published and staged artifacts have no experimental package or speech/Aion DLL [13.00ms]
+
+ 2 pass
+ 0 fail
+ 14 expect() calls
+Ran 2 tests across 1 file. [57.00ms]
+
+workers\windows-ai\protocol.test.ts:
+(pass) malformed JSON and unknown operations return bounded errors and recover [1604.08ms]
+(pass) passive status reports the actual architecture without downloads [1130.40ms]
+(pass) operation consent rejects preparation and private content before SDK access [191.91ms]
+(pass) request byte bounds reject oversize UTF-8 and image payloads [212.60ms]
+(pass) cancel unknown request is an idempotent bounded result [169.28ms]
+(pass) trusted catalogue rejects caller-created content before indexing [168.23ms]
+(pass) queued cancellation returns one terminal cancellation without model work [1959.11ms]
+(pass) answer consent is independent of preview text-tool consent [185.02ms]
+(pass) stable search requires its own grant even when language access is configured [1133.57ms]
+
+ 9 pass
+ 0 fail
+ 36 expect() calls
+Ran 9 tests across 1 file. [6.79s]
+
+workers\windows-ai\stable-package.test.ts:
+(pass) both architecture locks and identity require only the stable runtime [3.93ms]
+(pass) fresh published and staged artifacts have no experimental package or speech/Aion DLL [1.11ms]
+
+ 2 pass
+ 0 fail
+ 14 expect() calls
+Ran 2 tests across 1 file. [49.00ms]
+$ bun scripts/stage-clipproxy.ts

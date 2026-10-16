@@ -1,5 +1,9 @@
 # High-refresh performance report
 
+## Production-readiness continuation, 2026-10-15
+
+The [dated continuation report](2026-10-15-performance-continuation.md) records the restored frontend experiments, corrected shared-service native fixture lifecycle and exact source/binary provenance. The corrected native capture is valid, but ordinary React p95 is 9.3 ms versus <3 ms and strict 240 Hz remains false. Browser and native failures, focused checks and remaining acceptance gates are preserved separately; full Task 4 is not complete.
+
 ## UI refinement measurement, 2026-10-11
 
 **Status:** incomplete acceptance; draft required. The final clean-source profile fails hover, ordinary React, ordinary-query Long Tasks and aggregate strict-240 checks. Regenerated evidence and native/package results are recorded in the dated [UI completion report](2026-10-11-ui-completion-motion.md) and `artifacts/verification/ui-completion-motion/manifest.json`.

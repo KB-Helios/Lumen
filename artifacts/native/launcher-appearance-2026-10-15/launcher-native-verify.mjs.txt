@@ -1,0 +1,100 @@
+import {spawn,execFileSync} from 'node:child_process';
+import {mkdir,mkdtemp,realpath,readFile,writeFile,rename} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {createInterface} from 'node:readline';
+import os from 'node:os';
+import path from 'node:path';
+import net from 'node:net';
+import {chromium} from 'playwright';
+import {withLumenDevServer} from '../scripts/lib/lumen-dev-server.mjs';
+import {ownedDescendants,admitFixturePage} from '../scripts/native-performance-profile.mjs';
+const output=path.resolve('.superpowers/sdd/2026-10-12-production-readiness/launcher-native-evidence');
+await mkdir(output,{recursive:true});
+const save=async(name,value)=>{const target=path.join(output,name);await writeFile(`${target}.tmp`,typeof value==='string'?value:JSON.stringify(value,null,2));await rename(`${target}.tmp`,target);};
+const hash=(bytes)=>createHash('sha256').update(bytes).digest('hex');
+const ps=(source)=>execFileSync('powershell.exe',['-NoProfile','-EncodedCommand',Buffer.from(source,'utf16le').toString('base64')],{encoding:'utf8',windowsHide:true,timeout:5000}).trim();
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const exe='D:/CodexBuilds/Lumen/production-readiness/debug/lumen.exe';
+const sourceFiles=['src-tauri/src/window.rs','src-tauri/src/lib.rs','src-tauri/src/native_performance.rs','src-tauri/tauri.conf.json','src/design-system/global.css','src/test/NativePerformanceFixture.tsx','.superpowers/launcher-native-verify.mjs','.superpowers/launcher-controlled-underlay.ps1'];
+await save('provenance.json',{at:new Date().toISOString(),head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim(),diff:hash(execFileSync('git',['diff','HEAD'])),exe,exeSha256:hash(await readFile(exe)),sources:Object.fromEntries(await Promise.all(sourceFiles.map(async file=>[file,hash(await readFile(file))])))});
+await withLumenDevServer(async()=>{
+  // Browser alpha is a separate diagnostic, never composited/native acceptance.
+  let browser;
+  try {
+    browser=await chromium.launch({channel:'msedge',headless:true,timeout:20_000});
+    const page=await browser.newPage({viewport:{width:700,height:66},deviceScaleFactor:1});
+    await page.goto('http://127.0.0.1:1420/?service=memory&onboarded=1');
+    await page.locator('[data-einui-layer="surface"]').waitFor();
+    await page.screenshot({path:path.join(output,'browser-alpha.png'),omitBackground:true});
+    await save('browser-paint.json',await page.evaluate(()=>Object.fromEntries(['html','body','main','[data-einui-layer="surface"]'].map(selector=>{const e=document.querySelector(selector);const s=getComputedStyle(e);return[selector,{background:s.backgroundColor,colorScheme:s.colorScheme,radius:s.borderRadius,bounds:e.getBoundingClientRect().toJSON()}];}))));
+  } catch(error) {await save('browser-failure.json',{message:error.message,stack:error.stack});console.log(`Browser diagnostic unavailable: ${error.message.split('\n')[0]}`);}
+  finally {await browser?.close();}
+  const listener=net.createServer();await new Promise(resolve=>listener.listen(0,'127.0.0.1',resolve));const port=listener.address().port;await new Promise(resolve=>listener.close(resolve));
+  const root=await realpath(await mkdtemp(path.join(os.tmpdir(),'lumen-native-performance-')));
+  const child=spawn(exe,[],{env:{...process.env,LUMEN_NATIVE_PERFORMANCE_ROOT:root,WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`},windowsHide:true,stdio:['ignore','pipe','pipe']});
+  let log='';child.stdout.on('data',x=>log+=x);child.stderr.on('data',x=>log+=x);
+  let cdp,underlay,underlayLog='',pending;
+  const captures=[];
+  try {
+    let version;
+    for(let i=0;i<150;i++){if(child.exitCode!==null)throw Error(`Fixture exit ${child.exitCode}: ${log}`);try{const r=await fetch(`http://127.0.0.1:${port}/json/version`,{signal:AbortSignal.timeout(500)});if(r.ok){version=await r.json();break;}}catch{}await delay(200);}
+    if(!version)throw Error('Owned WebView2 CDP readiness timed out');
+    const processes=JSON.parse(ps('Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json'));
+    const owned=ownedDescendants(processes,child.pid);
+    const listenerPid=Number(ps(`(Get-NetTCPConnection -LocalPort ${port} -State Listen | Select-Object -First 1).OwningProcess`));
+    if(!owned.has(listenerPid))throw Error('Unowned CDP listener');
+    const ownedDetails=JSON.parse(ps(`Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${[...owned].join(',')}) } | Select-Object ProcessId,ParentProcessId,Name,CommandLine,CreationDate | ConvertTo-Json`));
+    if(!ownedDetails.some(p=>p.ProcessId===listenerPid&&p.CommandLine.includes(root)))throw Error('Owned browser data directory mismatch');
+    await save('attachment-before.json',{root,rootPid:child.pid,listenerPid,ownedDetails,version});
+    cdp=await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    const pages=cdp.contexts().flatMap(c=>c.pages());if(pages.length!==1)throw Error('Unexpected fixture page count');
+    const page=pages[0];await page.waitForURL('http://localhost:1420/scripts/native-performance.html');await admitFixturePage(page);
+    const status=()=>page.evaluate(async()=>await(await import('/node_modules/@tauri-apps/api/core.js')).invoke('native_performance_status'));
+    const search=page.getByRole('searchbox',{name:'Search files'});await search.waitFor({state:'visible'});
+    await page.evaluate(async()=>{await import('/src/platform/window/tauri-window-service.ts');await import('/src/features/launcher/useLauncherPresentation.ts');});
+    await page.waitForLoadState('networkidle');await delay(1000);
+    await page.evaluate(()=>{window.__launcherInvokeTrace=[];const original=window.__TAURI_INTERNALS__.invoke;window.__TAURI_INTERNALS__.invoke=async function(command,args,...rest){if(command==='show_lumen_window'||command==='hide_lumen_window')window.__launcherInvokeTrace.push({command,args,at:performance.now()});return original.call(this,command,args,...rest);};});
+    const initial=await status();if(!initial.foregroundUnchanged||!initial.visible)throw Error('Fixture foreground/visibility invalid');
+    const fixtureStartTime=ps(`(Get-Process -Id ${child.pid}).StartTime.ToUniversalTime().ToFileTimeUtc().ToString()`);
+    underlay=spawn('powershell.exe',['-NoProfile','-File',path.resolve('.superpowers/launcher-controlled-underlay.ps1')],{windowsHide:true,stdio:['pipe','pipe','pipe']});
+    underlay.stderr.on('data',x=>underlayLog+=x);
+    const lines=createInterface({input:underlay.stdout});lines.on('line',line=>{if(pending){const fn=pending;pending=null;try{fn.resolve(JSON.parse(line));}catch(error){fn.reject(error);}}});
+    const response=()=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending=null;reject(Error(`Underlay response timeout: ${underlayLog}`));},5000);pending={resolve:value=>{clearTimeout(timer);resolve(value);},reject:error=>{clearTimeout(timer);reject(error);}};});
+    const ready=await response();if(ready.foreground!==initial.initialForeground)throw Error('Underlay initial foreground mismatch');
+    const command=async(request)=>{const physical=(await status()).innerSize;const promise=response();underlay.stdin.write(JSON.stringify({...request,pid:child.pid,startTime:fixtureStartTime,ownedPids:[...owned],width:physical.width,height:physical.height})+'\n');return promise;};
+    const capture=async(name,color)=>{
+      await command({operation:'position',color});await delay(250);
+      const result=await command({operation:'capture',color,path:path.join(output,`${name}.png`)});
+      const state=await status();if(!state.foregroundUnchanged||!state.visible||result.foreground!==initial.initialForeground)throw Error('Capture admission failed');
+      const paint=await page.evaluate(()=>{const e=document.querySelector('[data-einui-layer="surface"]');const s=getComputedStyle(e);return {surface:{background:s.backgroundColor,radius:s.borderRadius,bounds:e.getBoundingClientRect().toJSON()},html:getComputedStyle(document.documentElement).backgroundColor,body:getComputedStyle(document.body).backgroundColor,viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio}};});
+      captures.push({name,...result,state,paint});await save('captures.json',captures);console.log(JSON.stringify({name,points:result.points,bounds:result.bounds,foregroundUnchanged:state.foregroundUnchanged}));
+    };
+    await capture('collapsed-initial-cyan','#19c8dc');
+    await capture('collapsed-initial-orange','#ec7828');
+    await search.fill('report');await page.getByRole('grid',{name:'Search results'}).waitFor();await delay(500);
+    await capture('expanded','#19c8dc');
+    await search.fill('');await page.waitForFunction(()=>innerHeight===66);await delay(500);
+    await capture('expanded-to-collapsed-cyan','#19c8dc');
+    await capture('expanded-to-collapsed-orange','#ec7828');
+    // Exercise the existing SearchExperience/controller service instance.
+    await search.press('Escape');
+    await page.locator('[data-launcher-visible="false"]').waitFor({state:'attached'});
+    const hideSamples=[];for(const wait of [0,50,200,500]){await delay(wait);hideSamples.push({wait,state:await status()});}await save('hide-samples.json',hideSamples);
+    let hidden=hideSamples.at(-1).state;
+    await save('hide-independent.json',{controllerStatus:hidden,win32:await command({operation:'visibility'}),service:await page.evaluate(async()=>{const{createWindowService}=await import('/src/platform/window/tauri-window-service.ts');return{type:createWindowService().constructor.name,tauri:'__TAURI_INTERNALS__'in window};})});
+    if(hidden.visible){
+      const direct=await page.evaluate(async()=>await(await import('/node_modules/@tauri-apps/api/core.js')).invoke('hide_lumen_window'));
+      await delay(500);hidden=await status();await save('hide-direct.json',{direct,status:hidden,win32:await command({operation:'visibility'})});
+    }
+    await save('invoke-trace.json',await page.evaluate(()=>window.__launcherInvokeTrace));
+    if(hidden.visible)throw Error('Fixture did not hide');
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('lumen:diagnostics-show-launcher')));await search.waitFor({state:'visible'});await delay(500);
+    await capture('collapsed-reopened','#19c8dc');
+    await save('attachment.json',{root,rootPid:child.pid,listenerPid,version,ownedProcesses:processes.filter(p=>owned.has(p.ProcessId)),underlayPid:underlay.pid,initial,hidden,final:await status()});
+  } finally {
+    if(underlay){underlay.stdin.end(JSON.stringify({operation:'exit'})+'\n');await delay(150);if(underlay.exitCode===null)underlay.kill();}
+    try{await cdp?.close();}finally{if(child.exitCode===null&&child.signalCode===null)execFileSync('taskkill.exe',['/PID',String(child.pid),'/T','/F'],{windowsHide:true});}
+    await save('fixture.log',log);await save('underlay.log',underlayLog);
+    await save('cleanup.json',{root,rootPid:child.pid,childExit:child.exitCode,childSignal:child.signalCode,underlayPid:underlay?.pid,underlayExit:underlay?.exitCode});
+  }
+},undefined,{reuseExistingServer:false});

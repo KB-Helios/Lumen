@@ -21,7 +21,7 @@ concurrency:
 jobs:
   verify-package:
     name: Verify and package
-    runs-on: windows-2025
+    runs-on: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.LUMEN_SIGNING_RUNNER || 'windows-2025' }}
     timeout-minutes: 120
     env:
       CARGO_TERM_COLOR: always
@@ -55,6 +55,19 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Verify product versions
+        run: bun scripts/release.ts version
+
+      - name: Require existing release signing identity before release work
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          LUMEN_SIGN_CERT_SHA1: ${{ vars.LUMEN_SIGN_CERT_SHA1 }}
+          LUMEN_SIGN_CERT_SUBJECT: ${{ vars.LUMEN_SIGN_CERT_SUBJECT }}
+          LUMEN_SIGN_CERT_STORE: ${{ vars.LUMEN_SIGN_CERT_STORE }}
+          LUMEN_SIGN_TIMESTAMP_URL: ${{ vars.LUMEN_SIGN_TIMESTAMP_URL }}
+        run: bun run release:preflight
+
       - name: Typecheck
         run: bun run typecheck
 
@@ -67,12 +80,46 @@ jobs:
       - name: Run native answer bridge tests
         run: bun run test:answer-bridge
 
-      - name: Run Edge end-to-end tests
+      - name: Run native performance and dev server tooling tests
+        run: bun run test:tooling
+
+      - name: Qualify production profiling in Edge
+        run: bun run test:performance
+        timeout-minutes: 5
+
+      - name: Preserve production profiling samples
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lumen-production-profile-${{ github.run_id }}
+          path: test-results/performance-results.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Run Edge functional tests in development mode
         run: bun run test:e2e
         timeout-minutes: 45
 
       - name: Stage sidecars
         run: bun run stage:sidecars
+
+      - name: Verify real vendor signatures and reject modified PE bytes
+        run: powershell.exe -NoProfile -File scripts/test-release-signatures.ps1
+
+      - name: Verify actual sparse identity metadata and signing admission
+        run: powershell.exe -NoProfile -File scripts/test-identity-package.ps1
+
+      - name: Verify pinned Gateway matches compiled native admission
+        working-directory: src-tauri
+        run: cargo test --all-features -j 1 pinned_gateway_digest_matches_compiled_admission -- --ignored --test-threads=1
+
+      - name: Verify pinned workers and staging integrity
+        run: bun test workers/rivet-wasm.test.ts scripts/stage-rivet-engine.test.ts scripts/stage-windows-ai.test.ts workers/enrichment-queue.test.ts workers/improvement-queue.test.ts workers/lease-deadline.test.ts
+
+      - name: Verify compiled enrichment recovery
+        env:
+          LUMEN_COMPILED_ENRICHMENT_TEST: '1'
+        run: bun test workers/enrichment-runtime.test.ts
 
       - name: Check Rust formatting
         working-directory: src-tauri
@@ -86,28 +133,35 @@ jobs:
         working-directory: src-tauri
         run: cargo test --all-features
 
+      - name: Verify compiled native enrichment consumer
+        working-directory: src-tauri
+        run: cargo test --all-features -j 1 compiled_enrichment_consumer -- --ignored --test-threads=1
+
+      - name: Verify compiled native enrichment ownership and restart
+        working-directory: src-tauri
+        run: cargo test --all-features -j 1 rivet_worker_ -- --ignored --test-threads=1
+
+      - name: Verify compiled improvement queue crash recovery and fencing
+        working-directory: src-tauri
+        run: cargo test --all-features -j 1 improvement_worker_recovers_crash_and_fences_old_generation -- --ignored --test-threads=1
+
       - name: Verify native answers in Edge
         run: bun run test:answer-native
         timeout-minutes: 5
 
-      - name: Verify release version
+      - name: Build installers
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: bun run tauri build
+
+      - name: Build and verify signed release payload
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          $packageVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
-          $tauriVersion = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          if ($packageVersion -cne $tauriVersion) {
-            throw "Version mismatch: package.json=$packageVersion tauri.conf.json=$tauriVersion"
-          }
-          $expectedTag = "v$packageVersion"
-          if ($env:RELEASE_TAG -cne $expectedTag) {
-            throw "Release tag $env:RELEASE_TAG must equal $expectedTag"
-          }
-
-      - name: Build installers
-        run: bun run tauri build
+          LUMEN_SIGN_CERT_SHA1: ${{ vars.LUMEN_SIGN_CERT_SHA1 }}
+          LUMEN_SIGN_CERT_SUBJECT: ${{ vars.LUMEN_SIGN_CERT_SUBJECT }}
+          LUMEN_SIGN_CERT_STORE: ${{ vars.LUMEN_SIGN_CERT_STORE }}
+          LUMEN_SIGN_TIMESTAMP_URL: ${{ vars.LUMEN_SIGN_TIMESTAMP_URL }}
+        run: bun run release:build
 
       - name: Verify installer artifacts
         shell: pwsh
@@ -122,7 +176,12 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: lumen-windows-x64-${{ github.sha }}
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            .build/release/verified.json
+            .build/release/seal.json
+            .build/release/provenance.json
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
 
@@ -155,12 +214,19 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_CERT_SHA1: ${{ vars.LUMEN_SIGN_CERT_SHA1 }}
         run: |
           mapfile -t nsis < <(find installers -type f -name '*-setup.exe' -print)
+          mapfile -t reports < <(find installers -type f -name 'verified.json' -print)
           if [[ ${#nsis[@]} -ne 1 || ! -s "${nsis[0]}" ]]; then
             printf 'Expected exactly one non-empty NSIS installer, found %s\n' "${#nsis[@]}" >&2
             exit 1
           fi
+          [[ ${#reports[@]} -eq 1 && -n "$RELEASE_CERT_SHA1" ]]
+          jq -e --arg version "${GITHUB_REF_NAME#v}" --arg filename "$(basename "${nsis[0]}")" --arg cert "$RELEASE_CERT_SHA1" \
+            '.version == 1 and .productVersion == $version and .filename == $filename and .owner.thumbprint == $cert and (.binding | startswith("lumen-release-v1:"))' "${reports[0]}"
+          expected=$(jq -er '.sha256 | select(test("^[a-f0-9]{64}$"))' "${reports[0]}")
+          printf '%s  %s\n' "$expected" "${nsis[0]}" | sha256sum --check --strict
           gh release create "$GITHUB_REF_NAME" "${nsis[0]}" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \

@@ -1,0 +1,92 @@
+diff --git a/dist/tsup/mod.cjs b/dist/tsup/mod.cjs
+index 24d48bf213bc05108f781846b35d954887f07447..001c1f34520b1946b5d681d0366adb80a7b651a9 100644
+--- a/dist/tsup/mod.cjs
++++ b/dist/tsup/mod.cjs
+@@ -6236,7 +6236,7 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+     buildActorConfig(definition, registryConfig, runtime.kind)
+   );
+ }
+-async function buildServeConfig(config) {
++async function buildServeConfig(config, runtimeKind) {
+   var _a;
+   if (!config.endpoint) {
+     throw nativeEndpointNotConfiguredError();
+@@ -6256,7 +6256,7 @@ async function buildServeConfig(config) {
+     serverlessValidateEndpoint: config.validateServerlessEndpoint,
+     serverlessMaxStartPayloadBytes: config.serverless.maxStartPayloadBytes
+   };
+-  try {
++  if (runtimeKind === "napi") try {
+     const { getEnginePath } = await loadEngineCli();
+     serveConfig.engineBinaryPath = getEnginePath();
+   } catch (error) {
+@@ -6291,7 +6291,7 @@ async function buildRegistryWithRuntime(config, runtime) {
+   return {
+     runtime,
+     registry,
+-    serveConfig: await buildServeConfig(config)
++    serveConfig: await buildServeConfig(config, runtime.kind)
+   };
+ }
+ async function buildConfiguredRegistry(config) {
+diff --git a/dist/tsup/mod.js b/dist/tsup/mod.js
+index f77b7d33ada6753a149b47be7383b199b8372acf..bab41d81a8debcb183a399eee34eb3afbb84f882 100644
+--- a/dist/tsup/mod.js
++++ b/dist/tsup/mod.js
+@@ -6236,7 +6236,7 @@ function buildNativeFactory(runtime, registryConfig, definition) {
+     buildActorConfig(definition, registryConfig, runtime.kind)
+   );
+ }
+-async function buildServeConfig(config) {
++async function buildServeConfig(config, runtimeKind) {
+   var _a;
+   if (!config.endpoint) {
+     throw nativeEndpointNotConfiguredError();
+@@ -6256,7 +6256,7 @@ async function buildServeConfig(config) {
+     serverlessValidateEndpoint: config.validateServerlessEndpoint,
+     serverlessMaxStartPayloadBytes: config.serverless.maxStartPayloadBytes
+   };
+-  try {
++  if (runtimeKind === "napi") try {
+     const { getEnginePath } = await loadEngineCli();
+     serveConfig.engineBinaryPath = getEnginePath();
+   } catch (error) {
+@@ -6291,7 +6291,7 @@ async function buildRegistryWithRuntime(config, runtime) {
+   return {
+     runtime,
+     registry,
+-    serveConfig: await buildServeConfig(config)
++    serveConfig: await buildServeConfig(config, runtime.kind)
+   };
+ }
+ async function buildConfiguredRegistry(config) {
+diff --git a/src/registry/native.ts b/src/registry/native.ts
+index cc9a3541ac0601c21d200c353bc45a1a18ac96e3..7d2f66ceeb1322d39cbd2465da1fefcdb660d442 100644
+--- a/src/registry/native.ts
++++ b/src/registry/native.ts
+@@ -5016,6 +5016,7 @@ export function buildNativeFactory(
+ 
+ export async function buildServeConfig(
+ 	config: RegistryConfig,
++	runtimeKind: CoreRuntime["kind"],
+ ): Promise<RuntimeServeConfig> {
+ 	if (!config.endpoint) {
+ 		throw nativeEndpointNotConfiguredError();
+@@ -5045,7 +5046,7 @@ export async function buildServeConfig(
+ 	// (remote-only install, unsupported platform, optional deps skipped), leave
+ 	// it unset and let the core report `engine.binary_unavailable` if it actually
+ 	// needs one.
+-	try {
++	if (runtimeKind === "napi") try {
+ 		const { getEnginePath } = await loadEngineCli();
+ 		serveConfig.engineBinaryPath = getEnginePath();
+ 	} catch (error) {
+@@ -5103,7 +5104,7 @@ export async function buildRegistryWithRuntime(
+ 	return {
+ 		runtime,
+ 		registry,
+-		serveConfig: await buildServeConfig(config),
++		serveConfig: await buildServeConfig(config, runtime.kind),
+ 	};
+ }
+ 

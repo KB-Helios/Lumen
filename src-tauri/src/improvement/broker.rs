@@ -30,11 +30,14 @@ pub struct GatewayBroker {
     account: Arc<tokio::sync::Mutex<Account>>,
     cancelled: CancellationToken,
     current: Arc<dyn Fn() -> bool + Send + Sync>,
+    shared_budget: Arc<crate::gateway::enrichment_budget::EnrichmentBudget>,
+    budget_deferred: Arc<std::sync::atomic::AtomicBool>,
 }
 impl GatewayBroker {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         endpoint: (String, String),
+        shared_budget: Arc<crate::gateway::enrichment_budget::EnrichmentBudget>,
         alias: String,
         store: Arc<ImprovementStore>,
         cloud: bool,
@@ -69,6 +72,8 @@ impl GatewayBroker {
             account: Arc::new(tokio::sync::Mutex::new(Account { fingerprint: None })),
             cancelled,
             current,
+            shared_budget,
+            budget_deferred: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
     }
     fn admitted(&self) -> bool {
@@ -81,6 +86,10 @@ impl GatewayBroker {
                     && (!self.cloud || s.cloud_consent)
                     && (s.route_mode == RouteMode::Cloud) == self.cloud
             })
+    }
+    pub(crate) fn budget_deferred(&self) -> bool {
+        self.budget_deferred
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
     async fn send(&self, mut body: Value, cancel: CancellationToken) -> Result<Value, String> {
         validate_model_body(&body)?;
@@ -121,6 +130,20 @@ impl GatewayBroker {
             self.budget,
             self.deadline.as_millis() as u64,
         )?;
+        let mut shared = match self.shared_budget.reserve(Some(reserved)) {
+            Ok(reservation) => reservation,
+            Err(_) => {
+                self.store.settle_tokens(&reservation, 0)?;
+                self.budget_deferred
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                return Err(crate::gateway::enrichment_budget::DEFERRED.into());
+            }
+        };
+        if !self.admitted() {
+            shared.cancel_unsent()?;
+            self.store.settle_tokens(&reservation, 0)?;
+            return Err("improvement_cancelled".into());
+        }
         body["model"] = json!(self.alias);
         body["stream"] = json!(false);
         body.as_object_mut()
@@ -155,32 +178,42 @@ impl GatewayBroker {
             let mut response: Value = serde_json::from_slice(&bytes)
                 .map_err(|_| "Improvement model response is invalid.")?;
             response["lumenHostLatencyMs"] = json!(began.elapsed().as_millis().max(1) as u64);
-            let input = response["usage"]["prompt_tokens"]
-                .as_u64()
-                .ok_or("Improvement requires metered model usage.")?;
-            let output = response["usage"]["completion_tokens"]
-                .as_u64()
-                .ok_or("Improvement requires metered model usage.")?;
-            let used = input
-                .checked_add(output)
-                .ok_or("improvement_budget_exceeded")?;
-            if response["choices"]
-                .as_array()
-                .is_none_or(|choices| choices.len() != 1)
-                || !response["choices"][0]["message"].is_object()
-                || !matches!(
-                    response["choices"][0]["finish_reason"].as_str(),
-                    Some("stop" | "tool_calls")
-                )
-            {
-                return Err("Improvement model returned incomplete output.".into());
-            }
-            Ok::<(Value, u64), String>((response, used))
+            Ok::<Value, String>(response)
         };
         let remaining = self.deadline.saturating_sub(self.began.elapsed());
-        let (response, used) = tokio::select! {_=cancel.cancelled()=>return Err("improvement_cancelled".into()),_=self.cancelled.cancelled()=>return Err("improvement_cancelled".into()),result=tokio::time::timeout(remaining,operation)=>result.map_err(|_|"improvement_budget_exceeded")??};
-        if !self.store.settle_tokens(&reservation, used)? {
+        let response = tokio::select! {_=cancel.cancelled()=>return Err("improvement_cancelled".into()),_=self.cancelled.cancelled()=>return Err("improvement_cancelled".into()),result=tokio::time::timeout(remaining,operation)=>result.map_err(|_|"improvement_budget_exceeded".to_owned()).and_then(|result| result)};
+        let response = match response {
+            Ok(response) => response,
+            Err(_) => {
+                let _ = shared.settle(None);
+                self.budget_deferred
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                return Err(crate::gateway::enrichment_budget::DEFERRED.into());
+            }
+        };
+        let used = crate::gateway::enrichment_budget::usage_tokens(&response);
+        let settlement = shared.settle(used);
+        let job_within_budget = used
+            .map(|used| self.store.settle_tokens(&reservation, used))
+            .transpose()?;
+        if settlement.is_err() {
+            self.budget_deferred
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            return Err(crate::gateway::enrichment_budget::DEFERRED.into());
+        }
+        if job_within_budget != Some(true) {
             return Err("improvement_budget_exceeded".into());
+        }
+        if response["choices"]
+            .as_array()
+            .is_none_or(|choices| choices.len() != 1)
+            || !response["choices"][0]["message"].is_object()
+            || !matches!(
+                response["choices"][0]["finish_reason"].as_str(),
+                Some("stop" | "tool_calls")
+            )
+        {
+            return Err("Improvement model returned incomplete output.".into());
         }
         let model = response["model"]
             .as_str()
@@ -243,6 +276,10 @@ mod tests {
     fn broker(url: String, store: Arc<ImprovementStore>, cloud: bool, limit: u64) -> GatewayBroker {
         GatewayBroker::new(
             (url, "fixture-secret".into()),
+            crate::gateway::enrichment_budget::EnrichmentBudget::open(std::path::Path::new(
+                ":memory:",
+            ))
+            .unwrap(),
             if cloud {
                 "lumen.improvement.cloud"
             } else {
@@ -370,8 +407,9 @@ mod tests {
                 .request(body(), CancellationToken::new())
                 .await
                 .unwrap_err()
-                .contains("metered")
+                .contains(crate::gateway::enrichment_budget::DEFERRED)
         );
+        assert!(broker.budget_deferred());
         assert_eq!(
             broker
                 .request(body(), CancellationToken::new())
@@ -380,6 +418,40 @@ mod tests {
             "improvement_budget_exceeded"
         );
         assert_eq!(worker.join().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn shared_enrichment_budget_defers_broker_before_http_and_refunds_job_reservation() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let broker = broker(
+            format!("http://{}", listener.local_addr().unwrap()),
+            enabled(false, false),
+            false,
+            20000,
+        );
+        let mut existing = broker.shared_budget.reserve(None).unwrap();
+        existing.settle(Some(500000)).unwrap();
+        for _ in 0..20 {
+            assert_eq!(
+                broker
+                    .request(body(), CancellationToken::new())
+                    .await
+                    .unwrap_err(),
+                crate::gateway::enrichment_budget::DEFERRED
+            );
+        }
+        assert!(broker.budget_deferred());
+        assert!(
+            broker
+                .store
+                .phase_budget_valid(&broker.job, "generation")
+                .unwrap()
+        );
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
     }
 
     #[tokio::test]

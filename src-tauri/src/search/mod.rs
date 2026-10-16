@@ -1,4 +1,5 @@
 mod embedding;
+mod enrichment;
 mod extraction;
 mod index;
 mod index_worker;
@@ -154,13 +155,16 @@ pub async fn get_file_metadata(root: String, path: String) -> Result<FileRecord,
 #[tauri::command]
 pub async fn get_basic_preview(
     privacy: State<'_, crate::privacy::PrivacyRuntime>,
+    index: State<'_, IndexRuntime>,
     root: String,
     path: String,
 ) -> Result<BasicPreview, SearchFailure> {
     privacy.ensure_previews_enabled()?;
     let privacy = privacy.inner().clone();
+    let index = index.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        get_basic_preview_if_enabled(&privacy, Path::new(&root), Path::new(&path))
+        privacy.ensure_previews_enabled()?;
+        preview::get_indexed_preview(&index, &privacy, Path::new(&root), Path::new(&path))
     })
     .await
     .map_err(|error| SearchFailure::new("preview-failed", error.to_string(), None))?
@@ -190,15 +194,6 @@ pub fn open_containing_folder<R: Runtime>(
     opening::open_containing_folder_impl(&app, Path::new(&root), Path::new(&path))
 }
 
-fn get_basic_preview_if_enabled(
-    privacy: &crate::privacy::PrivacyRuntime,
-    root: &Path,
-    path: &Path,
-) -> Result<BasicPreview, SearchFailure> {
-    privacy.ensure_previews_enabled()?;
-    preview::get_basic_preview_impl(root, path)
-}
-
 #[cfg(test)]
 mod privacy_tests {
     use super::*;
@@ -209,12 +204,21 @@ mod privacy_tests {
         privacy.set_previews_enabled(false);
         let missing =
             std::env::temp_dir().join(format!("lumen-disabled-preview-{}", uuid::Uuid::new_v4()));
+        let fixture = test_support::SearchFixture::new("disabled-preview");
+        let index = IndexRuntime::open(
+            &fixture.root().join("index.sqlite"),
+            Path::new("missing.dll"),
+            false,
+        )
+        .unwrap();
 
-        let error = get_basic_preview_if_enabled(&privacy, &missing, &missing.join("secret.txt"))
-            .unwrap_err();
+        let error =
+            preview::get_indexed_preview(&index, &privacy, &missing, &missing.join("secret.txt"))
+                .unwrap_err();
 
         assert_eq!(error.code, "permission-denied");
         assert_eq!(error.path, None);
+        index.stop_index_worker();
     }
 }
 
@@ -223,6 +227,37 @@ pub(crate) mod test_support {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    pub fn small_pdf(text: Option<&str>) -> Vec<u8> {
+        use std::fmt::Write as _;
+        let content = text
+            .map(|text| format!("BT /F1 12 Tf 40 700 Td ({text}) Tj ET"))
+            .unwrap_or_default();
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_owned(),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        ];
+        let mut pdf = "%PDF-1.4\n".to_owned();
+        let mut offsets = Vec::new();
+        for (index, object) in objects.iter().enumerate() {
+            offsets.push(pdf.len());
+            write!(pdf, "{} 0 obj\n{object}\nendobj\n", index + 1).unwrap();
+        }
+        let xref = pdf.len();
+        pdf.push_str("xref\n0 6\n0000000000 65535 f \n");
+        for offset in offsets {
+            writeln!(pdf, "{offset:010} 00000 n ").unwrap();
+        }
+        write!(
+            pdf,
+            "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+        )
+        .unwrap();
+        pdf.into_bytes()
+    }
 
     pub struct SearchFixture {
         base: PathBuf,

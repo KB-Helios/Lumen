@@ -1,0 +1,10 @@
+rtk : warning: in the working copy of '.superpowers/callback-recovery/evidence/sdk.original.js', LF will be replaced by
+ CRLF the next time Git touches it
+At line:1 char:1
++ rtk proxy git diff --no-index -- .superpowers/callback-recovery/evide ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: in the... Git touches it:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: in the working copy of '.superpowers/callback-recovery/evidence/sdk.diagnostic.js', LF will be replaced by CRL
+F the next time Git touches it

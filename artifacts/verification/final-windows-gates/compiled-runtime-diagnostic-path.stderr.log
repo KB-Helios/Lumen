@@ -1,0 +1,8 @@
+
+.superpowers\task14c-diagnostic-runtime.test.ts:
+(pass) compiled worker authenticates and persists fenced enrichment leases through crash [41977.53ms]
+
+ 1 pass
+ 0 fail
+ 196 expect() calls
+Ran 1 test across 1 file. [42.09s]

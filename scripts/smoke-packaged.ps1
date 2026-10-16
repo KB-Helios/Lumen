@@ -1,6 +1,7 @@
 param(
     [string]$InstallerPath = "src-tauri\target\release\bundle\nsis\Lumen_0.1.0_x64-setup.exe",
     [string]$EvidencePath = "artifacts\packaged\packaged-smoke.json",
+    [string]$ReleaseSealPath,
     [switch]$PreflightOnly
 )
 
@@ -39,11 +40,13 @@ function Get-SmokeSha256([string]$Path) {
 }
 
 function Assert-ComputerUseRuntime([string]$ApplicationDirectory) {
-    $inventoryPath = Join-Path $repositoryRoot 'workers\computer-use-preview\.build\staged-runtime-inventory.json'
+    $inventoryPath = if ($ReleaseSealPath) { (Resolve-Path -LiteralPath $ReleaseSealPath).Path } else { Join-Path $repositoryRoot 'workers\computer-use-preview\.build\staged-runtime-inventory.json' }
     $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
     if ($inventory.version -ne 1) { throw 'The staged Computer Use inventory is unavailable.' }
+    $files = if ($ReleaseSealPath) { $inventory.final } else { $inventory.files }
     $expectedFiles = @()
-    foreach ($entry in $inventory.files.PSObject.Properties) {
+    foreach ($entry in $files.PSObject.Properties) {
+        if ($ReleaseSealPath -and $entry.Name -ne 'lumen-computer-use.exe' -and -not $entry.Name.StartsWith('computer-use-runtime/')) { continue }
         $relativeFile = if ($entry.Name -eq 'lumen-computer-use-x86_64-pc-windows-msvc.exe') { 'lumen-computer-use.exe' } else { $entry.Name }
         $file = Join-Path $ApplicationDirectory $relativeFile
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw 'An installed Computer Use resource is missing.' }
@@ -72,6 +75,7 @@ function Get-LumenProfileState {
     $desktop = Get-ChildItem -LiteralPath ([Environment]::GetFolderPath("Desktop")) -Filter "Lumen.lnk" -ErrorAction SilentlyContinue
     $processes = Get-Process -Name "Lumen" -ErrorAction SilentlyContinue
     [ordered]@{
+        appDataExists = (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'com.bridgehammer.lumen')) -or (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'com.bridgehammer.lumen'))
         uninstallRegistration = Test-Path -LiteralPath $uninstallKey
         productRegistration = Test-Path -LiteralPath $productKey
         autostart = $null -ne $runValue
@@ -107,7 +111,7 @@ function Remove-SmokeRegistration {
 
 try {
     $profileState = Get-LumenProfileState
-    if ($profileState.uninstallRegistration -or $profileState.productRegistration -or $profileState.autostart -or $profileState.shortcuts -or $profileState.processes) {
+    if ($profileState.appDataExists -or $profileState.uninstallRegistration -or $profileState.productRegistration -or $profileState.autostart -or $profileState.shortcuts -or $profileState.processes) {
         $profileSummary = $profileState | ConvertTo-Json -Compress
         throw "Packaged smoke requires a clean Windows user profile with no installed, running, registered, or shortcut-linked Lumen instance: $profileSummary"
     }
@@ -115,6 +119,14 @@ try {
     if ($PreflightOnly) {
         [ordered]@{cleanProfilePreflight = $true} | ConvertTo-Json
         return
+    }
+    if ($ReleaseSealPath) {
+        $expectedSeal = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.build/release/seal.json'))
+        if ((Resolve-Path -LiteralPath $ReleaseSealPath).Path -cne $expectedSeal) { throw 'Signed smoke must use this checkout''s verified release seal.' }
+        & bun (Join-Path $repositoryRoot 'scripts/release.ts') verify
+        if ($LASTEXITCODE -ne 0) { throw 'Signed release verification failed before installation.' }
+        $verified = Get-Content -LiteralPath (Join-Path $repositoryRoot '.build/release/verified.json') -Raw | ConvertFrom-Json
+        if ((Get-SmokeSha256 $installer) -cne $verified.sha256) { throw 'Smoke installer differs from the verified signed release.' }
     }
     New-Item -ItemType Directory -Force -Path $installRoot, $isolatedAppData, $isolatedLocalAppData | Out-Null
     $env:APPDATA = $isolatedAppData

@@ -1,0 +1,18 @@
+{
+  "label": "native-proxy",
+  "command": "node",
+  "args": [
+    ".superpowers/task14c-native-exact.mjs",
+    "proxy"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T14:14:14.685Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "0378625cf8696ee2a35d17b992b63613e9856f8c7409fab0302c4f3f5a57da0d",
+  "releaseMarker": null,
+  "runnerPid": 26148,
+  "pid": 9688,
+  "ended": "2026-10-15T14:14:17.822Z",
+  "code": 0,
+  "signal": null
+}

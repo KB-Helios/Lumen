@@ -11,6 +11,40 @@ vi.mock('motion/mini', () => ({animate: native.animate}));
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); native.animate.mockReset(); native.stop.mockReset(); useSelectionStore.getState().reset(); useLauncherStore.getState().reset(); });
 
 describe('SelectionCapsule native geometry', () => {
+  it('skips unchanged resize notifications and measures actual size changes in both directions', async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++nextFrame, callback); return nextFrame; });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    const resizeCallbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { resizeCallbacks.push(callback); }
+      observe() {}
+      disconnect() {}
+    });
+    let rowHeight = 52;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return {top: this.dataset.resultId ? 46 : 0, width: 200, height: this.dataset.resultId ? rowHeight : 400} as DOMRect;
+    });
+    const ref = createRef<HTMLDivElement>();
+    const {container} = render(<div ref={ref}><SelectionCapsule containerRef={ref} selectedId="a" reducedMotion /><div data-result-id="a" /></div>);
+    await act(async () => {});
+    const row = container.querySelector('[data-result-id]')!;
+    const capsule = container.querySelector<HTMLElement>('[data-selection-capsule]')!;
+    const notify = () => resizeCallbacks[0]!([{target: row, borderBoxSize: [{inlineSize: 200, blockSize: rowHeight}]} as unknown as ResizeObserverEntry], {} as ResizeObserver);
+    act(notify);
+    expect(frames.size).toBe(0);
+    for (const height of [60, 52]) {
+      rowHeight = height;
+      act(notify);
+      expect(frames.size).toBe(1);
+      act(() => { const callback = frames.values().next().value!; frames.clear(); callback(0); });
+      expect(capsule.style.height).toBe(`${height}px`);
+      act(notify);
+      expect(frames.size).toBe(0);
+    }
+  });
+
   it.each(['native', 'document'] as const)('disconnects observers and cancels pending measurements while %s hidden, then snaps the latest selection', async (visibility) => {
     const frames = new Map<number, FrameRequestCallback>();
     let nextFrame = 0;

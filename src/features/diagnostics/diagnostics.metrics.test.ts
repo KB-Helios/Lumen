@@ -21,6 +21,20 @@ it('distinguishes unavailable React measurements from a measured zero-duration c
 });
 
 describe('measureAfterPaint', () => {
+  it('preserves actual callback latency while separating queue time and nominal frame offset', () => {
+    let frame: FrameRequestCallback | undefined;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frame = callback; return 1; });
+    vi.spyOn(performance, 'now').mockReturnValueOnce(12).mockReturnValueOnce(30);
+
+    measureAfterPaint('selection-paint', 10);
+    frame?.(27);
+
+    expect(readDiagnosticMetrics().timings).toEqual([expect.objectContaining({
+      name: 'selection-paint', durationMs: 20,
+      frame: {startedAt: 10, queuedAt: 12, nominalAt: 27, callbackAt: 30},
+    })]);
+  });
+
   it('captures queued samples without writing User Timing entries', () => {
     const frames: FrameRequestCallback[] = [];
     const measure = vi.spyOn(performance, 'measure');

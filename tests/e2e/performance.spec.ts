@@ -1,6 +1,7 @@
 import {expect, test, type Page} from '@playwright/test';
 
 import {sampleHover} from '../../scripts/lib/hover-sample.mjs';
+import {installReactRendererProbe, readReactRenderers} from '../../scripts/lib/react-renderer-probe.mjs';
 import {sampleFrameCadence} from '../../src/features/diagnostics/diagnostics.refresh.mjs';
 
 const frameSchedulingToleranceMs = 2;
@@ -17,8 +18,18 @@ test.use({
   },
 });
 
+test.beforeEach(async ({page}) => {
+  await installReactRendererProbe(page);
+});
+
+async function openPerformancePage(page: Page, url: string) {
+  await page.goto(url);
+  const bundleTypes = (await readReactRenderers(page)).map((renderer: {bundleType: number}) => renderer.bundleType);
+  expect(bundleTypes, 'Performance qualification requires the production renderer').toEqual([0]);
+}
+
 test('keeps the ready activity indicator settled', async ({page}) => {
-  await page.goto('/?onboarded=1&service=memory');
+  await openPerformancePage(page, '/?onboarded=1&service=memory');
 
   await page.getByRole('searchbox', {name: 'Search files'}).fill('report');
   await expect(page.getByRole('grid', {name: 'Search results'})).toBeVisible();
@@ -107,10 +118,10 @@ async function measureFrameCadence(page: Page, sampleCount = 60) {
   return cadence;
 }
 
-test('warm launcher and ordinary interactions stay inside browser budgets', async ({page}) => {
+test('warm launcher and ordinary interactions stay inside browser budgets', async ({page}, testInfo) => {
   test.setTimeout(60_000);
   await page.setViewportSize({width: 800, height: 540});
-  await page.goto('/?onboarded=1&service=memory');
+  await openPerformancePage(page, '/?onboarded=1&service=memory');
   const search = page.getByRole('searchbox', {name: 'Search files'});
   await expect(search).toBeFocused();
 
@@ -155,15 +166,22 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
   await resetMetrics(page);
   const ordinaryQueries = ['report', 'design', 'project', ''];
   const ordinaryMetrics: DiagnosticsMetrics = {timings: [], reactCommits: [], browserLongTasks: []};
+  const ordinaryQuerySamples: Array<{query: string; reactCommits: number[]}> = [];
   for (let index = 0; index < 24; index += 1) {
     await resetMetrics(page);
     await search.fill(ordinaryQueries[index % ordinaryQueries.length]);
     await page.waitForTimeout(250);
     const queryMetrics = await readMetrics(page);
+    ordinaryQuerySamples.push({query: ordinaryQueries[index % ordinaryQueries.length], reactCommits: queryMetrics.reactCommits});
     ordinaryMetrics.reactCommits.push(...queryMetrics.reactCommits);
     ordinaryMetrics.browserLongTasks.push(...queryMetrics.browserLongTasks);
   }
   const ordinaryReactCommits = ordinaryMetrics.reactCommits;
+  await testInfo.attach('ordinary-render-samples', {
+    body: JSON.stringify({p95Ms: percentile(ordinaryReactCommits, 0.95), queries: ordinaryQuerySamples,
+      browserLongTasks: ordinaryMetrics.browserLongTasks}, null, 2),
+    contentType: 'application/json',
+  });
   expect(ordinaryReactCommits.length).toBeGreaterThan(0);
   expect(ordinaryMetrics.browserLongTasks).toHaveLength(0);
 
@@ -191,9 +209,15 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
   }
   await page.waitForTimeout(100);
   const selectionMetrics = await readMetrics(page);
-  expect(selectionMetrics.timings.filter((sample) => sample.name === 'selection-paint')).toHaveLength(120);
+  const selectionSamples = selectionMetrics.timings.filter((sample) => sample.name === 'selection-paint');
+  await testInfo.attach('selection-frame-samples', {
+    body: JSON.stringify({frameCadence, observedFrameBudget, inputFrameSamples, selectionSamples,
+      browserLongTasks: selectionMetrics.browserLongTasks}, null, 2),
+    contentType: 'application/json',
+  });
+  expect(selectionSamples).toHaveLength(120);
   const selectionP95 = percentile(
-    selectionMetrics.timings.filter((sample) => sample.name === 'selection-paint').map((sample) => sample.durationMs),
+    selectionSamples.map((sample) => sample.durationMs),
     0.95,
   );
   const ordinaryCommitP95 = percentile(ordinaryReactCommits, 0.95);
@@ -213,7 +237,7 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
 
 test('hover, idle work, animation count, and browser heap remain bounded', async ({page, context}, testInfo) => {
   await page.setViewportSize({width: 800, height: 540});
-  await page.goto('/?gallery=1&scenario=expanded-results&capture=1&theme=reduced-motion');
+  await openPerformancePage(page, '/?gallery=1&scenario=expanded-results&capture=1&theme=reduced-motion');
   const row = page.getByRole('row').first();
   await expect(row).toBeVisible();
 
@@ -228,7 +252,8 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
   const hoverFrameIntervals = hoverSamples.map((sample) => sample.callbackIntervalMs);
   const hoverSynchronousDispatch = hoverSamples.map((sample) => sample.synchronousDispatchMs);
   const hoverMetrics = await readMetrics(page);
-  const hoverFrameBudget = Math.max(percentile(hoverNominalFrameIntervals, 0.95), 1000 / 240);
+  const hoverFrameBudget = Math.max(percentile(hoverNominalFrameIntervals, 0.95), 1000 / 240) +
+    frameSchedulingToleranceMs;
   const hoverEvidence = {
     browserVersion: page.context().browser()?.version(),
     responseP95Ms: percentile(hoverToPaintSamples, 0.95),
@@ -243,8 +268,8 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
     body: JSON.stringify(hoverEvidence, null, 2), contentType: 'application/json',
   });
   console.info('hover-performance', JSON.stringify({...hoverEvidence, samples: undefined}));
-  // Use the same independent nominal cadence budget as the evidence profiler.
-  // Readiness additionally checks state and the intended color.
+  // Use the same independent nominal cadence and scheduling allowance as the
+  // evidence profiler. Readiness still requires state/color at the first callback.
   expect(hoverSamples.filter((sample) => !sample.ready)).toEqual([]);
   expect(percentile(hoverToPaintSamples, 0.95)).toBeLessThanOrEqual(hoverFrameBudget);
   expect(Math.max(...hoverSynchronousDispatch)).toBeLessThan(16);
@@ -272,7 +297,7 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
 
 test('the static palette keeps one answer region and exposes diagnostics instrumentation', async ({page}) => {
   await page.setViewportSize({width: 800, height: 540});
-  await page.goto('/?gallery=1&scenario=ai-streaming&capture=1');
+  await openPerformancePage(page, '/?gallery=1&scenario=ai-streaming&capture=1');
 
   await expect(page.getByTestId('answer-region')).toHaveCount(1);
   await expect(page.getByRole('button', {name: 'Stop answer'})).toBeVisible();

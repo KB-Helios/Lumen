@@ -1,0 +1,6 @@
+
+running 1 test
+test search::indexing::freshness_tests::compiled_enrichment_consumer_indexes_scanned_pdf_image_audio_video_and_cancels_stop ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 408 filtered out; finished in 1.94s
+

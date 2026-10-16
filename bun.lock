@@ -23,7 +23,7 @@
         "react": "^19.1.0",
         "react-aria-components": "^1.19.0",
         "react-dom": "^19.1.0",
-        "rivetkit": "^2.3.10",
+        "rivetkit": "2.3.10",
         "sonner": "^2.0.7",
         "tailwind-merge": "^3.6.0",
         "zod": "^4.4.3",
@@ -50,6 +50,9 @@
         "vitest": "^4.1.10",
       },
     },
+  },
+  "patchedDependencies": {
+    "rivetkit@2.3.10": "patches/rivetkit@2.3.10.patch",
   },
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.5.0", "", {}, "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q=="],

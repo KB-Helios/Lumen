@@ -19,6 +19,14 @@ mod query;
 #[path = "index_cleanup_tests.rs"]
 mod cleanup_tests;
 
+#[cfg(test)]
+#[path = "enrichment_tests.rs"]
+mod enrichment_tests;
+
+#[cfg(test)]
+#[path = "recovery_tests.rs"]
+mod recovery_tests;
+
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
     #[error(transparent)]
@@ -320,6 +328,27 @@ fn migrate_content(connection: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+fn file_fts_scope(
+    transaction: &rusqlite::Transaction<'_>,
+    file_id: i64,
+) -> rusqlite::Result<&'static str> {
+    // Use point deletes only when each live chunk has the matching FTS rowid.
+    let aligned = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM chunks WHERE file_id=?1)
+         AND NOT EXISTS(SELECT 1 FROM chunks WHERE file_id=?1 AND NOT EXISTS(
+           SELECT 1 FROM search_fts WHERE rowid=chunks.id
+             AND CAST(search_fts.file_id AS INTEGER)=?1
+             AND CAST(search_fts.chunk_id AS INTEGER)=chunks.id))",
+        [file_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    Ok(if aligned {
+        "rowid IN (SELECT id FROM chunks WHERE file_id=?1)"
+    } else {
+        "file_id=?1"
+    })
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct IndexedChunk {
     pub text: String,
@@ -361,7 +390,7 @@ pub struct IndexedHit {
     pub rank: f64,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnrichmentJobRecord {
     pub idempotency_key: String,
@@ -451,6 +480,10 @@ fn store_inventory(connection: &Connection, file_id: i64, metadata: &str) -> Ind
 }
 
 impl IndexDatabase {
+    #[cfg(test)]
+    pub(super) fn inspect_connection<T>(&self, operation: impl FnOnce(&mut Connection) -> T) -> T {
+        operation(&mut self.connection.lock().unwrap())
+    }
     pub(super) fn policy_inventory(&self) -> IndexResult<Vec<PolicyInventoryItem>> {
         let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
         let mut statement = connection.prepare("SELECT files.stable_id, files.root_path, files.path, file_inventory.metadata FROM files LEFT JOIN file_inventory ON file_inventory.file_id = files.id")?;
@@ -630,7 +663,8 @@ impl IndexDatabase {
                     "the verified vector runtime path is missing".to_owned(),
                 )
             })?;
-            connection.execute_batch(
+            let reset = connection.transaction()?;
+            reset.execute_batch(
                 "DROP TABLE vector_embeddings;
                  CREATE TABLE vector_embeddings (
                    chunk_id INTEGER PRIMARY KEY REFERENCES chunks(id) ON DELETE CASCADE,
@@ -642,6 +676,7 @@ impl IndexDatabase {
                    index_revision INTEGER NOT NULL
                  );",
             )?;
+            reset.commit()?;
             let replacement = Connection::open(database_path)?;
             register_or_load_sqlite_vector(&replacement, extension)?;
             configure(&replacement)?;
@@ -879,16 +914,37 @@ impl IndexDatabase {
     }
 
     pub fn representative_hit(&self, stable_id: &str) -> IndexResult<Option<IndexedHit>> {
+        self.representative_hit_with_limit(stable_id, i64::MAX, None)
+    }
+
+    pub(super) fn preview_hit(&self, stable_id: &str) -> IndexResult<Option<IndexedHit>> {
+        // SQLite counts characters here: at most 256 KiB is hydrated, then the
+        // native preview retains at most 64 KiB at a valid UTF-8 boundary.
+        self.representative_hit_with_limit(
+            stable_id,
+            64 * 1024,
+            Some(super::extraction::EXTRACTION_VERSION),
+        )
+    }
+
+    fn representative_hit_with_limit(
+        &self,
+        stable_id: &str,
+        text_limit: i64,
+        extraction_version: Option<&str>,
+    ) -> IndexResult<Option<IndexedHit>> {
         let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
         connection
             .query_row(
                 "SELECT files.stable_id, files.root_path, files.path, files.name,
                         files.content_hash, files.index_revision, COALESCE(chunks.extraction_kind, 'metadata'),
-                        COALESCE(chunks.text, ''), chunks.page, chunks.time_start_ms, chunks.time_end_ms
+                        substr(COALESCE(chunks.text, ''), 1, ?2), chunks.page, chunks.time_start_ms, chunks.time_end_ms
                  FROM files LEFT JOIN chunks ON chunks.file_id = files.id
-                 WHERE files.stable_id = ?1
+                   AND (?3 IS NULL OR (chunks.content_hash = files.content_hash
+                     AND chunks.index_revision = files.index_revision))
+                 WHERE files.stable_id = ?1 AND (?3 IS NULL OR files.extraction_version = ?3)
                  ORDER BY chunks.ordinal ASC LIMIT 1",
-                [stable_id],
+                rusqlite::params![stable_id, text_limit, extraction_version],
                 |row| {
                     Ok(IndexedHit {
                         stable_id: row.get(0)?,
@@ -1109,7 +1165,13 @@ impl IndexDatabase {
                  WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)",
                 [file_id],
             )?;
-            transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
+            transaction.execute(
+                &format!(
+                    "DELETE FROM search_fts WHERE {}",
+                    file_fts_scope(&transaction, file_id)?
+                ),
+                [file_id],
+            )?;
             transaction.execute(
                 "DELETE FROM enrichment_artifacts WHERE file_id = ?1",
                 [file_id],
@@ -1222,12 +1284,20 @@ impl IndexDatabase {
         let transaction = connection.transaction()?;
         let existing = transaction
             .query_row(
-                "SELECT id, index_revision FROM files WHERE stable_id = ?1",
+                "SELECT id, index_revision, root_path, path, name FROM files WHERE stable_id = ?1",
                 [stable_id],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                },
             )
             .optional()?;
-        if let Some((file_id, revision)) = existing {
+        if let Some((file_id, revision, old_root, old_path, old_name)) = existing {
             let previous: Option<String> = transaction
                 .query_row(
                     "SELECT metadata FROM file_inventory WHERE file_id = ?1",
@@ -1235,6 +1305,17 @@ impl IndexDatabase {
                     |row| row.get(0),
                 )
                 .optional()?;
+            // Unchanged maintenance must not rewrite every unindexed FTS row.
+            if previous.as_deref() == Some(metadata.as_str())
+                && old_root == root_path
+                && old_path == path
+                && old_name == name
+            {
+                transaction.commit()?;
+                return Ok(UpsertOutcome::Unchanged {
+                    revision: u64::try_from(revision).map_err(|_| IndexError::IntegerOverflow)?,
+                });
+            }
             // Missing inventory is a schema backfill, not evidence of a file change.
             let changed = previous
                 .as_deref()
@@ -1247,7 +1328,13 @@ impl IndexDatabase {
                     [file_id],
                 )?;
                 transaction.execute("DELETE FROM answer_cache WHERE file_id = ?1", [file_id])?;
-                transaction.execute("DELETE FROM search_fts WHERE file_id = ?1", [file_id])?;
+                transaction.execute(
+                    &format!(
+                        "DELETE FROM search_fts WHERE {}",
+                        file_fts_scope(&transaction, file_id)?
+                    ),
+                    [file_id],
+                )?;
                 transaction.execute("DELETE FROM chunks WHERE file_id = ?1", [file_id])?;
                 transaction.execute("UPDATE files SET content_hash = ?2, extraction_version = 'metadata-v1', index_revision = index_revision + 1 WHERE id = ?1", params![file_id, metadata_hash])?;
                 transaction.execute("INSERT INTO chunks (file_id, ordinal, text, extraction_kind, content_hash, index_revision) VALUES (?1, 0, '', 'metadata', ?2, ?3)", params![file_id, metadata_hash, revision + 1])?;
@@ -1629,6 +1716,76 @@ impl IndexDatabase {
             params![job.file_id, job.content_hash, job.kind, job.route],
             |row| row.get(0),
         ).map_err(IndexError::from)
+    }
+
+    pub(crate) fn complete_enrichment(
+        &self,
+        job: &EnrichmentJobRecord,
+        text: &str,
+        provider: &str,
+        model: &str,
+    ) -> IndexResult<bool> {
+        if text.trim().is_empty()
+            || text.len() > 64 * 1024
+            || text.contains('\0')
+            || !matches!(job.kind.as_str(), "ocr" | "transcription")
+        {
+            return Err(IndexError::Inventory(serde_json::Error::io(
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid enrichment result"),
+            )));
+        }
+        let mut connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        let transaction = connection.transaction()?;
+        let source = transaction.query_row(
+            "SELECT files.id, files.name, files.path, files.index_revision FROM files JOIN enrichment_jobs ON enrichment_jobs.file_id=files.id WHERE files.stable_id=?1 AND files.content_hash=?2 AND enrichment_jobs.content_hash=?2 AND enrichment_jobs.kind=?3 AND enrichment_jobs.route=?4 AND enrichment_jobs.status='queued'",
+            params![job.file_id, job.content_hash, job.kind, job.route],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, i64>(3)?)),
+        ).optional()?;
+        let Some((file_id, name, path, revision)) = source else {
+            return Ok(false);
+        };
+        let ordinal: i64 = transaction.query_row(
+            "SELECT COALESCE(MAX(ordinal)+1,0) FROM chunks WHERE file_id=?1",
+            [file_id],
+            |row| row.get(0),
+        )?;
+        let mut artifact_chunk_id = None;
+        for (offset, chunk) in super::extraction::chunks_from_text(text, &job.kind, None)
+            .iter()
+            .enumerate()
+        {
+            let chunk_ordinal =
+                ordinal + i64::try_from(offset).map_err(|_| IndexError::IntegerOverflow)?;
+            transaction.execute("INSERT INTO chunks(file_id,ordinal,text,extraction_kind,content_hash,index_revision) VALUES(?1,?2,?3,?4,?5,?6)", params![file_id,chunk_ordinal,chunk.text,job.kind,job.content_hash,revision])?;
+            let chunk_id = transaction.last_insert_rowid();
+            artifact_chunk_id.get_or_insert(chunk_id);
+            transaction.execute(
+                "INSERT INTO search_fts(file_id,chunk_id,name,path,body) VALUES(?1,?2,?3,?4,?5)",
+                params![file_id, chunk_id, name, path, chunk.text],
+            )?;
+        }
+        transaction.execute("INSERT INTO enrichment_artifacts(file_id,chunk_id,kind,provider,model,content_hash,payload) VALUES(?1,?2,?3,?4,?5,?6,?7)", params![file_id,artifact_chunk_id,job.kind,provider,model,job.content_hash,serde_json::to_string(&serde_json::json!({"text":text}))?])?;
+        transaction.execute("UPDATE enrichment_jobs SET status='completed' WHERE file_id=?1 AND content_hash=?2 AND kind=?3 AND route=?4", params![file_id,job.content_hash,job.kind,job.route])?;
+        transaction.commit()?;
+        Ok(true)
+    }
+
+    pub(crate) fn fail_enrichment(&self, job: &EnrichmentJobRecord) -> IndexResult<()> {
+        let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        connection.execute("UPDATE enrichment_jobs SET status='failed' WHERE file_id=(SELECT id FROM files WHERE stable_id=?1 AND content_hash=?2) AND content_hash=?2 AND kind=?3 AND route=?4 AND status='queued'", params![job.file_id,job.content_hash,job.kind,job.route])?;
+        Ok(())
+    }
+
+    pub(crate) fn failed_enrichment_count(&self) -> IndexResult<u64> {
+        let connection = self.connection.lock().map_err(|_| IndexError::Poisoned)?;
+        let count: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM enrichment_jobs WHERE status='failed'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(IndexError::from)?;
+        u64::try_from(count).map_err(|_| IndexError::IntegerOverflow)
     }
 
     pub fn delete_indexed_content(&self) -> IndexResult<DeletedIndexData> {
@@ -2165,7 +2322,12 @@ mod tests {
         assert!(!smoke_root.exists());
     }
 
-    fn document(path: PathBuf, stable_id: &str, hash: &str, text: &str) -> IndexedDocument {
+    pub(super) fn document(
+        path: PathBuf,
+        stable_id: &str,
+        hash: &str,
+        text: &str,
+    ) -> IndexedDocument {
         IndexedDocument {
             stable_id: stable_id.to_owned(),
             path,

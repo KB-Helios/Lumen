@@ -175,19 +175,33 @@ export const previewKindSchema = z.enum([
 ]);
 export type PreviewKind = z.infer<typeof previewKindSchema>;
 
+export const previewTextSchema = z.string().max(64 * 1024).refine(value => new TextEncoder().encode(value).length <= 64 * 1024, 'Preview text exceeds 64 KiB');
+export const previewRowsSchema = z.array(z.array(previewTextSchema).max(12)).max(40);
+export const previewColumnsSchema = z.array(previewTextSchema).max(12);
+
+export function previewBodyWithinBudget(preview: {text?: string | null; rows?: string[][] | null; columns?: string[] | null}) {
+  const encoder = new TextEncoder();
+  let bytes = encoder.encode(preview.text ?? '').length;
+  for (const value of [...(preview.columns ?? []), ...(preview.rows ?? []).flat()]) {
+    bytes += encoder.encode(value).length;
+    if (bytes > 64 * 1024) return false;
+  }
+  return bytes <= 64 * 1024;
+}
+
 export const filePreviewSchema = z.object({
   fileId: z.string().min(1),
   kind: previewKindSchema,
   title: z.string().min(1),
   subtitle: z.string().optional(),
-  text: z.string().optional(),
+  text: previewTextSchema.optional(),
   sourceUrl: z.string().optional(),
   mimeType: z.string().optional(),
-  rows: z.array(z.array(z.string())).optional(),
-  columns: z.array(z.string()).optional(),
+  rows: previewRowsSchema.optional(),
+  columns: previewColumnsSchema.optional(),
   children: z.array(z.object({id: z.string(), name: z.string(), kind: searchResultKindSchema})).optional(),
   metadata: z.record(z.string(), z.string()).default({}),
-});
+}).refine(previewBodyWithinBudget, 'Preview body exceeds 64 KiB');
 export type FilePreview = z.infer<typeof filePreviewSchema>;
 
 export function flattenSearchGroups(groups: readonly SearchGroup[]): SearchResult[] {

@@ -1,0 +1,473 @@
+**********************************************************************
+** Visual Studio 2026 Developer PowerShell v18.10.4
+** Copyright (c) 2026 Microsoft Corporation
+**********************************************************************
+
+running 409 tests
+test activity::tests::executable_identity_is_canonical_and_secret_free ... ok
+test activity::tests::executable_overrides_are_enforced_before_automatic_classification ... ok
+test activity::tests::persisted_ui_game_identities_are_loaded_without_paths ... ok
+test activity::tests::resume_delay_retains_restriction_until_elapsed ... ok
+test activity::tests::user_battery_game_fullscreen_and_video_precedence_is_stable ... ok
+test computer_use::coordinator::tests::acknowledged_stop_releases_the_run_before_executor_cleanup ... ok
+test computer_use::coordinator::tests::denied_approval_closes_admission_and_finishes_as_stopped ... ok
+test computer_use::coordinator::tests::exactly_one_terminal_event_and_no_late_worker_events ... ok
+test computer_use::coordinator::tests::native_stop_terminates_a_worker_with_blocked_stdin ... ok
+test computer_use::coordinator::tests::native_stop_twenty_blocked_worker_samples ... ignored, native reference-machine acceptance; writes content-free timing evidence
+test computer_use::coordinator::tests::replayed_or_wrong_approval_does_not_consume_a_valid_pending_approval ... ok
+test computer_use::coordinator::tests::stop_does_not_need_stdin_and_invalidates_approvals_and_generations ... ok
+test computer_use::coordinator::tests::stop_during_startup_kills_a_late_executor_before_input_admission ... ok
+test computer_use::coordinator::tests::verified_task_completion_preserves_delivery_uncertainty_and_stop_still_wins ... ok
+test computer_use::executor::tests::missing_executor_never_uses_a_path_supplied_by_the_caller ... ok
+test computer_use::executor::tests::rejects_untyped_or_unknown_worker_messages ... ok
+test computer_use::executor::tests::rust_executor_wire_and_warm_pool_verify_real_edge_state ... ignored, installed Edge and staged executor acceptance; run separately
+test computer_use::foreground::tests::a_partial_unicode_pair_keeps_only_the_lumen_down_for_stop_cleanup ... ok
+test computer_use::foreground::tests::actual_window_hit_test_rejects_an_occluding_owned_fixture ... ok
+test computer_use::foreground::tests::semantic_foreground_bounds_cannot_escape_the_selected_capture ... ok
+test computer_use::foreground::tests::stopped_admission_cannot_change_focus_or_send_input ... ok
+test computer_use::gate::tests::admission_is_serial_and_stop_is_idempotent ... ok
+test computer_use::gate::tests::stop_fences_a_held_action_without_waiting_for_its_lock ... ok
+test computer_use::policy::tests::approval_refuses_changed_values_and_pixel_captures ... ok
+test computer_use::policy::tests::batch_boundary_requires_replanning_after_observed_browser_url_change ... ok
+test computer_use::policy::tests::budgets_allow_exactly_sixty_turns_and_inputs_independently ... ok
+test computer_use::policy::tests::completion_checks_require_current_unique_proposal_and_fresh_nondegraded_state ... ok
+test computer_use::policy::tests::completion_requires_fresh_matching_application_state_not_a_summary ... ok
+test computer_use::policy::tests::forbids_private_navigation_and_worker_extensions ... ok
+test computer_use::policy::tests::outcome_review_accepts_fresh_changed_status_but_not_delivery_or_unchanged_title ... ok
+test computer_use::policy::tests::outcome_review_forbids_input_and_allows_only_one_vision_transition ... ok
+test computer_use::policy::tests::rebinds_only_unique_semantic_controls_and_never_coordinates ... ok
+test computer_use::policy::tests::rejects_stale_snapshots_and_unrelated_action_fields ... ok
+test computer_use::provider::tests::blocked_safety_and_silent_cloud_switches_are_impossible ... ok
+test computer_use::provider::tests::cancellation_aborts_a_real_slow_http_response ... ok
+test computer_use::provider::tests::completion_rejects_partial_refused_and_implicit_provider_outputs ... ok
+test computer_use::provider::tests::gemini_coordinates_are_normalized_and_old_tokens_are_not_guessed ... ok
+test computer_use::provider::tests::gemini_visual_fields_preserve_the_documented_action_meaning ... ok
+test computer_use::provider::tests::live_provider_availability ... ignored, requires configured live credentials; run separately from local tests
+test computer_use::provider::tests::positive_status_completion_is_explicit_and_cannot_request_vision_together ... ok
+test computer_use::provider::tests::refuses_unrecognized_tools_and_large_batches ... ok
+test computer_use::provider::tests::skipped_visual_calls_are_not_acknowledged_as_executed_or_approved ... ok
+test computer_use::provider::tests::strict_plan_schema_has_no_optional_openai_properties ... ok
+test computer_use::stop::tests::native_message_thread_handles_stop_without_a_worker_or_ui_loop ... ok
+test computer_use::windows::tests::a_lost_window_instance_marker_invalidates_selection_without_process_changes ... ignored, requires a non-elevated interactive Windows desktop; run separately
+test computer_use::windows::tests::pruning_stale_metadata_preserves_the_current_window_marker ... ignored, requires a non-elevated interactive Windows desktop; run separately
+test computer_use::windows::tests::unmarked_windows_are_never_admitted ... ignored, requires a non-elevated interactive Windows desktop; run separately
+test consent::tests::consent_fails_closed_and_reads_only_persisted_boolean_values ... ok
+test gateway::answer::tests::auto_mode_uses_cloud_only_after_explicit_consent ... ok
+test gateway::answer::tests::cloud_mode_requires_consent_and_a_credential ... ok
+test gateway::answer::tests::delivery_acknowledgement_counts_forwarded_events_without_reserializing ... ok
+test gateway::answer::tests::delivery_acknowledgement_excludes_rejected_channel_sends ... ok
+test gateway::answer::tests::local_mode_never_has_cloud_fallback ... ok
+test gateway::answer::tests::unavailable_cloud_route_does_not_block_auto_local_answers ... ok
+test gateway::answer::transport_tests::accepts_bom_comments_cr_lines_and_empty_optional_space ... ok
+test gateway::answer::transport_tests::accepts_crlf_multiline_data_and_optional_field_space ... ok
+test gateway::answer::transport_tests::attempt_preparation_is_cancelled_even_when_the_attempt_is_not_cooperative ... ok
+test gateway::answer::transport_tests::bounded_header_and_idle_waits_fail_without_socket_eof ... ok
+test gateway::answer::transport_tests::cancellation_at_failure_boundary_does_not_enter_local_fallback ... ok
+test gateway::answer::transport_tests::cancellation_before_headers_drops_the_owned_request_promptly ... ok
+test gateway::answer::transport_tests::cancellation_before_native_admission_is_preserved ... ok
+test gateway::answer::transport_tests::cancellation_during_a_chunk_does_not_emit_more_tokens_or_complete ... ok
+test gateway::answer::transport_tests::cumulative_output_event_and_wire_limits_bound_small_frames ... ok
+test gateway::answer::transport_tests::dispatch_rechecks_current_consent_and_attribution_after_preparation ... ok
+test gateway::answer::transport_tests::incomplete_provider_status_is_not_success ... ok
+test gateway::answer::transport_tests::invalid_utf8_is_rejected_instead_of_replacing_provider_content ... ok
+test gateway::answer::transport_tests::malformed_json_cannot_be_hidden_by_a_later_completion ... ok
+test gateway::answer::transport_tests::malformed_type_cannot_be_reinterpreted_as_a_valid_named_completion ... ok
+test gateway::answer::transport_tests::native_bridge ... ignored, interactive owned loopback transport fixture; driven by test:answer-native
+test gateway::answer::transport_tests::provider_error_details_never_escape_the_native_boundary ... ok
+test gateway::answer::transport_tests::provider_fixture_drop_interrupts_an_accepted_incomplete_request ... ok
+test gateway::answer::transport_tests::provider_fixture_drop_without_a_client_is_prompt ... ok
+test gateway::answer::transport_tests::rate_limit_headers_do_not_require_reading_a_stalled_error_body ... ok
+test gateway::answer::transport_tests::rejects_a_stream_that_ends_without_a_completion ... ok
+test gateway::answer::transport_tests::remembered_pre_admission_cancellations_are_bounded_and_deduplicated ... ok
+test gateway::answer::transport_tests::replacement_cleanup_does_not_cancel_the_new_owner ... ok
+test gateway::answer::transport_tests::shutdown_cancels_owned_work_and_rejects_new_admission ... ok
+test gateway::answer::transport_tests::the_total_deadline_bounds_a_live_socket_across_transport_waits ... ok
+test gateway::answer::transport_tests::unbounded_event_data_is_rejected_before_completion ... ok
+test gateway::answer::transport_tests::usage_is_parsed_once_from_valid_completion_and_headers_are_sanitized ... ok
+test gateway::answer::transport_tests::utf8_codepoint_fragmented_across_http_chunks_is_preserved ... ok
+test gateway::answer::transport_tests::valid_completion_does_not_wait_for_the_provider_to_close ... ok
+test gateway::config::tests::config_has_all_aliases_separate_budgets_and_no_secret_values ... ok
+test gateway::config::tests::custom_and_native_provider_syntax_is_generated_from_validated_routes ... ok
+test gateway::config::tests::pinned_binary_accepts_generated_config ... ignored, requires the checksum-pinned AgentGateway sidecar
+test gateway::enrichment::tests::enrichment_engine_config_matches_selected_loopback_ports_and_owned_database ... ok
+test gateway::enrichment::tests::enrichment_late_readiness_cannot_mark_a_replaced_runtime_ready ... ok
+test gateway::enrichment::tests::enrichment_process_environment_has_no_inherited_credentials_or_configuration ... ok
+test gateway::enrichment::tests::improvement_worker_recovers_crash_and_fences_old_generation ... ignored, requires the compiled Rivet enrichment worker
+test gateway::enrichment::tests::local_http_enrichment_bounds_json_bodies ... ok
+test gateway::enrichment::tests::local_http_enrichment_deadline_includes_status_body ... ok
+test gateway::enrichment::tests::local_http_enrichment_failures_are_sanitized ... ok
+test gateway::enrichment::tests::local_http_enrichment_refuses_redirects ... ok
+test gateway::enrichment::tests::local_http_enrichment_status_operations_bound_body ... ok
+test gateway::enrichment::tests::local_http_proxy_probe_enrichment ... ignored, invoked only by isolated proxy regression
+test gateway::enrichment::tests::missing_enrichment_engine_does_not_report_readiness_or_spawn_a_worker ... ok
+test gateway::enrichment::tests::queue_transport_failure_reports_stop_before_another_submission ... ok
+test gateway::enrichment::tests::rivet_worker_replaces_dead_engine_and_stops_owned_children ... ignored, explicit compiled enrichment engine ownership gate after staging
+test gateway::enrichment::tests::rivet_worker_replaces_hung_owned_engine_without_false_readiness ... ignored, explicit owned Windows hung-engine integration gate after staging
+test gateway::enrichment::tests::rivet_worker_resumes_without_duplicate_jobs ... ignored, requires the compiled Rivet enrichment worker
+test gateway::enrichment::tests::worker_ports_are_loopback_selected_and_token_is_not_in_paths ... ok
+test gateway::enrichment_budget::tests::enrichment_budget_amends_actual_usage_and_cannot_refund_twice ... ok
+test gateway::enrichment_budget::tests::enrichment_budget_crash_and_settled_usage_survive_restart_and_old_permits_cannot_refund_new_window ... ok
+test gateway::enrichment_budget::tests::enrichment_budget_debt_refill_clock_reversal_and_deferral_do_not_mint_quota ... ok
+test gateway::enrichment_budget::tests::enrichment_budget_is_shared_atomic_and_every_retry_counts ... ok
+test gateway::enrichment_budget::tests::enrichment_budget_unknown_usage_and_cancellation_remain_blocked_after_restart ... ok
+test gateway::enrichment_budget::tests::enrichment_budget_validates_usage_and_refunds_only_proven_unsent_requests ... ok
+test gateway::local_runtime::answer_preparation_tests::a_cancelled_waiter_does_not_start_a_second_probe ... ok
+test gateway::local_runtime::answer_preparation_tests::already_cancelled_and_expired_preparation_do_not_spawn_a_probe ... ok
+test gateway::local_runtime::answer_preparation_tests::cancellation_during_readiness_kills_only_the_newly_owned_server ... ok
+test gateway::local_runtime::answer_preparation_tests::cancellation_kills_and_reaps_an_acknowledged_owned_version_probe ... ok
+test gateway::local_runtime::answer_preparation_tests::cancellation_while_waiting_for_an_existing_process_preserves_its_pid ... ok
+test gateway::local_runtime::answer_preparation_tests::cloud_stop_cannot_acknowledge_an_unadopted_answer_startup ... ok
+test gateway::local_runtime::answer_preparation_tests::dropping_preparation_reaps_the_owned_readiness_process ... ok
+test gateway::local_runtime::answer_preparation_tests::external_listening_runtime_still_requires_the_pinned_version ... ok
+test gateway::local_runtime::answer_preparation_tests::healthy_cached_owned_runtime_is_retained_without_another_probe ... ok
+test gateway::local_runtime::answer_preparation_tests::management_start_cannot_replace_a_runtime_during_answer_preparation ... ok
+test gateway::local_runtime::answer_preparation_tests::oversized_version_output_is_bounded_and_kills_the_probe ... ok
+test gateway::local_runtime::answer_preparation_tests::preparation_does_not_report_success_when_only_its_redundant_child_is_ready ... ok
+test gateway::local_runtime::answer_preparation_tests::preparation_rejects_an_unexpected_ready_management_registration_without_reaping_it ... ok
+test gateway::local_runtime::answer_preparation_tests::preparation_restarts_a_process_that_exits_during_version_admission ... ok
+test gateway::local_runtime::answer_preparation_tests::probe_child ... ignored, owned subprocess fixture, invoked only by answer preparation tests
+test gateway::local_runtime::answer_preparation_tests::server_child ... ignored, owned subprocess fixture, invoked only by answer preparation tests
+test gateway::local_runtime::answer_preparation_tests::successful_preparation_adopts_the_verified_ready_owned_runtime ... ok
+test gateway::local_runtime::answer_preparation_tests::version_deadline_kills_the_owned_probe ... ok
+test gateway::local_runtime::tests::component_requires_the_pinned_version ... ok
+test gateway::local_runtime::tests::hardware_profiles_prefer_qualified_accelerators ... ok
+test gateway::local_runtime::tests::parses_plain_and_json_version_output ... ok
+test gateway::mcp::tests::allowed_search_and_metadata_execute_inside_the_index ... ok
+test gateway::mcp::tests::file_tools_accept_only_stable_ids_and_reject_path_arguments ... ok
+test gateway::mcp::tests::permissions_fail_closed_and_ask_requires_one_time_approval ... ok
+test gateway::provisioning::tests::cancellation_removes_the_staging_directory ... ok
+test gateway::provisioning::tests::checksum_size_and_inventory_are_all_required ... ok
+test gateway::provisioning::tests::production_manifest_is_https_immutable_and_exactly_pinned ... ok
+test gateway::provisioning::tests::promotion_keeps_the_last_healthy_version_until_probe_passes ... ok
+test gateway::provisioning::tests::rejects_unknown_profile_ids ... ok
+test gateway::registry::tests::legacy_route_migration_preserves_user_models_and_adds_improvement_defaults ... ok
+test gateway::registry::tests::registry_has_stable_aliases_capabilities_and_no_secrets ... ok
+test gateway::registry::tests::route_validation_is_capability_consent_and_url_safe ... ok
+test gateway::supervisor::tests::gateway_admission_rejects_changed_bytes_before_credentials_or_spawn ... ok
+test gateway::supervisor::tests::generated_config_is_secret_free_and_uses_loopback_admin ... ok
+test gateway::supervisor::tests::pinned_gateway_digest_matches_compiled_admission ... ignored, requires the verified staged Gateway; never reads credentials or starts it
+test gateway::supervisor::tests::pinned_gateway_starts_restarts_and_stops_both_lanes ... ignored, requires the checksum-pinned AgentGateway sidecar
+test improvement::broker::tests::cloud_consent_is_checked_before_any_http_connection ... ok
+test improvement::broker::tests::native_broker_uses_fixed_enrichment_alias_and_rejects_changing_model ... ok
+test improvement::broker::tests::native_cancellation_aborts_a_real_blocked_gateway_request ... ok
+test improvement::broker::tests::shared_enrichment_budget_defers_broker_before_http_and_refunds_job_reservation ... ok
+test improvement::broker::tests::unmetered_response_keeps_reservation_and_blocks_more_model_traffic ... ok
+test improvement::coordinator::tests::task_2a_review_cleanup_uncertainty_outweighs_quota_pause_and_cancellation ... ok
+test improvement::docker::tests::actual_docker_prime_acceptance_generation_cancel_and_ownership ... ignored, Requires explicit LUMEN_IMPROVEMENT_ASSETS, staged pinned image and running Docker Desktop Linux engine; synthetic broker, real Prime ACP
+test improvement::docker::tests::actual_docker_sandbox_empirical_confinement ... ignored, Requires explicit staged assets and healthy Docker; actual diagnostic guest under production sandbox args, no inference
+test improvement::docker::tests::blocked_guest_stdin_does_not_block_native_cancellation ... ok
+test improvement::docker::tests::broker_request_cannot_change_route_or_send_extra_network_fields ... ok
+test improvement::docker::tests::cleanup_rejects_a_container_owned_by_another_installation ... ok
+test improvement::docker::tests::duplicate_guest_protocol_keys_are_rejected ... ok
+test improvement::docker::tests::initial_harness_version_zero_is_valid_for_first_generation ... ok
+test improvement::docker::tests::interleaved_broker_completion_preserves_partially_consumed_frame ... ok
+test improvement::docker::tests::metadata_input_rejects_extra_private_payloads ... ok
+test improvement::docker::tests::oversized_unterminated_frame_is_rejected_without_waiting_for_eof ... ok
+test improvement::docker::tests::probe_cleanup_uncertainty_preserves_both_failures_and_still_removes_canary ... ok
+test improvement::docker::tests::probe_failure_still_awaits_both_cleanup_steps ... ok
+test improvement::docker::tests::probe_success_requires_successful_cleanup_before_returning_value ... ok
+test improvement::docker::tests::sandbox_arguments_do_not_admit_host_access ... ok
+test improvement::tests::crash_between_candidate_import_and_queue_advance_reuses_one_candidate ... ok
+test improvement::tests::durable_budgets_do_not_reset_when_the_store_reopens ... ok
+test improvement::tests::fixed_evaluator_accepts_improvement_rejects_degradation_and_supports_rollback ... ok
+test improvement::tests::gate_cannot_be_satisfied_by_duplicate_or_missing_cases ... ok
+test improvement::tests::gate_rejects_regression_missing_usage_and_incomplete_measurements ... ok
+test improvement::tests::inferred_memories_are_rejected_and_explicit_preferences_are_allowlisted ... ok
+test improvement::tests::interrupted_evaluation_can_resume_and_explicit_cancel_is_terminal ... ok
+test improvement::tests::learning_payload_rejects_content_and_unknown_fields ... ok
+test improvement::tests::promotion_is_atomic_bound_to_report_and_rollback_keeps_old_snapshot ... ok
+test improvement::tests::token_reservations_survive_restart_and_unknown_usage_is_not_refunded ... ok
+test improvement::tests::workflow_approval_cannot_bypass_gate_or_reuse_stale_version ... ok
+test improvement::tests::workflows_are_bounded_and_cannot_contain_scripts_or_silent_desktop_runs ... ok
+test local_http_tests::local_http_proxy_bypass_in_isolated_process ... 
+running 4 tests
+test gateway::enrichment::tests::local_http_proxy_probe_enrichment ... ok
+test provider_switcher::client::tests::local_http_proxy_probe_management ... ok
+test provider_switcher::supervisor::tests::local_http_proxy_probe_health ... ok
+test search::embedding::tests::local_http_proxy_probe_embedding ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 405 filtered out; finished in 0.04s
+
+ok
+test native_performance_root::tests::fresh_owned_root_is_admitted_once_without_touching_other_data ... ok
+test native_performance_root::tests::nested_root_wrong_name_and_file_are_refused ... ok
+test native_performance_root::tests::symlink_root_is_refused_without_touching_its_target ... ok
+test native_performance_root::tests::temp_root_and_existing_content_are_refused ... ok
+test privacy::tests::diagnostic_export_core_writes_the_same_sanitized_payload_without_a_dialog ... ok
+test privacy::tests::diagnostic_export_sanitizer_removes_paths_prompts_and_credentials ... ok
+test privacy::tests::preview_gate_rejects_requests_before_work_starts ... ok
+test privacy::tests::privacy_runtime_loads_persisted_values_and_preserves_product_defaults ... ok
+test provider_switcher::client::tests::base_is_loopback_v8 ... ok
+test provider_switcher::client::tests::credentials_linked_matches_aliases_and_skips_disabled ... ok
+test provider_switcher::client::tests::local_http_management_bounds_bodies ... ok
+test provider_switcher::client::tests::local_http_management_deadline_includes_stalled_body ... ok
+test provider_switcher::client::tests::local_http_management_has_total_deadline ... ok
+test provider_switcher::client::tests::local_http_management_refuses_redirects ... ok
+test provider_switcher::client::tests::local_http_management_sanitizes_failures ... ok
+test provider_switcher::client::tests::local_http_proxy_probe_management ... ignored, invoked only by isolated proxy regression
+test provider_switcher::client::tests::oauth_start_requires_url_and_state ... ok
+test provider_switcher::client::tests::oauth_status_maps_wait_ok_error ... ok
+test provider_switcher::client::tests::query_encoding_keeps_unreserved_and_escapes_rest ... ok
+test provider_switcher::config::tests::minimal_yaml_pins_loopback_and_hardening ... ok
+test provider_switcher::config::tests::runtime_initialization_fails_closed_on_incomplete_or_invalid_paths ... ok
+test provider_switcher::config::tests::runtime_initialization_preserves_config_keys_and_auths_on_restart ... ok
+test provider_switcher::config::tests::runtime_initialization_refuses_reparse_ancestors_and_files ... ok
+test provider_switcher::config::tests::write_rejects_placeholders_and_empty_keys ... ok
+test provider_switcher::config::tests::yaml_quotes_windows_paths_without_escape_interpretation ... ok
+test provider_switcher::files::profile_ownership::tests::exclusive_ownership_survives_unrelated_external_edits ... ok
+test provider_switcher::files::profile_ownership::tests::interrupted_activation_recovers_live_configuration_and_ownership_together ... ok
+test provider_switcher::files::profile_ownership::tests::legacy_additive_nodes_and_oversized_ownership_are_never_deleted_or_overwritten ... ok
+test provider_switcher::files::profile_ownership::tests::removal_retains_user_enriched_owned_models_and_their_identity ... ok
+test provider_switcher::files::tests::claude_floor_covers_connection_keys ... ok
+test provider_switcher::files::tests::claude_floor_leaves_user_keys_alone ... ok
+test provider_switcher::files::tests::gemini_floor_keeps_cli_settings ... ok
+test provider_switcher::files::tests::target_rejects_blank_or_multiline_fields ... ok
+test provider_switcher::files::tests::target_rejects_unsafe_ids_urls_and_oversized_fields ... ok
+test provider_switcher::paths::tests::opencode_prefers_jsonc_when_present ... ok
+test provider_switcher::paths::tests::tool_paths_derive_from_home ... ok
+test provider_switcher::profiles::tests::all_five_targets_activate_remove_and_retain_unrelated_configuration ... ok
+test provider_switcher::profiles::tests::committed_credential_cleanup_resumes_after_restart ... ok
+test provider_switcher::profiles::tests::empty_key_keeps_stored_credential_and_secret_failures_do_not_replace_metadata ... ok
+test provider_switcher::profiles::tests::enabling_additive_profiles_preserves_other_model_entries_in_the_same_node ... ok
+test provider_switcher::profiles::tests::exclusive_removal_refuses_external_connection_edits_even_after_saved_edits ... ok
+test provider_switcher::profiles::tests::failed_metadata_publish_keeps_previous_key_and_recovers_unused_slot ... ok
+test provider_switcher::profiles::tests::inactive_exclusive_removal_never_clears_current_profile ... ok
+test provider_switcher::profiles::tests::managed_additive_removal_restores_prior_fields_and_preserves_later_user_edits ... ok
+test provider_switcher::profiles::tests::openclaw_activation_uses_documented_connection_fields ... ok
+test provider_switcher::profiles::tests::reactivating_additive_edits_removes_only_the_previous_owned_model ... ok
+test provider_switcher::profiles::tests::saves_metadata_without_secret_or_live_configuration ... ok
+test provider_switcher::profiles::tests::unsupported_targets_missing_keys_and_bad_fields_do_not_write ... ok
+test provider_switcher::profiles::tests::windows_credentials_owned_slot_round_trip ... ignored, writes one owned synthetic Windows Credential Manager slot; run explicitly
+test provider_switcher::supervisor::tests::clean_start_initializes_config_before_spawning ... ok
+test provider_switcher::supervisor::tests::health_url_is_loopback ... ok
+test provider_switcher::supervisor::tests::local_http_health_bounds_response_body ... ok
+test provider_switcher::supervisor::tests::local_http_health_has_total_deadline ... ok
+test provider_switcher::supervisor::tests::local_http_health_refuses_redirects ... ok
+test provider_switcher::supervisor::tests::local_http_proxy_probe_health ... ignored, invoked only by isolated proxy regression
+test provider_switcher::supervisor::tests::local_http_stalled_health_does_not_block_restart ... ok
+test search::embedding::tests::active_storage_key_tracks_the_validated_provider_route ... ok
+test search::embedding::tests::local_http_embedding_accepts_metered_vectors_and_defers_missing_usage ... ok
+test search::embedding::tests::local_http_embedding_bounds_chunked_and_declared_bodies ... ok
+test search::embedding::tests::local_http_embedding_refuses_redirects ... ok
+test search::embedding::tests::local_http_embedding_retains_twenty_second_body_deadline ... ok
+test search::embedding::tests::local_http_proxy_probe_embedding ... ignored, invoked only by isolated proxy regression
+test search::embedding::tests::shared_enrichment_budget_defers_embedding_before_http ... ok
+test search::embedding::tests::vectors_are_finite_ordered_and_dimension_consistent ... ok
+test search::enrichment::tests::enrichment_budget_defers_unmetered_output_and_proven_unsent_cancellation_is_neutral ... ok
+test search::enrichment::tests::enrichment_lease_decodes_only_the_native_queue_contract ... ok
+test search::enrichment::tests::enrichment_provider_requests_use_fixed_pdf_image_and_audio_shapes_without_source_paths ... ok
+test search::enrichment::tests::enrichment_provider_text_is_typed_bounded_and_refusals_are_not_indexed ... ok
+test search::enrichment::tests::local_http_enrichment_provider_searches_real_fixture_outputs_and_bounds_redirects ... ok
+test search::extraction::tests::extracts_office_xml_without_returning_markup ... ok
+test search::extraction::tests::extracts_utf8_text_into_bounded_chunks_with_a_content_hash ... ok
+test search::extraction::tests::office_extraction_hash_and_text_come_from_the_same_captured_bytes ... ok
+test search::extraction::tests::office_xml_reads_enforce_actual_bytes_even_when_declared_size_is_small ... ok
+test search::extraction::tests::pdf_extraction_uses_captured_bytes_without_reopening_a_replaced_path ... ok
+test search::extraction::tests::review_xlsx_absent_typed_cached_values_are_blank_and_preserve_real_neighbors ... ok
+test search::extraction::tests::review_xlsx_inline_strings_exclude_phonetic_hints_from_plain_and_rich_values ... ok
+test search::extraction::tests::review_xlsx_present_malformed_typed_values_still_reject_the_sheet ... ok
+test search::extraction::tests::review_xlsx_shared_strings_exclude_phonetic_hints_from_plain_and_rich_values ... ok
+test search::extraction::tests::routes_images_to_cloud_enrichment_without_exposing_binary_bytes ... ok
+test search::extraction::tests::worksheet_limits_dimensions_and_aggregate_xml_including_forged_size_headers ... ok
+test search::extraction::tests::worksheet_values_preserve_shared_rich_inline_sparse_and_cached_cells ... ok
+test search::extraction::tests::worksheets_reject_invalid_indices_malformed_xml_zip_dtds_and_oversized_text ... ok
+test search::index::cleanup_tests::failed_scoped_cleanup_rolls_back_rows_and_private_staging ... ok
+test search::index::cleanup_tests::large_private_cleanup_preserves_unaffected_and_legacy_rows ... ok
+test search::index::cleanup_tests::scoped_cleanup_executes_one_fts_delete_per_batch ... ok
+test search::index::enrichment_tests::enrichment_completion_is_transactional_searchable_and_duplicate_safe ... ok
+test search::index::enrichment_tests::enrichment_completion_refuses_invalid_output_and_superseded_hash ... ok
+test search::index::enrichment_tests::enrichment_long_output_reuses_bounded_chunks_and_rolls_back_on_artifact_failure ... ok
+test search::index::recovery_tests::interrupted_migrations_reopen_without_losing_authoritative_rows ... ok
+test search::index::recovery_tests::interrupted_vector_reset_preserves_table_and_authoritative_data ... ok
+test search::index::recovery_tests::legacy_fts_rowids_keep_unrelated_content_during_replacement ... ok
+test search::index::recovery_tests::one_document_replacement_does_not_scan_the_whole_fts_inventory ... ok
+test search::index::recovery_tests::unchanged_inventory_preserves_content_without_rewriting_fts ... ok
+test search::index::tests::content_changes_invalidate_derived_state_and_advance_revision ... ok
+test search::index::tests::creates_authoritative_and_rebuildable_schema ... ok
+test search::index::tests::deleting_indexed_content_reports_counts_and_keeps_query_history ... ok
+test search::index::tests::dimension_change_rebuilds_only_vectors_and_preserves_lexical_rows ... ok
+test search::index::tests::embedding_jobs_complete_only_for_the_current_chunk_revision ... ok
+test search::index::tests::exact_vector_search ... ok
+test search::index::tests::explicit_user_queries_are_recorded_only_when_successful_and_enabled ... ok
+test search::index::tests::lexical_search_survives_an_unavailable_vector_runtime ... ok
+test search::index::tests::migrates_vec0_to_sqlite_vector_rows ... ok
+test search::index::tests::packaged_smoke_exercises_exact_vector_and_lexical_fallback ... ok
+test search::index::tests::pins_and_file_open_history_are_durable_ranking_inputs ... ok
+test search::index::tests::ranks_an_exact_filename_before_a_content_only_match ... ok
+test search::index::tests::rejects_documents_outside_the_selected_root ... ok
+test search::index::tests::removes_deleted_files_and_roots_from_all_search_lanes ... ok
+test search::index::tests::sqlite_vector_runtime_is_pinned ... ok
+test search::index::tests::sqlite_vector_runtime_rejects_version_drift ... ok
+test search::index_worker::pending_queue_tests::ordered_pending_keeps_retry_replacement_and_removal_consistent ... ok
+test search::index_worker::pending_queue_tests::retry_count_tracks_every_pending_queue_mutation ... ok
+test search::indexing::capacity_tests::a_long_directory_reconciliation_anchors_the_periodic_deadline ... ok
+test search::indexing::capacity_tests::complete_reconciliation_clears_truncation_without_sticky_watcher_failure ... ok
+test search::indexing::capacity_tests::content_worker_batches_small_documents_with_bounded_rest ... ok
+test search::indexing::capacity_tests::native_filesystem_capacity ... ignored, owned D-drive capacity; run explicitly with LUMEN_TASK13_FILES=1000,50000,249750
+test search::indexing::capacity_tests::pending_selection_and_status_do_not_rescan_every_remaining_successful_job ... ok
+test search::indexing::capacity_tests::sqlite_full_native_inventory_and_content_recover_on_same_connection ... ok
+test search::indexing::capacity_tests::warm_queries_do_not_traverse_while_worker_maintenance_runs ... ok
+test search::indexing::document_preview_tests::cached_document_body_is_bounded_in_utf8_and_refuses_mismatched_chunk_provenance ... ok
+test search::indexing::document_preview_tests::cached_office_preview_requires_current_source_and_local_root_without_cloud_consent ... ok
+test search::indexing::document_preview_tests::cached_preview_capture_cannot_survive_revision_generation_grant_or_privacy_changes ... ok
+test search::indexing::document_preview_tests::document_admission_rejects_original_symlinks_and_junctions_inside_and_outside_root ... ok
+test search::indexing::document_preview_tests::legacy_extraction_records_cannot_supply_document_preview_bodies ... ok
+test search::indexing::document_preview_tests::pending_metadata_only_removed_oversized_and_revoked_sources_never_admit_bodies ... ok
+test search::indexing::document_preview_tests::real_pdf_and_presentation_excerpts_and_no_text_pdf_stay_passive ... ok
+test search::indexing::document_preview_tests::worksheet_preview_reaches_the_native_dto_without_content_indexing_or_cloud_consent ... ok
+test search::indexing::freshness_tests::admitted_enrichment_result_is_searchable_without_waiting_for_reindexing ... ok
+test search::indexing::freshness_tests::blocked_first_real_extraction_does_not_block_inventory_or_root_revoke ... ok
+test search::indexing::freshness_tests::changed_exclusions_prune_existing_hits_at_configuration_admission ... ok
+test search::indexing::freshness_tests::compiled_enrichment_consumer_indexes_scanned_pdf_image_audio_video_and_cancels_stop ... ignored, explicit compiled enrichment integration gate after sidecar staging
+test search::indexing::freshness_tests::directory_batch_defers_when_generation_changes_after_delegated_reconciliation ... ok
+test search::indexing::freshness_tests::directory_events_preserve_existing_body_and_enrichment ... ok
+test search::indexing::freshness_tests::directory_removal_cancels_pending_descendant_extractions ... ok
+test search::indexing::freshness_tests::dirty_same_signature_event_fences_an_already_extracted_stale_body ... ok
+test search::indexing::freshness_tests::disappearing_selected_root_prunes_content_and_reports_degraded ... ok
+test search::indexing::freshness_tests::durable_enrichment_is_not_dispatchable_before_current_root_admission ... ok
+test search::indexing::freshness_tests::enrichment_admission_refuses_changed_bytes_before_watcher_metadata_update ... ok
+test search::indexing::freshness_tests::enrichment_results_recheck_generation_roots_consent_pause_and_stop ... ok
+test search::indexing::freshness_tests::exhausted_enrichment_is_visible_as_degraded_and_preserves_file_metadata ... ok
+test search::indexing::freshness_tests::first_empty_admission_prunes_durable_rows_from_a_previous_run ... ok
+test search::indexing::freshness_tests::forced_overflow_retries_signature_preserving_content_after_sqlite_failure ... ok
+test search::indexing::freshness_tests::incomplete_valid_root_keeps_inventory_pending_and_completed_until_complete_retry ... ok
+test search::indexing::freshness_tests::metadata_outcome_reports_changed_revision_and_file_to_folder_drops_body ... ok
+test search::indexing::freshness_tests::mixed_directory_file_batch_defers_when_generation_changes_before_file_admission ... ok
+test search::indexing::freshness_tests::native_inventory_boundary_recovers_invalid_metadata_and_defers_stop ... ok
+test search::indexing::freshness_tests::paused_dirty_content_is_not_an_authoritative_answer ... ok
+test search::indexing::freshness_tests::periodic_reconciliation_preserves_delivered_dirty_content_events ... ok
+test search::indexing::freshness_tests::permanent_invalid_utf8_has_bounded_retries_and_truthful_metadata_only_state ... ok
+test search::indexing::freshness_tests::redirected_root_is_pruned_even_after_incomplete_inventory ... ok
+test search::indexing::freshness_tests::reopened_periodic_worker_distinguishes_uninitialized_from_admitted_empty_policy ... ok
+test search::indexing::freshness_tests::reopened_periodic_worker_preserves_saved_rows_until_paused_policy_admission ... ok
+test search::indexing::freshness_tests::replaced_ancestor_cannot_redirect_content_commit ... ok
+test search::indexing::freshness_tests::replaced_ancestor_cannot_redirect_pending_extraction ... ok
+test search::indexing::freshness_tests::retry_status_clears_after_success_and_root_revocation ... ok
+test search::indexing::freshness_tests::revoked_generation_rejects_downstream_derived_commits ... ok
+test search::indexing::freshness_tests::safety_inventory_is_uncapped_and_single_path_deletion_does_not_parse_other_rows ... ok
+test search::indexing::freshness_tests::schema_three_admission_and_scoped_deletion_preserve_legacy_siblings_and_history ... ok
+test search::indexing::freshness_tests::schema_three_inventory_backfill_preserves_chunks_vectors_and_enrichment ... ok
+test search::indexing::freshness_tests::task_2a_review_activity_resume_reaches_lifecycle_sync_and_dispatch_without_ipc ... ok
+test search::indexing::freshness_tests::task_2a_review_native_activity_cancels_pending_provider_and_neutrally_releases_lease ... ok
+test search::indexing::freshness_tests::vanished_inventory_record_does_not_abort_other_private_files ... ok
+test search::indexing::freshness_tests::watcher_events_do_not_follow_real_file_or_directory_symlinks ... ok
+test search::indexing::freshness_tests::watcher_path_admission_expands_short_ancestors_for_deleted_paths ... ok
+test search::indexing::freshness_tests::watcher_path_admission_handles_drive_roots_unc_and_unicode ... ok
+test search::indexing::freshness_tests::watcher_path_admission_preserves_nested_verbatim_components ... ok
+test search::indexing::freshness_tests::watcher_short_path_expansion_never_admits_a_reparse_route ... ok
+test search::indexing::freshness_tests::worker_deletion_requires_re_admission_and_rebuilds_unchanged_signatures ... ok
+test search::indexing::freshness_tests::worker_edit_rename_and_delete_refresh_real_content ... ok
+test search::indexing::freshness_tests::worker_excluded_changes_are_never_admitted ... ok
+test search::indexing::freshness_tests::worker_overflow_reconciles_real_deleted_inventory_and_missed_edits ... ok
+test search::indexing::freshness_tests::worker_paused_content_stays_pending_and_resumes ... ok
+test search::indexing::freshness_tests::worker_same_size_same_mtime_event_forces_content_refresh ... ok
+test search::indexing::tests::applies_filters_before_limit_for_filename_and_content_candidates ... ok
+test search::indexing::tests::cloud_jobs_require_explicit_root_consent ... ok
+test search::indexing::tests::metadata_only_sync_adds_filename_without_reading_content ... ok
+test search::indexing::tests::metadata_reconciliation_prunes_revoked_roots_and_their_jobs_while_paused ... ok
+test search::indexing::tests::missing_vector_extension_preserves_content_only_and_filename_hits ... ok
+test search::indexing::tests::native_diagnostics_contract_serializes_only_bounded_typed_samples ... ok
+test search::indexing::tests::query_finds_eligible_names_beyond_global_inventory_cap ... ok
+test search::indexing::tests::query_scaling_uses_selected_hydration_on_fifty_thousand_rows ... ok
+test search::indexing::tests::recency_uses_file_modification_and_open_history_instead_of_index_time ... ok
+test search::indexing::tests::runtime_history_and_diagnostics_are_durable_and_redacted ... ok
+test search::indexing::tests::selected_semantic_and_content_snippets_use_the_matching_current_chunk ... ok
+test search::indexing::tests::semantic_recovery_and_related_results_exclude_the_source ... ok
+test search::indexing::tests::sql_query_preserves_exact_unicode_fuzzy_and_combined_preferences ... ok
+test search::indexing::tests::sql_query_ties_preserve_native_path_component_order ... ok
+test search::indexing::tests::unified_inventory_retains_folders_empty_and_unsupported_files ... ok
+test search::matching::tests::fallback_filters_admit_eligible_files_below_ten_thousand_matches ... ok
+test search::matching::tests::matching_is_case_insensitive_and_preserves_unicode ... ok
+test search::matching::tests::ranks_exact_prefix_substring_and_fuzzy_matches_in_order ... ok
+test search::preview::tests::binary_content_is_never_returned_as_text ... ok
+test search::preview::tests::raster_boundary_and_legacy_formats_keep_their_passive_contract ... ok
+test search::preview::tests::raster_images_use_bounded_data_urls ... ok
+test search::preview::tests::text_preview_is_bounded ... ok
+test search::preview::tests::text_preview_rejects_invalid_and_eof_incomplete_utf8 ... ok
+test search::preview::tests::truncated_text_keeps_the_valid_prefix_when_utf8_is_cut_at_the_limit ... ok
+test search::preview::tests::unindexed_documents_have_an_honest_passive_state ... ok
+test search::privacy_tests::disabled_preview_wins_before_path_validation_or_file_reads ... ok
+test search::ranking::tests::exact_filename_tier_cannot_be_displaced_by_semantic_score ... ok
+test search::ranking::tests::semantic_recency_and_pin_lanes_are_independently_bounded ... ok
+test search::root_policy::tests::rejects_paths_outside_the_selected_root ... ok
+test search::root_policy::tests::rejects_relative_roots ... ok
+test search::traversal::tests::configured_policy_excludes_hidden_patterns_and_large_files ... ok
+test search::traversal::tests::configured_policy_rejects_parent_and_absolute_exclusions ... ok
+test search::traversal::tests::traversal_preserves_unicode_and_has_stable_ordering ... ok
+test search::traversal::tests::traversal_skips_common_generated_directories ... ok
+test window::tests::collapsed_launcher_has_no_full_window_material ... ok
+test window::tests::launcher_position_respects_scale_and_upper_fifth ... ok
+test window::tests::lifecycle_commands_reject_unknown_enum_values_and_apply_valid_values ... ok
+test window::tests::lifecycle_preferences_drive_monitor_and_close_branches ... ok
+test window::tests::native_geometry_table_matches_each_window_mode_contract ... ok
+test window::tests::native_material_uses_documented_fallback_order ... ok
+test window::tests::native_shortcut_accelerators_remove_display_spacing ... ok
+test window::tests::runtime_lifecycle_preferences_load_persisted_values_and_fail_safe ... ok
+test window::tests::window_state_events_serialize_for_native_visibility_reconciliation ... ok
+test windows_ai::commands::tests::helper_citations_cannot_escape_native_context ... ok
+test windows_ai::commands::tests::native_text_rejects_edge_and_oversize_utf8_inputs ... ok
+test windows_ai::supervisor::tests::busy_dispatch_is_bounded_and_rejects_work_instead_of_queueing_it ... ok
+test windows_ai::supervisor::tests::cancellation_before_dispatch_never_overtakes_the_original_request ... ok
+test windows_ai::supervisor::tests::cancellation_before_helper_start_prevents_dispatch_and_is_bounded ... ok
+test windows_ai::supervisor::tests::cancellation_only_targets_the_current_native_request ... ok
+test windows_ai::supervisor::tests::failed_preference_write_never_enables_in_memory_policy ... ok
+test windows_ai::supervisor::tests::helper_absence_is_truthful_and_cannot_mark_a_feature_ready ... ok
+test windows_ai::supervisor::tests::real_staged_helper_status_probe ... ignored, Requires the real staged Windows AI helper; run explicitly after staging
+test windows_ai::tests::a_later_identical_activation_is_a_new_user_draft ... ok
+test windows_ai::tests::activation_rejects_oversize_duplicate_and_malformed_parameters ... ok
+test windows_ai::tests::all_privileged_preferences_default_to_opt_out_and_revoke_at_dispatch ... ok
+test windows_ai::tests::bounded_protocol_rejects_foreign_ids_and_invalid_progress ... ok
+test windows_ai::tests::confined_reads_reject_outside_paths_and_oversize_images ... ok
+test windows_ai::tests::local_answers_require_windows_opt_in_and_preview_tools_keep_separate_consent ... ok
+test windows_ai::tests::preferences_reject_unknown_fields_and_invalid_language_or_engine ... ok
+test windows_ai::tests::public_catalogue_resolution_rejects_unknown_destinations_and_ids ... ok
+test windows_ai::tests::rejects_untrusted_activation_and_consumes_valid_drafts_once ... ok
+
+test result: ok. 383 passed; 0 failed; 26 ignored; 0 measured; 0 filtered out; finished in 200.13s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 16 tests
+test api_key_usage_aggregates_counters_without_secret_keys ... ok
+test client_base_is_loopback_v8 ... ok
+test credential_metadata_excludes_secret_contents ... ok
+test get_config_sends_bearer_to_v8_route ... ok
+test list_credentials_sends_bearer_to_v8_route ... ok
+test management_config_excludes_secret_fields ... ok
+test management_patch_response_excludes_secrets ... ok
+test minimal_config_pins_loopback ... ok
+test oauth_auth_url_sends_bearer_and_maps_start ... ok
+test oauth_cancel_distinguishes_already_gone_from_invalid_acknowledgements ... ok
+test oauth_cancel_reports_sidecar_flag ... ok
+test oauth_error_excludes_upstream_secret_contents ... ok
+test oauth_linked_matches_credential_metadata ... ok
+test oauth_status_poll_reports_pending ... ok
+test patch_config_sends_bearer_to_v8_route ... ok
+test pinned_executable_serves_isolated_authenticated_management ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.82s
+
+
+running 10 tests
+test broken_claude_settings_abort_without_writes ... ok
+test claude_switch_replaces_only_floor_keys ... ok
+test codex_switch_rewrites_custom_table_only ... ok
+test gemini_switch_preserves_user_env ... ok
+test openclaw_upsert_and_remove_round_trip ... ok
+test opencode_upsert_and_remove_round_trip ... ok
+test recover_discards_unpublished_intent ... ok
+test recover_rolls_forward_published_intent ... ok
+test remove_from_live_clears_claude_floor ... ok
+test tauri_commands_switch_and_remove ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

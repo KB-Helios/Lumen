@@ -4,7 +4,6 @@ using Microsoft.Windows.AI.Imaging;
 using Microsoft.Windows.AI.Text;
 using Microsoft.Windows.AI.MachineLearning;
 using Microsoft.Windows.ApplicationModel.DynamicDependency;
-using Microsoft.Windows.Search.AppContentIndex;
 using Windows.AI.Actions;
 using Windows.ApplicationModel;
 using Windows.Foundation.Metadata;
@@ -27,27 +26,23 @@ internal sealed class WindowsHost : IDisposable
         try { var package = Package.Current; Identity = package.Id.Name == "Bridgehammer.Lumen" && package.Id.Publisher == "CN=Bridgehammer"; PackageFamily = Identity ? package.Id.FamilyName : null; } catch { Identity = false; }
         try
         {
-            var minVersion = new Microsoft.Windows.ApplicationModel.DynamicDependency.PackageVersion(0x0002000500040000);
+            var minVersion = new Microsoft.Windows.ApplicationModel.DynamicDependency.PackageVersion(0x0002000500010000);
             // The exact release constants shipped by Microsoft.WindowsAppSDK.Runtime
-            // 2.5.4-experimental/include/WindowsAppSDK-VersionInfo.cs.
+            // 2.5.1/include/WindowsAppSDK-VersionInfo.cs.
             if (Identity)
             {
                 // OnPackageIdentity_NOOP reports success without loading a
                 // framework. Inspect the declared package graph instead.
-                AiRuntimeReady = Package.Current.Dependencies.Any(p => p.Id.FamilyName == "Microsoft.WindowsAppRuntime.2-experimentalF_8wekyb3d8bbwe" &&
-                    new Version(p.Id.Version.Major, p.Id.Version.Minor, p.Id.Version.Build, p.Id.Version.Revision) >= new Version(2, 5, 4, 0));
+                AiRuntimeReady = Package.Current.Dependencies.Any(p => p.Id.FamilyName == "Microsoft.WindowsAppRuntime.2_8wekyb3d8bbwe" &&
+                    new Version(p.Id.Version.Major, p.Id.Version.Minor, p.Id.Version.Build, p.Id.Version.Revision) >= new Version(2, 5, 1, 0));
             }
             else
             {
-                AiRuntimeReady = Bootstrap.TryInitialize(0x00020005, "experimentalF", minVersion, Bootstrap.InitializeOptions.None, out _);
+                AiRuntimeReady = Bootstrap.TryInitialize(0x00020005, "", minVersion, Bootstrap.InitializeOptions.None, out _);
                 bootstrapped = AiRuntimeReady;
             }
-            // Provider enumeration can use an installed stable runtime without claiming
-            // that the separately pinned experimental AI contracts are available.
-            if (!bootstrapped && !Identity)
-                bootstrapped = Bootstrap.TryInitialize(0x00020000, "", minVersion, Bootstrap.InitializeOptions.None, out _) || Bootstrap.TryInitialize(0x00010008, "", minVersion, Bootstrap.InitializeOptions.None, out _);
             var packages = new PackageManager().FindPackagesForUser("")
-                .Where(p => p.Id.Name.StartsWith("Microsoft.WindowsAppRuntime.", StringComparison.Ordinal))
+                .Where(p => p.Id.FamilyName == "Microsoft.WindowsAppRuntime.2_8wekyb3d8bbwe" && p.Id.Architecture.ToString().Equals(Architecture, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(p => RuntimeRelease(p.Id.Name)).ThenByDescending(p => p.Id.Version.Build).ToArray();
             RuntimeVersion = packages.FirstOrDefault() is { } runtime ? $"{runtime.Id.Name} {runtime.Id.Version.Major}.{runtime.Id.Version.Minor}.{runtime.Id.Version.Build}.{runtime.Id.Version.Revision}" : null;
         }
@@ -61,12 +56,8 @@ internal sealed class WindowsHost : IDisposable
     }
     public IReadOnlyList<ExecutionProvider> Providers()
     {
+        if (!AiRuntimeReady) return [];
         try { return ExecutionProviderCatalog.GetDefault().FindAllProviders().Take(32).ToArray(); } catch { return []; }
-    }
-    public bool AionFrameworkPresent()
-    {
-        if (Architecture != "arm64") return false;
-        try { return new PackageManager().FindPackagesForUser("").Any(p => p.Id.FamilyName == AionAdapter.FamilyName && p.Id.Version.Major >= 1); } catch { return false; }
     }
     public bool LanguageAccess(string token)
     {
@@ -81,16 +72,11 @@ internal sealed class WindowsHost : IDisposable
     }
     public Feature Feature(string id, Preferences preferences, string token)
     {
-        var label = id switch { "languageModel" => "Windows language model", "aion" => "Aion Instruct preview", "summarize" => "Summarize", "rewrite" => "Rewrite", "ocr" => "Text recognition", "imageDescription" => "Image description", "appContentSearch" => "App content search", "agentDiscovery" => "Windows agent discovery", "agentInvocation" => "Windows agent invocation", _ => "Lumen agent registration" };
+        var label = id switch { "languageModel" => "Windows language model", "aion" => "Native Aion", "summarize" => "Summarize", "rewrite" => "Rewrite", "ocr" => "Text recognition", "imageDescription" => "Image description", "appContentSearch" => "App content search", "agentDiscovery" => "Windows agent discovery", "agentInvocation" => "Windows agent invocation", _ => "Lumen agent registration" };
         var enabled = preferences.Enabled(id);
         Feature State(string availability, string reason, string? detail = null) => new(id, "windows", label, availability, reason, detail, enabled, null);
         if (id == "aion")
-        {
-            if (Architecture != "arm64") return State("unsupported", "aion_arm64_only", "The pinned Aion preview supports ARM64 Snapdragon/QNN hosts only.");
-            if (!AionFrameworkPresent()) return State("runtimeRequired", "aion_framework_missing", "Install the Microsoft-signed Aion ARM64 framework through its documented setup before preparing the model.");
-            if (!Providers().Any(p => p.Name == "QNNExecutionProvider" && p.Certification == ExecutionProviderCertification.Certified && p.ReadyState == ExecutionProviderReadyState.Ready)) return State("unsupported", "aion_certified_npu_required", "Aion requires a certified ready QNN NPU provider; provider installation is a separate setup step.");
-            return State("ready", "aion_framework_and_qnn_ready", "The framework and certified QNN provider are installed. Model loading is checked when a request begins.");
-        }
+            return State("unavailable", "aion_no_stable_contract", "Native Aion has no verified redistributable stable contract and is excluded from this helper.");
         if (id == "agentDiscovery") return AgentRegistry.FindOdr() is null ? State("unavailable", "odr_unavailable") : State("ready", "odr_present");
         if (id == "agentRegistration")
         {
@@ -112,13 +98,12 @@ internal sealed class WindowsHost : IDisposable
             return State(result.availability, result.reason, result.availability == "ready" ? "Windows App Actions can be queried. Invocation still requires a currently discovered agent and a successful terminal action result." : null);
         }
         if (id == "appContentSearch" && !Identity) return State("identityRequired", "package_identity_missing");
-        if (!AiRuntimeReady) return State("runtimeRequired", "windows_ai_runtime_missing", "This helper is pinned to Windows App Runtime 2.5 experimentalF; an older installed runtime does not establish API readiness.");
+        if (!AiRuntimeReady) return State("runtimeRequired", "windows_ai_runtime_missing", "This helper requires the stable Windows App Runtime 2.5.1 or later compatible runtime; installation alone does not establish model readiness.");
         try
         {
             if (id == "appContentSearch")
             {
-                var capability = AppContentIndexer.GetIndexCapabilitiesOfCurrentSystem().GetIndexCapabilityStatus(IndexCapability.TextSemantic);
-                return capability switch { IndexCapabilityOfCurrentSystemStatus.Ready => State("ready", "index_semantic_ready"), IndexCapabilityOfCurrentSystemStatus.NotReady => State("downloadable", "index_semantic_not_ready"), IndexCapabilityOfCurrentSystemStatus.DisabledByPolicy => State("disabled", "index_disabled_by_policy"), _ => State("unsupported", "index_not_supported") };
+                return State("accessRequired", AppContentAccess.ReasonCode, "Stable App Content Search requires its own Microsoft-issued feature ID, token and attestation. This helper has no verified activation contract; a language-model token does not grant search access.");
             }
             if (id is "languageModel" or "summarize" or "rewrite" && !LanguageAccess(token)) return State("accessRequired", "limited_access_token_required");
             var ready = id switch { "ocr" => TextRecognizer.GetReadyState(), "imageDescription" => ImageDescriptionGenerator.GetReadyState(), _ => LanguageModel.GetReadyState() };
@@ -149,6 +134,7 @@ internal sealed class WindowsHost : IDisposable
     public void RequireReady(string feature, Preferences preferences, string token)
     {
         var state = Feature(feature, preferences, token);
+        if (feature == "appContentSearch" && state.Availability == "accessRequired") AppContentAccess.Require();
         if (state.Availability != "ready") throw new HelperFault(state.Availability switch { "identityRequired" => "identity_required", "runtimeRequired" => "runtime_required", "accessRequired" => "access_required", "downloadable" => "model_not_ready", "disabled" => "blocked_by_policy", "unsupported" => "unsupported", _ => state.ReasonCode });
     }
     public static HelperFault Map(Exception error) => error switch

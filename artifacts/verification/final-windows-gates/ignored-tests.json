@@ -1,0 +1,141 @@
+{
+  "source": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "binarySha256": "313ed3e6a94151fda08d710612054f9285c51f7b292bd0da4ac103b83b94799c",
+  "count": 26,
+  "entries": [
+    {
+      "path": "computer_use::coordinator::tests::native_stop_twenty_blocked_worker_samples",
+      "status": "owned_fixture_passed",
+      "gate": "native-stop"
+    },
+    {
+      "path": "computer_use::executor::tests::rust_executor_wire_and_warm_pool_verify_real_edge_state",
+      "status": "owned_fixture_passed",
+      "gate": "native-wire"
+    },
+    {
+      "path": "computer_use::provider::tests::live_provider_availability",
+      "status": "pending_live_provider_consent_and_setup"
+    },
+    {
+      "path": "computer_use::windows::tests::a_lost_window_instance_marker_invalidates_selection_without_process_changes",
+      "status": "pending_desktop_privacy_prerequisite"
+    },
+    {
+      "path": "computer_use::windows::tests::pruning_stale_metadata_preserves_the_current_window_marker",
+      "status": "pending_desktop_privacy_prerequisite"
+    },
+    {
+      "path": "computer_use::windows::tests::unmarked_windows_are_never_admitted",
+      "status": "pending_desktop_privacy_prerequisite"
+    },
+    {
+      "path": "gateway::answer::transport_tests::native_bridge",
+      "status": "owned_fixture_passed",
+      "gate": "answer-native-sha"
+    },
+    {
+      "path": "gateway::config::tests::pinned_binary_accepts_generated_config",
+      "status": "owned_fixture_passed",
+      "gate": "native-config"
+    },
+    {
+      "path": "gateway::enrichment::tests::improvement_worker_recovers_crash_and_fences_old_generation",
+      "status": "owned_fixture_passed",
+      "gate": "native-improvement"
+    },
+    {
+      "path": "gateway::enrichment::tests::local_http_proxy_probe_enrichment",
+      "status": "child_fixture_passed_through_parent",
+      "gate": "native-proxy"
+    },
+    {
+      "path": "gateway::enrichment::tests::rivet_worker_replaces_dead_engine_and_stops_owned_children",
+      "status": "owned_fixture_passed",
+      "gate": "native-dead"
+    },
+    {
+      "path": "gateway::enrichment::tests::rivet_worker_replaces_hung_owned_engine_without_false_readiness",
+      "status": "owned_fixture_passed",
+      "gate": "native-hung"
+    },
+    {
+      "path": "gateway::enrichment::tests::rivet_worker_resumes_without_duplicate_jobs",
+      "status": "owned_fixture_passed",
+      "gate": "native-resume"
+    },
+    {
+      "path": "gateway::local_runtime::answer_preparation_tests::probe_child",
+      "status": "child_fixture_passed_through_parent",
+      "gate": "rust-tests-full"
+    },
+    {
+      "path": "gateway::local_runtime::answer_preparation_tests::server_child",
+      "status": "child_fixture_passed_through_parent",
+      "gate": "rust-tests-full"
+    },
+    {
+      "path": "gateway::supervisor::tests::pinned_gateway_digest_matches_compiled_admission",
+      "status": "owned_fixture_passed",
+      "gate": "native-digest"
+    },
+    {
+      "path": "gateway::supervisor::tests::pinned_gateway_starts_restarts_and_stops_both_lanes",
+      "status": "excluded_fixed_ordinary_credential_read"
+    },
+    {
+      "path": "improvement::docker::tests::actual_docker_prime_acceptance_generation_cancel_and_ownership",
+      "status": "user_deferred_docker"
+    },
+    {
+      "path": "improvement::docker::tests::actual_docker_sandbox_empirical_confinement",
+      "status": "user_deferred_docker"
+    },
+    {
+      "path": "provider_switcher::client::tests::local_http_proxy_probe_management",
+      "status": "child_fixture_passed_through_parent",
+      "gate": "native-proxy"
+    },
+    {
+      "path": "provider_switcher::profiles::tests::windows_credentials_owned_slot_round_trip",
+      "status": "owned_fixture_passed",
+      "gate": "native-credential"
+    },
+    {
+      "path": "provider_switcher::supervisor::tests::local_http_proxy_probe_health",
+      "status": "child_fixture_passed_through_parent",
+      "gate": "native-proxy"
+    },
+    {
+      "path": "search::embedding::tests::local_http_proxy_probe_embedding",
+      "status": "child_fixture_passed_through_parent",
+      "gate": "native-proxy"
+    },
+    {
+      "path": "search::indexing::capacity_tests::native_filesystem_capacity",
+      "status": "large_50k_unclosed_original_cap_pending"
+    },
+    {
+      "path": "search::indexing::freshness_tests::compiled_enrichment_consumer_indexes_scanned_pdf_image_audio_video_and_cancels_stop",
+      "status": "owned_fixture_passed",
+      "gate": "native-consumer"
+    },
+    {
+      "path": "windows_ai::supervisor::tests::real_staged_helper_status_probe",
+      "status": "excluded_fixed_ordinary_credential_read"
+    }
+  ],
+  "latestNativeFixtureEvidence": {
+    "source": "ae412fb5587f87aa4914ff429cf0abf8e11dbee1",
+    "compiledSource": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+    "normalStagedWorkerUnchanged": true,
+    "standaloneCompiledRuntimeGate": "FAILED_OPEN",
+    "receipts": [
+      "callback-recovery-20261015/native-resume.receipt.json",
+      "callback-recovery-20261015/native-dead.receipt.json",
+      "callback-recovery-20261015/native-hung.receipt.json",
+      "callback-recovery-20261015/native-improvement.receipt.json",
+      "callback-recovery-20261015/native-consumer.receipt.json"
+    ]
+  }
+}

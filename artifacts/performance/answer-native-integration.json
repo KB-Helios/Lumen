@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-10T05:40:02.808Z",
+  "recordedAt": "2026-10-15T14:15:04.106Z",
   "browserVersion": "155.0.4283.45",
   "evidence": "loopback-native-transport-installed-edge",
-  "binary": "lumen_lib-c8d8a2b3af982606.exe",
+  "binary": "lumen_lib-4843514622e33193.exe",
   "nativeTest": "gateway::answer::transport_tests::native_bridge",
   "packagedWebViewVerified": false,
   "liveProviderVerified": false,
@@ -10,360 +10,360 @@
   "scenarios": {
     "fallback": {
       "commits": 7,
-      "renderMs": 15.600000001490116,
-      "callbackMs": 4.699999999254942,
+      "renderMs": 11.300000000745058,
+      "callbackMs": 3,
       "nativeEvents": 7,
-      "submittedAt": 4973.800000000745,
-      "firstRenderedTokenMs": 35.19999999925494
+      "submittedAt": 3302.699999999255,
+      "firstRenderedTokenMs": 40.20000000111759
     },
     "stop": {
-      "uiStopMs": 52.9341000000004
+      "uiStopMs": 31.67789999999968
     },
     "replacement": {
-      "commits": 4,
-      "renderMs": 4.699999997392297,
-      "callbackMs": 0.599999999627471,
+      "commits": 5,
+      "renderMs": 3,
+      "callbackMs": 0.3000000026077032,
       "nativeEvents": 4,
-      "submittedAt": 5427.699999999255,
-      "firstRenderedTokenMs": 20.700000001117587
+      "submittedAt": 3610.4000000003725,
+      "firstRenderedTokenMs": 20.699999999254942
     },
     "burst": {
       "commits": 10,
-      "renderMs": 14.09999999590218,
-      "callbackMs": 6.800000002607703,
+      "renderMs": 5.799999997019768,
+      "callbackMs": 5.400000000372529,
       "nativeEvents": 1003,
-      "submittedAt": 5459,
-      "firstRenderedTokenMs": 23.90000000037253
+      "submittedAt": 3637,
+      "firstRenderedTokenMs": 25.300000000745058
     },
     "deliveryOrder": {
       "commits": 4,
-      "renderMs": 4.799999998882413,
-      "callbackMs": 1.1000000014901161,
+      "renderMs": 2.599999997764826,
+      "callbackMs": 0.5000000018626451,
       "nativeEvents": 4,
-      "submittedAt": 5531.800000000745,
-      "firstRenderedTokenMs": 56.79999999888241
+      "submittedAt": 3685.699999999255,
+      "firstRenderedTokenMs": 51.20000000111759
     }
   },
   "nativeMemory": {
     "samplesBytes": [
-      15462400,
-      15491072,
-      15491072,
-      15491072,
-      15568896,
-      15572992
+      16576512,
+      16572416,
+      16596992,
+      16621568,
+      16691200,
+      16691200
     ],
     "iterations": 35,
-    "firstToLastGrowthBytes": 110592
+    "firstToLastGrowthBytes": 114688
   },
   "nativeSamples": [
     {
-      "requestId": 1791610807680001,
+      "requestId": 1792073707359001,
       "query": "fallback",
       "events": 7,
       "attempts": 2,
-      "firstTokenMs": 17.0024999999996,
-      "doneMs": 66.97519999999986
+      "firstTokenMs": 25.003099999999904,
+      "doneMs": 84.52370000000064
     },
     {
-      "requestId": 1791610807680002,
+      "requestId": 1792073707359002,
       "query": "retry",
       "events": 4,
       "attempts": 1,
-      "firstTokenMs": 7.538400000000365,
-      "doneMs": 94.9980000000005,
-      "cancelToNativeDoneMs": 6.727399999999761
+      "firstTokenMs": 15.676699999999983,
+      "doneMs": 54.51759999999922,
+      "cancelToNativeDoneMs": 6.998499999999694
     },
     {
-      "requestId": 1791610807680003,
+      "requestId": 1792073707359003,
       "query": "retry",
       "events": 4,
       "attempts": 1,
-      "firstTokenMs": 9.144599999999627,
-      "doneMs": 10.777000000000044
+      "firstTokenMs": 15.231999999999971,
+      "doneMs": 17.2507999999998
     },
     {
-      "requestId": 1791610807680004,
+      "requestId": 1792073707359004,
       "query": "replacement-a",
       "events": 4,
       "attempts": 1,
-      "firstTokenMs": 8.573900000000322,
-      "doneMs": 31.510700000000725,
-      "cancelToNativeDoneMs": 8.048899999999776
+      "firstTokenMs": 16.273699999999735,
+      "doneMs": 59.786299999999756,
+      "cancelToNativeDoneMs": 6.388799999999719
     },
     {
-      "requestId": 1791610807680005,
+      "requestId": 1792073707359005,
       "query": "replacement-b",
       "events": 4,
       "attempts": 1,
-      "firstTokenMs": 5.35570000000007,
-      "doneMs": 7.7750999999998385
+      "firstTokenMs": 14.71519999999964,
+      "doneMs": 17.157000000000153
     },
     {
-      "requestId": 1791610807680006,
+      "requestId": 1792073707359006,
       "query": "burst",
       "events": 1003,
       "attempts": 1,
-      "firstTokenMs": 12.174300000000585,
-      "doneMs": 47.16219999999976
+      "firstTokenMs": 16.888600000000224,
+      "doneMs": 35.50709999999981
     },
     {
-      "requestId": 1791610807680007,
+      "requestId": 1792073707359007,
       "query": "delivery-order",
       "events": 4,
       "attempts": 1,
-      "firstTokenMs": 11.902000000000044,
-      "doneMs": 14.30410000000029
+      "firstTokenMs": 15.805499999999483,
+      "doneMs": 17.797099999999773
     },
     {
-      "requestId": 1791610807680008,
+      "requestId": 1792073707359008,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.943599999999606
+      "doneMs": 17.35319999999956
     },
     {
-      "requestId": 1791610807680009,
+      "requestId": 1792073707359009,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 9.684400000000096
+      "doneMs": 17.204200000000128
     },
     {
-      "requestId": 1791610807680010,
+      "requestId": 1792073707359010,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 7.636199999999917
+      "doneMs": 16.738800000000083
     },
     {
-      "requestId": 1791610807680011,
+      "requestId": 1792073707359011,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.719000000000051
+      "doneMs": 18.466099999999642
     },
     {
-      "requestId": 1791610807680012,
+      "requestId": 1792073707359012,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.966499999999542
+      "doneMs": 16.938999999999396
     },
     {
-      "requestId": 1791610807680013,
+      "requestId": 1792073707359013,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.3079000000007
+      "doneMs": 17.162099999999555
     },
     {
-      "requestId": 1791610807680014,
+      "requestId": 1792073707359014,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.028599999999642
+      "doneMs": 16.933200000000397
     },
     {
-      "requestId": 1791610807680015,
+      "requestId": 1792073707359015,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.844600000000355
+      "doneMs": 18.122400000000198
     },
     {
-      "requestId": 1791610807680016,
+      "requestId": 1792073707359016,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.638100000000122
+      "doneMs": 22.96309999999994
     },
     {
-      "requestId": 1791610807680017,
+      "requestId": 1792073707359017,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 9.321600000000217
+      "doneMs": 19.878099999999904
     },
     {
-      "requestId": 1791610807680018,
+      "requestId": 1792073707359018,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.10189999999966
+      "doneMs": 15.232299999999668
     },
     {
-      "requestId": 1791610807680019,
+      "requestId": 1792073707359019,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 11.377700000000004
+      "doneMs": 16.472499999999854
     },
     {
-      "requestId": 1791610807680020,
+      "requestId": 1792073707359020,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.208700000000135
+      "doneMs": 16.246299999999792
     },
     {
-      "requestId": 1791610807680021,
+      "requestId": 1792073707359021,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 11.094200000000455
+      "doneMs": 16.45849999999973
     },
     {
-      "requestId": 1791610807680022,
+      "requestId": 1792073707359022,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.877999999999702
+      "doneMs": 17.485899999999674
     },
     {
-      "requestId": 1791610807680023,
+      "requestId": 1792073707359023,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 7.839899999999943
+      "doneMs": 16.795200000000477
     },
     {
-      "requestId": 1791610807680024,
+      "requestId": 1792073707359024,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 9.713200000000143
+      "doneMs": 16.851200000000063
     },
     {
-      "requestId": 1791610807680025,
+      "requestId": 1792073707359025,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.910200000000259
+      "doneMs": 16.594100000000253
     },
     {
-      "requestId": 1791610807680026,
+      "requestId": 1792073707359026,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.094600000000355
+      "doneMs": 16.470900000000256
     },
     {
-      "requestId": 1791610807680027,
+      "requestId": 1792073707359027,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 9.730400000000373
+      "doneMs": 16.994799999999486
     },
     {
-      "requestId": 1791610807680028,
+      "requestId": 1792073707359028,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.89049999999952
+      "doneMs": 16.11279999999988
     },
     {
-      "requestId": 1791610807680029,
+      "requestId": 1792073707359029,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 7.850599999999758
+      "doneMs": 19.24499999999898
     },
     {
-      "requestId": 1791610807680030,
+      "requestId": 1792073707359030,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 9.665100000000166
+      "doneMs": 19.486800000000585
     },
     {
-      "requestId": 1791610807680031,
+      "requestId": 1792073707359031,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 12.36830000000009
+      "doneMs": 18.76679999999942
     },
     {
-      "requestId": 1791610807680032,
+      "requestId": 1792073707359032,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 11.18539999999848
+      "doneMs": 24.66489999999976
     },
     {
-      "requestId": 1791610807680033,
+      "requestId": 1792073707359033,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 13.110800000000381
+      "doneMs": 20.675199999999677
     },
     {
-      "requestId": 1791610807680034,
+      "requestId": 1792073707359034,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 11.802300000001196
+      "doneMs": 15.112199999999575
     },
     {
-      "requestId": 1791610807680035,
+      "requestId": 1792073707359035,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.020700000000943
+      "doneMs": 16.7479000000003
     },
     {
-      "requestId": 1791610807680036,
+      "requestId": 1792073707359036,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 10.596799999999348
+      "doneMs": 16.254799999998795
     },
     {
-      "requestId": 1791610807680037,
+      "requestId": 1792073707359037,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.719900000000052
+      "doneMs": 15.483899999999267
     },
     {
-      "requestId": 1791610807680038,
+      "requestId": 1792073707359038,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 11.82589999999982
+      "doneMs": 18.43920000000071
     },
     {
-      "requestId": 1791610807680039,
+      "requestId": 1792073707359039,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 9.328199999999924
+      "doneMs": 23.96650000000045
     },
     {
-      "requestId": 1791610807680040,
+      "requestId": 1792073707359040,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 7.102899999999863
+      "doneMs": 21.611000000000786
     },
     {
-      "requestId": 1791610807680041,
+      "requestId": 1792073707359041,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 8.861100000000079
+      "doneMs": 22.3161999999993
     },
     {
-      "requestId": 1791610807680042,
+      "requestId": 1792073707359042,
       "query": "failure",
       "events": 3,
       "attempts": 1,
-      "doneMs": 7.950800000000527
+      "doneMs": 17.47229999999945
     }
   ],
   "nativeShutdown": {
     "code": 0,
     "signal": null,
-    "elapsedMs": 9.103700000001481
+    "elapsedMs": 6.240399999998772
   }
 }

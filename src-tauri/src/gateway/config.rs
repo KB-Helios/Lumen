@@ -4,6 +4,19 @@ pub const AGENTGATEWAY_VERSION: &str = "v1.4.1";
 pub const AGENTGATEWAY_SHA256: &str =
     "7fcdc2a51cb7ab7f5c4b5a21f9066b3704f30ec6895c386332871381fab84ab6";
 
+pub fn agentgateway_sha256() -> &'static str {
+    // Keep the complete verified seal binding in optimized binaries for package verification.
+    let binding = std::hint::black_box(env!("LUMEN_GATEWAY_BINDING"));
+    if binding == "lumen-unsigned-v1" {
+        AGENTGATEWAY_SHA256
+    } else {
+        binding
+            .rsplit(':')
+            .next()
+            .expect("build-verified Gateway binding")
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct GatewayPorts {
     pub interactive: u16,

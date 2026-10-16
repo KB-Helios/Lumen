@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-15T15:41:51.910Z",
+  "success": true,
+  "files": [
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "originalSha256": "5c35664868f2331e2495a395911d2645aabaf89ced9073c530479c8ce502cd46",
+      "restoredSha256": "5c35664868f2331e2495a395911d2645aabaf89ced9073c530479c8ce502cd46"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js",
+      "originalSha256": "c82a029ca57f10b0e7e136efcb4e895fa28df89d2d4ac1b59aade3e7e780b24d",
+      "restoredSha256": "c82a029ca57f10b0e7e136efcb4e895fa28df89d2d4ac1b59aade3e7e780b24d"
+    }
+  ],
+  "stagedSha256": "4a02bdfe85051badd0d98e52067c4dad0b16c20bfe237cf0d21b6a34727d7dc0",
+  "testSha256": "aac01683857c37d129e7d9420e0133b7b68e98ded201863962b7103615c684a6"
+}

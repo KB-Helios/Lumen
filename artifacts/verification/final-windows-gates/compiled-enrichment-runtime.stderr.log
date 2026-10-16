@@ -1,0 +1,18 @@
+
+workers\enrichment-runtime.test.ts:
+56 |     let last: unknown;
+57 |     do {
+58 |       try {const value = await operation(); if (accept(value)) return value;} catch (error) {last = error;}
+59 |       await Bun.sleep(100);
+60 |     } while (Date.now() < deadline);
+61 |     throw new Error(`Compiled readiness/recovery deadline ${milliseconds}ms: ${String(last)}`);
+                   ^
+error: Compiled readiness/recovery deadline 15000ms: Error: Unable to connect. Is the computer able to access the url?
+      at until ([workspace]\workers\enrichment-runtime.test.ts:61:15)
+      at async <anonymous> ([workspace]\workers\enrichment-runtime.test.ts:183:25)
+(fail) compiled worker authenticates and persists fenced enrichment leases through crash [47122.93ms]
+
+ 0 pass
+ 1 fail
+ 184 expect() calls
+Ran 1 test across 1 file. [47.25s]

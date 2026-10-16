@@ -1,5 +1,5 @@
 use lumen_lib::provider_switcher::client::CliproxyClient;
-use lumen_lib::provider_switcher::config::minimal_yaml;
+use lumen_lib::provider_switcher::config::{minimal_yaml, write_minimal_config};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 
@@ -37,13 +37,10 @@ fn pinned_executable_serves_isolated_authenticated_management() {
     drop(listener);
     let key = uuid::Uuid::new_v4().to_string();
     let client_key = uuid::Uuid::new_v4().to_string();
-    let yaml = minimal_yaml(
-        &auth_dir.to_string_lossy().replace('\\', "/"),
-        &key,
-        &client_key,
-    )
-    .replace("port: 8317", &format!("port: {port}"));
-    let config = directory.join("config.yaml");
+    let config = write_minimal_config(&directory, &key, &client_key).unwrap();
+    let yaml = std::fs::read_to_string(&config)
+        .unwrap()
+        .replace("port: 8317", &format!("port: {port}"));
     std::fs::write(&config, yaml).unwrap();
     let executable = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("binaries/cliproxy-sidecar-x86_64-pc-windows-msvc.exe");
@@ -92,6 +89,8 @@ fn pinned_executable_serves_isolated_authenticated_management() {
         serde_json::to_value(credentials).unwrap()["files"],
         serde_json::json!([])
     );
+    assert!(!tauri::async_runtime::block_on(client.oauth_linked("codex")).unwrap());
+    assert!(!tauri::async_runtime::block_on(client.oauth_cancel("owned-missing-session")).unwrap());
     let unauthorized = CliproxyClient::with_base(base, "incorrect-key".to_owned());
     assert!(
         tauri::async_runtime::block_on(unauthorized.get_config())
@@ -246,6 +245,36 @@ fn oauth_cancel_reports_sidecar_flag() {
         tauri::async_runtime::block_on(client.oauth_cancel("state-123")).expect("cancel");
     assert!(cancelled);
     server.join().expect("mock server");
+}
+
+#[test]
+fn oauth_cancel_distinguishes_already_gone_from_invalid_acknowledgements() {
+    for (body, expected) in [
+        (r#"{"status":"ok","cancelled":false}"#, Some(false)),
+        (r#"{"status":"ok"}"#, None),
+        (r#"{"status":"ok","cancelled":"true"}"#, None),
+        (
+            r#"{"status":"error","cancelled":true,"error":"private upstream detail"}"#,
+            None,
+        ),
+    ] {
+        let (base, server) = serve_once(
+            "DELETE",
+            "/v8/management/oauth/session?state=owned-state",
+            "owned-key",
+            body,
+        );
+        let client = CliproxyClient::with_base(base, "owned-key".into());
+        let result = tauri::async_runtime::block_on(client.oauth_cancel("owned-state"));
+        server.join().unwrap();
+        match expected {
+            Some(expected) => assert_eq!(result.unwrap(), expected),
+            None => assert_eq!(
+                result.unwrap_err(),
+                "Cliproxy did not confirm OAuth cancellation"
+            ),
+        }
+    }
 }
 
 #[test]

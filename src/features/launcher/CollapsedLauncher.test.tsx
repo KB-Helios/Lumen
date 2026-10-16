@@ -6,6 +6,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {readDiagnosticMetrics, resetDiagnosticMetrics} from '../diagnostics/diagnostics.metrics';
 import {useSettingsStore} from '../settings/settings.store';
 import {BrowserWindowService} from '../../platform/window/browser-window-service';
+import {motionTokens} from '../../design-system/motion';
 import {useLauncherStore} from './launcher.store';
 import {CollapsedLauncher} from './CollapsedLauncher';
 import {useQueryStore} from './query.store';
@@ -21,6 +22,52 @@ afterEach(() => {
 });
 
 describe('CollapsedLauncher', () => {
+  it('reverses an exiting workspace before composition without admitting a stale collapse', async () => {
+    useQueryStore.getState().setDraft('report');
+    const windowService = new BrowserWindowService();
+    const show = vi.spyOn(windowService, 'show');
+    const {container} = render(<CollapsedLauncher windowService={windowService} />);
+    const input = screen.getByRole('searchbox') as HTMLInputElement;
+    await waitFor(() => expect(windowService.snapshot().mode).toBe('expanded'));
+    expect(container.querySelector('[data-einui-slot="workspace"]')).toBeInTheDocument();
+
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(useQueryStore.getState().committed).toBe('');
+    expect(container.querySelector('[data-einui-slot="footer"]')).toBeInTheDocument();
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    const cancelFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {frames.delete(id);});
+    fireEvent.input(input, {target: {value: 'report again'}});
+    input.setSelectionRange(3, 3);
+    fireEvent.compositionStart(input);
+    act(() => {
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach((frame) => frame(performance.now()));
+    });
+    requestFrame.mockRestore();
+    cancelFrame.mockRestore();
+
+    // Allow the real workspace's obsolete exit animation to finish.
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve,
+        (motionTokens.duration.launcherClose + motionTokens.duration.launcherExpansion) * 1000));
+    });
+    expect(useQueryStore.getState()).toMatchObject({committed: 'report again', isComposing: true});
+    expect(windowService.snapshot()).toMatchObject({mode: 'expanded', width: 800, height: 540});
+    expect(show.mock.calls.map(([mode]) => mode)).not.toContain('collapsed');
+    expect(container.querySelector('[data-einui-slot="workspace"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-einui-slot="footer"]')).toHaveTextContent('Ready');
+    expect(screen.getByRole('searchbox')).toBe(input);
+    expect(input).toHaveValue('report again');
+    expect(input.selectionStart).toBe(3);
+    fireEvent.compositionEnd(input);
+  });
+
   it('records 24 launcher-visible samples across 24 hide and show transitions', () => {
     const frames = new Map<number, FrameRequestCallback>();
     let nextFrame = 0;

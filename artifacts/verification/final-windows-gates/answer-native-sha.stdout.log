@@ -1,0 +1,7 @@
+{
+    "binary":  "[native-target]/debug/deps/lumen_lib-4843514622e33193.exe",
+    "sha256":  "313ed3e6a94151fda08d710612054f9285c51f7b292bd0da4ac103b83b94799c",
+    "source":  "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+    "bytes":  32425472
+}
+Native answer integration passed. Evidence: [workspace]\artifacts\performance\answer-native-integration.json

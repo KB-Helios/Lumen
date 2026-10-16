@@ -1,0 +1,20 @@
+current-source: exit 0, expected accepted=True
+formatting-and-comments: exit 0, expected accepted=True
+wrong-package-name: exit 1, expected accepted=False
+wrong-application-id: exit 1, expected accepted=False
+wrong-main-target: exit 1, expected accepted=False
+wrong-helper-target: exit 1, expected accepted=False
+missing-helper: exit 1, expected accepted=False
+external-content-disabled: exit 1, expected accepted=False
+wrong-runtime-behavior: exit 1, expected accepted=False
+wrong-publisher: exit 1, expected accepted=False
+wrong-version: exit 1, expected accepted=False
+changed-fixed-action-asset: exit 1, expected accepted=False
+missing-fixed-registration-asset: exit 1, expected accepted=False
+extra-payload: exit 1, expected accepted=False
+duplicate-manifest: exit 1, expected accepted=False
+Sign-rejects-other-package-before-owner: expected refusal exit 1
+Verify-rejects-other-package-before-signature: expected refusal exit 1
+Sign-valid-metadata-still-requires-owner: expected refusal exit 1
+Verify-valid-metadata-still-requires-signature: expected refusal exit 1
+19 unsigned metadata/ordering cases passed; no signing, certificate import or trust changes. Signed-MSIX acceptance remains pending.

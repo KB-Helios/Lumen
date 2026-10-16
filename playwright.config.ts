@@ -2,6 +2,7 @@ import {defineConfig} from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: '**/performance.spec.ts',
   // Functional flows and the compositor benchmark share one desktop GPU.
   // Serial execution keeps the high-refresh evidence isolated and repeatable.
   fullyParallel: false,

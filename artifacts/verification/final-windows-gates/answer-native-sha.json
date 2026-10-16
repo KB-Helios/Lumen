@@ -1,0 +1,19 @@
+{
+  "label": "answer-native-sha",
+  "command": "powershell.exe",
+  "args": [
+    "-NoProfile",
+    "-File",
+    ".superpowers/task14c-answer.ps1"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T14:15:01.984Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "0378625cf8696ee2a35d17b992b63613e9856f8c7409fab0302c4f3f5a57da0d",
+  "releaseMarker": null,
+  "runnerPid": 31128,
+  "pid": 8780,
+  "ended": "2026-10-15T14:15:14.576Z",
+  "code": 0,
+  "signal": null
+}

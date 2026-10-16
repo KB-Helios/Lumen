@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run stage:sidecars && bun run build",
+    "beforeBuildCommand": "bun scripts/release.ts before-build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -31,11 +31,7 @@
         "skipTaskbar": true,
         "shadow": false,
         "zoomHotkeysEnabled": false,
-        "backgroundColor": "#00000000",
-        "windowEffects": {
-          "effects": ["acrylic", "mica", "blur"],
-          "color": "#0a121bc4"
-        }
+        "backgroundColor": "#00000000"
       }
     ],
     "security": {
@@ -48,9 +44,7 @@
     "targets": "nsis",
     "externalBin": ["binaries/agentgateway", "binaries/cliproxy-sidecar", "binaries/lumen-enrichment", "binaries/lumen-rivet-engine", "binaries/lumen-computer-use"],
     "resources": {
-      "binaries/libstdc++-6.dll": "libstdc++-6.dll",
-      "binaries/libgcc_s_seh-1.dll": "libgcc_s_seh-1.dll",
-      "binaries/libwinpthread-1.dll": "libwinpthread-1.dll",
+      "resources/rivet-engine/THIRD-PARTY-NOTICES.txt": "rivet-engine/THIRD-PARTY-NOTICES.txt",
       "binaries/vector.dll": "vector.dll",
       "binaries/windows-ai/": "windows-ai/",
       "binaries/computer-use-runtime/": "computer-use-runtime/",

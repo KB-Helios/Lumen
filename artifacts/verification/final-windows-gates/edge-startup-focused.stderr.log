@@ -1,0 +1,3 @@
+$ node scripts/run-e2e.mjs "tests/e2e/accessibility.spec.ts" -g "core launcher and preview controls|keyboard-only search, selection"
+(node:15640) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

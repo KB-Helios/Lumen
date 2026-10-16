@@ -3,6 +3,129 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[tokio::test]
+    async fn probe_failure_still_awaits_both_cleanup_steps() {
+        use std::cell::RefCell;
+        let events = RefCell::new(Vec::new());
+        for panic in [false, true] {
+            events.borrow_mut().clear();
+            let result = probe_then_cleanup(
+                async {
+                    events.borrow_mut().push("probe");
+                    assert!(!panic, "synthetic probe assertion");
+                    Err::<(), _>("synthetic probe failure".to_string())
+                },
+                async {
+                    tokio::task::yield_now().await;
+                    events.borrow_mut().push("container");
+                    Ok(())
+                },
+                || {
+                    events.borrow_mut().push("canary");
+                    Ok(())
+                },
+            )
+            .await;
+            events.borrow_mut().push("returned");
+            assert!(result.unwrap_err().contains(if panic {
+                "synthetic probe assertion"
+            } else {
+                "synthetic probe failure"
+            }));
+            assert_eq!(
+                *events.borrow(),
+                ["probe", "container", "canary", "returned"]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_cleanup_uncertainty_preserves_both_failures_and_still_removes_canary() {
+        let canary_attempted = std::cell::Cell::new(false);
+        let result = probe_then_cleanup(
+            async { Err::<(), _>("probe-error".to_string()) },
+            async { Err("container-error".to_string()) },
+            || {
+                canary_attempted.set(true);
+                Err("canary-error".to_string())
+            },
+        )
+        .await;
+        assert!(canary_attempted.get());
+        let detail = result.unwrap_err();
+        for expected in [
+            CLEANUP_UNCERTAIN,
+            "probe-error",
+            "container-error",
+            "canary-error",
+        ] {
+            assert!(detail.contains(expected));
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_success_requires_successful_cleanup_before_returning_value() {
+        for cleanup_fails in [false, true] {
+            let cleaned = std::cell::Cell::new(false);
+            let canary_removed = std::cell::Cell::new(false);
+            let outcome = probe_then_cleanup(
+                async { Ok(42) },
+                async {
+                    tokio::task::yield_now().await;
+                    cleaned.set(true);
+                    if cleanup_fails {
+                        Err("cleanup-error".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    canary_removed.set(true);
+                    Ok(())
+                },
+            )
+            .await;
+            assert!(cleaned.get() && canary_removed.get());
+            if cleanup_fails {
+                assert!(outcome.unwrap_err().contains(CLEANUP_UNCERTAIN));
+            } else {
+                assert_eq!(outcome.unwrap(), 42);
+            }
+        }
+    }
+
+    async fn probe_then_cleanup<T>(
+        probe: impl std::future::Future<Output = Result<T, String>>,
+        cleanup: impl std::future::Future<Output = Result<(), String>>,
+        remove_canary: impl FnOnce() -> Result<(), String>,
+    ) -> Result<T, String> {
+        use futures_util::FutureExt;
+        let outcome = std::panic::AssertUnwindSafe(probe)
+            .catch_unwind()
+            .await
+            .unwrap_or_else(|panic| {
+                let detail = panic
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| panic.downcast_ref::<&str>().copied())
+                    .unwrap_or("unknown probe panic");
+                Err(format!("Probe assertion failed: {detail}"))
+            });
+        let container = cleanup.await;
+        let canary = remove_canary();
+        if container.is_err() || canary.is_err() {
+            return Err(format!(
+                "{CLEANUP_UNCERTAIN} container={container:?}; canary={canary:?}; probe={}",
+                outcome
+                    .as_ref()
+                    .err()
+                    .map(String::as_str)
+                    .unwrap_or("passed")
+            ));
+        }
+        outcome
+    }
+
     #[test]
     fn sandbox_arguments_do_not_admit_host_access() {
         let args = sandbox_args("installation", "run", "sha256:image");
@@ -107,6 +230,168 @@ mod tests {
         assert!(strict_json(br#"{"v":1,"v":2,"type":"result"}"#).is_err());
     }
 
+    fn assert_sandbox_configuration(inspected: &Value) {
+        let host = &inspected[0]["HostConfig"];
+        assert_eq!(inspected[0]["Config"]["User"], "10001:10001");
+        assert_eq!(host["ReadonlyRootfs"], true);
+        assert_eq!(host["NetworkMode"], "none");
+        assert_eq!(host["Privileged"], false);
+        assert_eq!(host["NanoCpus"], 2_000_000_000u64);
+        assert_eq!(host["Memory"], 2_147_483_648u64);
+        assert_eq!(host["MemorySwap"], 2_147_483_648u64);
+        assert_eq!(host["PidsLimit"], 128);
+        assert_eq!(host["CapDrop"], json!(["ALL"]));
+        assert!(host["Binds"].is_null() || host["Binds"] == json!([]));
+        assert!(host["Mounts"].is_null() || host["Mounts"] == json!([]));
+        assert!(
+            host["SecurityOpt"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("no-new-privileges=true"))
+        );
+        assert!(
+            host["Ulimits"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|limit| limit["Name"] == "nofile"
+                    && limit["Soft"] == 256
+                    && limit["Hard"] == 256)
+        );
+        assert_eq!(
+            host["Tmpfs"]["/scratch"],
+            "rw,nosuid,nodev,noexec,size=268435456,uid=10001,gid=10001,mode=0700"
+        );
+        assert_eq!(
+            host["Tmpfs"]["/tmp"],
+            "rw,nosuid,nodev,noexec,size=67108864,uid=10001,gid=10001,mode=0700"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires explicit staged assets and healthy Docker; actual diagnostic guest under production sandbox args, no inference"]
+    async fn actual_docker_sandbox_empirical_confinement() {
+        let assets = std::env::var_os("LUMEN_IMPROVEMENT_ASSETS")
+            .expect("Explicit asset directory required");
+        let owner = format!("test-{}", uuid::Uuid::new_v4());
+        let runtime = DockerRuntime::new(owner.clone(), assets.into());
+        assert_eq!(
+            runtime.health().await.state,
+            "ready",
+            "Prepare the pinned image first"
+        );
+        let manifest = runtime.manifest().await.unwrap();
+        let run = uuid::Uuid::new_v4().to_string();
+        let name = format!("lumen-improvement-{run}");
+        let canary = std::env::temp_dir().join(format!("lumen-sandbox-canary-{run}"));
+        let token = uuid::Uuid::new_v4().to_string();
+        let create_attempted = std::cell::Cell::new(false);
+        let probe = async {
+            std::fs::write(&canary, token.as_bytes()).unwrap();
+            let host_path = canary.to_str().unwrap().replace('\\', "/");
+            let host_path = host_path.trim_start_matches("//?/");
+            let mapped = host_path.replacen(':', "", 1);
+            let mapped = format!("{}{}", mapped[..1].to_lowercase(), &mapped[1..]);
+            let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let route = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+            // Select the host interface without sending a packet to the documentation-only address.
+            route.connect("192.0.2.1:9").unwrap();
+            let host_endpoint = std::net::SocketAddr::new(
+                route.local_addr().unwrap().ip(),
+                listener.local_addr().unwrap().port(),
+            );
+            let host_control =
+                std::net::TcpStream::connect_timeout(&host_endpoint, Duration::from_secs(2))
+                    .unwrap();
+            let accepted_control = listener.accept().unwrap();
+            drop(accepted_control);
+            drop(host_control);
+            let config = json!({"hostPaths":[format!("/host_mnt/{mapped}"), format!("/run/desktop/mnt/host/{mapped}")],
+            "hostAddress":route.local_addr().unwrap().ip().to_string(), "hostPort":listener.local_addr().unwrap().port()});
+            let mut args = sandbox_args(&owner, &run, &manifest.image_id);
+            let image_index = args.len() - 1;
+            args.splice(
+                image_index..image_index,
+                ["--entrypoint".into(), "python3".into()],
+            );
+            args.extend([
+                "-c".into(),
+                include_str!("../../../workers/improvement-runtime/sandbox_probe.py").into(),
+                config.to_string(),
+            ]);
+            create_attempted.set(true);
+            let created = tokio::time::timeout(
+                Duration::from_secs(30),
+                command()
+                    .env("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN", &token)
+                    .args(&args)
+                    .output(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!(created.status.success());
+            let inspected = execute(
+                &["container".into(), "inspect".into(), name.clone()],
+                Duration::from_secs(15),
+            )
+            .await
+            .unwrap();
+            let inspected: Value = serde_json::from_slice(&inspected).unwrap();
+            assert_sandbox_configuration(&inspected);
+
+            let env = inspected[0]["Config"]["Env"].to_string();
+            assert!(!env.contains("LUMEN_ACCEPTANCE_HOST_ONLY_TOKEN") && !env.contains(&token));
+            let outcome = execute(
+                &[
+                    "container".into(),
+                    "start".into(),
+                    "--attach".into(),
+                    name.clone(),
+                ],
+                Duration::from_secs(30),
+            )
+            .await;
+            let bytes = outcome.unwrap();
+            assert!(!std::str::from_utf8(&bytes).unwrap().contains(&token));
+            let evidence: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(evidence.as_object().unwrap().len(), 9);
+            assert!(
+                evidence
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .all(|value| value == true)
+            );
+            assert_eq!(
+                listener.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock
+            );
+            Ok(evidence)
+        };
+        let cleanup = async {
+            if create_attempted.get() {
+                remove_exact_owned(&owner, &name)
+                    .await
+                    .map_err(|detail| format!("owner={owner}; container={name}; {detail}"))
+            } else {
+                Ok(())
+            }
+        };
+        let evidence = probe_then_cleanup(probe, cleanup, || match std::fs::remove_file(&canary) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "Host canary {} removal failed: {error}",
+                canary.display()
+            )),
+        })
+        .await
+        .expect("Sandbox probe and awaited owned cleanup must succeed");
+        println!("sandboxEmpiricalEvidence={evidence}; liveModel=false");
+    }
+
     #[tokio::test]
     #[ignore = "Requires explicit LUMEN_IMPROVEMENT_ASSETS, staged pinned image and running Docker Desktop Linux engine; synthetic broker, real Prime ACP"]
     async fn actual_docker_prime_acceptance_generation_cancel_and_ownership() {
@@ -168,21 +453,42 @@ mod tests {
         .await
         .unwrap();
         let inspected: Value = serde_json::from_slice(&inspected).unwrap();
-        let host = &inspected[0]["HostConfig"];
-        assert_eq!(inspected[0]["Config"]["User"], "10001:10001");
-        assert_eq!(host["ReadonlyRootfs"], true);
-        assert_eq!(host["NetworkMode"], "none");
-        assert_eq!(host["Privileged"], false);
-        assert_eq!(host["Memory"], 2_147_483_648u64);
-        assert_eq!(host["PidsLimit"], 128);
-        assert_eq!(host["CapDrop"], json!(["ALL"]));
-        assert!(host["Binds"].is_null() || host["Binds"] == json!([]));
+        assert_sandbox_configuration(&inspected);
+
+        // Reopen the same persisted owner; this is not an abrupt process-crash test.
+        let orphan_run = uuid::Uuid::new_v4().to_string();
+        let orphan_name = format!("lumen-improvement-{orphan_run}");
+        let mut orphan_guard = ContainerGuard {
+            owner: owner.clone(),
+            name: orphan_name.clone(),
+            armed: true,
+        };
+        execute(
+            &sandbox_args(&owner, &orphan_run, &manifest.image_id),
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap();
+        let reopened = DockerRuntime::new(owner.clone(), runtime.asset_directory.clone());
+        reopened.cleanup_owned().await.unwrap();
+        orphan_guard.armed = false;
         assert!(
-            host["SecurityOpt"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("no-new-privileges=true"))
+            execute(
+                &["container".into(), "inspect".into(), orphan_name],
+                Duration::from_secs(15)
+            )
+            .await
+            .is_err()
         );
+        assert!(
+            execute(
+                &["container".into(), "inspect".into(), other_name.clone()],
+                Duration::from_secs(15)
+            )
+            .await
+            .is_ok()
+        );
+        println!("sameOwnerReopenCleanup=true; abruptProcessCrash=false; liveModel=false");
 
         let requested = Arc::new(tokio::sync::Notify::new());
         let generated = runtime
@@ -219,6 +525,37 @@ mod tests {
             tokio::time::timeout(Duration::from_secs(60), cancel_requested.notified())
                 .await
                 .is_ok();
+        let running_inspection = if reached_prompt {
+            Some(
+                async {
+                    let owned = execute(
+                        &[
+                            "container".into(),
+                            "ls".into(),
+                            "--quiet".into(),
+                            "--no-trunc".into(),
+                            "--filter".into(),
+                            format!("label={OWNER_LABEL}={owner}"),
+                        ],
+                        Duration::from_secs(15),
+                    )
+                    .await?;
+                    let id = std::str::from_utf8(&owned).map_err(|_| ERROR)?.trim();
+                    if !digest(id) {
+                        return Err(ERROR.to_string());
+                    }
+                    let inspected = execute(
+                        &["container".into(), "inspect".into(), id.into()],
+                        Duration::from_secs(15),
+                    )
+                    .await?;
+                    serde_json::from_slice::<Value>(&inspected).map_err(|_| ERROR.to_string())
+                }
+                .await,
+            )
+        } else {
+            None
+        };
         cancel.cancel();
         let outcome = tokio::time::timeout(Duration::from_secs(45), blocked)
             .await
@@ -230,6 +567,9 @@ mod tests {
         );
         assert_eq!(outcome.err().as_deref(), Some(CANCELLED));
         runtime.cleanup_owned().await.unwrap();
+        let inspected = running_inspection.unwrap().unwrap();
+        assert_eq!(inspected[0]["State"]["Running"], true);
+        assert_sandbox_configuration(&inspected);
         let survived = execute(
             &["container".into(), "inspect".into(), other_name.clone()],
             Duration::from_secs(15),

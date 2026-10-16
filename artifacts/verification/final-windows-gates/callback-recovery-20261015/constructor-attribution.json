@@ -1,0 +1,429 @@
+{
+  "at": "2026-10-15T15:48:13.520Z",
+  "method": "read-only binary-section and preserved-metadata parsing; no WASM compilation/instantiation",
+  "wasm": {
+    "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm_bg.wasm",
+    "sha256": "120f20bbec82ba1cd18834c5924aa4605998580af65ee55fe13d804234b6f8f9",
+    "imports": [
+      {
+        "module": "wbg",
+        "name": "__wbg_new_a12002a7f91c75be",
+        "functionIndex": 59,
+        "typeIndex": 17,
+        "signature": {
+          "parameters": [
+            "externref"
+          ],
+          "results": [
+            "externref"
+          ]
+        }
+      }
+    ],
+    "customSections": [
+      "producers",
+      "target_features"
+    ],
+    "producers": [
+      {
+        "field": "language",
+        "name": "Rust",
+        "version": ""
+      },
+      {
+        "field": "processed-by",
+        "name": "rustc",
+        "version": "1.96.1 (31fca3adb 2026-06-26)"
+      },
+      {
+        "field": "processed-by",
+        "name": "walrus",
+        "version": "0.23.3"
+      },
+      {
+        "field": "processed-by",
+        "name": "wasm-bindgen",
+        "version": "0.2.100 (2405ec2b4)"
+      }
+    ]
+  },
+  "instrumentation": {
+    "exactImportOnly": "__wbg_new_a12002a7f91c75be",
+    "constructorNeedleUnique": true,
+    "otherLengthAndOffsetConstructorsUnmodified": true
+  },
+  "workers": [
+    {
+      "name": "worker-0-error.log",
+      "constructors": 245,
+      "groups": [
+        {
+          "intrinsic": "[object Uint8Array]",
+          "wasm": "not-observed-as-wasm",
+          "callbackOrigin": false,
+          "count": 4,
+          "exampleIds": [
+            {
+              "sequence": 3,
+              "resultId": 3,
+              "bufferId": 4,
+              "byteOffset": 0,
+              "byteLength": 0,
+              "origin": null
+            },
+            {
+              "sequence": 6,
+              "resultId": 6,
+              "bufferId": 7,
+              "byteOffset": 0,
+              "byteLength": 0,
+              "origin": null
+            },
+            {
+              "sequence": 9,
+              "resultId": 9,
+              "bufferId": 10,
+              "byteOffset": 0,
+              "byteLength": 0,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object ArrayBuffer]",
+          "wasm": "current",
+          "callbackOrigin": false,
+          "count": 73,
+          "exampleIds": [
+            {
+              "sequence": 4,
+              "resultId": 2,
+              "bufferId": 2,
+              "byteOffset": 0,
+              "byteLength": 2424832,
+              "origin": null
+            },
+            {
+              "sequence": 7,
+              "resultId": 2,
+              "bufferId": 2,
+              "byteOffset": 0,
+              "byteLength": 2424832,
+              "origin": null
+            },
+            {
+              "sequence": 10,
+              "resultId": 2,
+              "bufferId": 2,
+              "byteOffset": 0,
+              "byteLength": 2424832,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object Uint8Array]",
+          "wasm": "current",
+          "callbackOrigin": false,
+          "count": 100,
+          "exampleIds": [
+            {
+              "sequence": 5,
+              "resultId": 5,
+              "bufferId": 2,
+              "byteOffset": 2370896,
+              "byteLength": 205,
+              "origin": null
+            },
+            {
+              "sequence": 8,
+              "resultId": 8,
+              "bufferId": 2,
+              "byteOffset": 2371384,
+              "byteLength": 205,
+              "origin": null
+            },
+            {
+              "sequence": 11,
+              "resultId": 11,
+              "bufferId": 2,
+              "byteOffset": 2371288,
+              "byteLength": 205,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object ArrayBuffer]",
+          "wasm": "not-observed-as-wasm",
+          "callbackOrigin": false,
+          "count": 56,
+          "exampleIds": [
+            {
+              "sequence": 15,
+              "resultId": 15,
+              "bufferId": 15,
+              "byteOffset": 0,
+              "byteLength": 25,
+              "origin": null
+            },
+            {
+              "sequence": 20,
+              "resultId": 19,
+              "bufferId": 19,
+              "byteOffset": 0,
+              "byteLength": 9,
+              "origin": null
+            },
+            {
+              "sequence": 23,
+              "resultId": 21,
+              "bufferId": 21,
+              "byteOffset": 0,
+              "byteLength": 25,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object Uint8Array]",
+          "wasm": "not-observed-as-wasm",
+          "callbackOrigin": true,
+          "count": 12,
+          "exampleIds": [
+            {
+              "sequence": 126,
+              "resultId": 83,
+              "bufferId": 84,
+              "byteOffset": 1,
+              "byteLength": 1,
+              "origin": {
+                "callback": "actions.status",
+                "invocation": 3,
+                "path": "result"
+              }
+            },
+            {
+              "sequence": 157,
+              "resultId": 98,
+              "bufferId": 84,
+              "byteOffset": 201,
+              "byteLength": 1,
+              "origin": {
+                "callback": "actions.status",
+                "invocation": 7,
+                "path": "result"
+              }
+            },
+            {
+              "sequence": 176,
+              "resultId": 106,
+              "bufferId": 84,
+              "byteOffset": 356,
+              "byteLength": 13,
+              "origin": {
+                "callback": "actions.enqueue",
+                "invocation": 9,
+                "path": "result"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "worker-1-error.log",
+      "constructors": 1263,
+      "groups": [
+        {
+          "intrinsic": "[object Uint8Array]",
+          "wasm": "not-observed-as-wasm",
+          "callbackOrigin": false,
+          "count": 5,
+          "exampleIds": [
+            {
+              "sequence": 3,
+              "resultId": 3,
+              "bufferId": 4,
+              "byteOffset": 0,
+              "byteLength": 0,
+              "origin": null
+            },
+            {
+              "sequence": 6,
+              "resultId": 6,
+              "bufferId": 7,
+              "byteOffset": 0,
+              "byteLength": 0,
+              "origin": null
+            },
+            {
+              "sequence": 9,
+              "resultId": 9,
+              "bufferId": 10,
+              "byteOffset": 0,
+              "byteLength": 82,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object ArrayBuffer]",
+          "wasm": "current",
+          "callbackOrigin": false,
+          "count": 360,
+          "exampleIds": [
+            {
+              "sequence": 4,
+              "resultId": 2,
+              "bufferId": 2,
+              "byteOffset": 0,
+              "byteLength": 2424832,
+              "origin": null
+            },
+            {
+              "sequence": 7,
+              "resultId": 2,
+              "bufferId": 2,
+              "byteOffset": 0,
+              "byteLength": 2424832,
+              "origin": null
+            },
+            {
+              "sequence": 10,
+              "resultId": 2,
+              "bufferId": 2,
+              "byteOffset": 0,
+              "byteLength": 2424832,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object Uint8Array]",
+          "wasm": "current",
+          "callbackOrigin": false,
+          "count": 543,
+          "exampleIds": [
+            {
+              "sequence": 5,
+              "resultId": 5,
+              "bufferId": 2,
+              "byteOffset": 2370896,
+              "byteLength": 205,
+              "origin": null
+            },
+            {
+              "sequence": 8,
+              "resultId": 8,
+              "bufferId": 2,
+              "byteOffset": 2371288,
+              "byteLength": 205,
+              "origin": null
+            },
+            {
+              "sequence": 11,
+              "resultId": 11,
+              "bufferId": 2,
+              "byteOffset": 2389568,
+              "byteLength": 57,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object ArrayBuffer]",
+          "wasm": "not-observed-as-wasm",
+          "callbackOrigin": false,
+          "count": 270,
+          "exampleIds": [
+            {
+              "sequence": 12,
+              "resultId": 12,
+              "bufferId": 12,
+              "byteOffset": 0,
+              "byteLength": 25,
+              "origin": null
+            },
+            {
+              "sequence": 17,
+              "resultId": 16,
+              "bufferId": 16,
+              "byteOffset": 0,
+              "byteLength": 9,
+              "origin": null
+            },
+            {
+              "sequence": 20,
+              "resultId": 18,
+              "bufferId": 18,
+              "byteOffset": 0,
+              "byteLength": 25,
+              "origin": null
+            }
+          ]
+        },
+        {
+          "intrinsic": "[object Uint8Array]",
+          "wasm": "not-observed-as-wasm",
+          "callbackOrigin": true,
+          "count": 85,
+          "exampleIds": [
+            {
+              "sequence": 98,
+              "resultId": 64,
+              "bufferId": 65,
+              "byteOffset": 60,
+              "byteLength": 175,
+              "origin": {
+                "callback": "actions.lease",
+                "invocation": 3,
+                "path": "result"
+              }
+            },
+            {
+              "sequence": 117,
+              "resultId": 73,
+              "bufferId": 65,
+              "byteOffset": 293,
+              "byteLength": 13,
+              "origin": {
+                "callback": "actions.finish",
+                "invocation": 5,
+                "path": "result"
+              }
+            },
+            {
+              "sequence": 136,
+              "resultId": 81,
+              "bufferId": 65,
+              "byteOffset": 363,
+              "byteLength": 13,
+              "origin": {
+                "callback": "actions.finish",
+                "invocation": 7,
+                "path": "result"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "conclusion": "The original exception proves the shared one-argument Uint8Array constructor import; unique Rust caller, conversion direction, callback owner and invalidating operation remain unproved. Passing trace inputs cannot identify the original failing input.",
+  "sourceReferences": [
+    {
+      "file": "rivetkit-wasm/src/lib.rs",
+      "lines": "2530-2538",
+      "facts": [
+        "bytes_to_js calls Uint8Array::from(bytes)",
+        "js_to_bytes calls Uint8Array::new(&value).to_vec()"
+      ]
+    },
+    {
+      "url": "https://github.com/wasm-bindgen/wasm-bindgen/blob/0.2.100/crates/js-sys/src/lib.rs#L5705-L5709",
+      "evidenceScope": "reference checkout Cargo.lock js-sys0.3.77/wasm-bindgen0.2.100, not independently proven packaged-WASM compiler identity",
+      "fact": "From<&[u8]> uses new(view(slice)), so Rust-to-JS copies also call the same one-argument constructor binding"
+    }
+  ]
+}

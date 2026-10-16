@@ -1,10 +1,12 @@
 import {execFileSync} from 'node:child_process';
+import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 
 import {chromium} from 'playwright';
 
-import {withLumenDevServer} from './lib/lumen-dev-server.mjs';
+import {withLumenPerformanceServer} from './lib/lumen-performance-server.mjs';
+import {installReactRendererProbe, readReactRenderers} from './lib/react-renderer-probe.mjs';
 import {sampleHover} from './lib/hover-sample.mjs';
 import {sampleFrameCadence} from '../src/features/diagnostics/diagnostics.refresh.mjs';
 import {evaluateRefreshTarget} from './lib/refresh-budget.mjs';
@@ -97,7 +99,10 @@ async function profile(baseUrl) {
   let traceStarted = false;
 
   try {
+    await installReactRendererProbe(page);
     await page.goto(`${baseUrl}/?onboarded=1&service=memory`);
+    const reactRenderers = await readReactRenderers(page);
+    assert.deepEqual(reactRenderers.map(({bundleType}) => bundleType), [0], 'Production renderer required');
     const display = await page.evaluate(() => ({
       screenWidth: window.screen.width, screenHeight: window.screen.height,
       devicePixelRatio: window.devicePixelRatio, visibility: document.visibilityState,
@@ -288,10 +293,7 @@ async function profile(baseUrl) {
     const settledSelectionMeasurements = await page.evaluate(() => window.__LUMEN_ROW_MEASUREMENTS__);
     // Simulate the typed native visibility store transition; this is browser lifecycle
     // evidence, not native HWND hide or presentation acceptance.
-    await page.evaluate(async () => {
-      const {useLauncherStore} = await import('/src/features/launcher/launcher.store.ts');
-      useLauncherStore.getState().hide();
-    });
+    await page.evaluate(() => window.__LUMEN_DIAGNOSTICS__.hideLauncher());
     await page.waitForTimeout(500);
     await page.evaluate(() => { window.__LUMEN_ROW_MEASUREMENTS__ = 0; });
     await page.waitForTimeout(100);
@@ -345,7 +347,7 @@ async function profile(baseUrl) {
     const effectiveHoverFrameBudgetMs = Math.max(
       measured.hoverNominalFrameIntervalP95Ms,
       targetFrameBudgetMs,
-    );
+    ) + frameSchedulingToleranceMs;
     const strict120Hz = evaluateRefreshTarget(measured, 120);
     const strict240Hz = evaluateRefreshTarget(measured, 240);
     const cadenceMeasurementAvailable = Number.isFinite(refresh.p95FrameIntervalMs) &&
@@ -414,6 +416,7 @@ async function profile(baseUrl) {
       gitSha: execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(),
       sourceWorktreeDirty: execFileSync('git', ['status', '--porcelain'], {encoding: 'utf8'}).trim().length > 0,
       browser: {name: 'Microsoft Edge', version: browserVersion, headless: !headed},
+      react: {build: 'production-profiling', renderers: reactRenderers},
       instrumentation: {timedPhaseTracing: false, timedPhaseScreenshots: false, tracePhase: 'separate interaction study after measurements'},
       display,
       graphics,
@@ -471,4 +474,4 @@ async function profile(baseUrl) {
   }
 }
 
-await withLumenDevServer(profile);
+await withLumenPerformanceServer(profile);

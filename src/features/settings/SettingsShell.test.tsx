@@ -1,9 +1,12 @@
-import {render, screen, waitFor} from '@testing-library/react';
+import {render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {App} from '../../app/App';
+import {AppProviders} from '../../app/AppProviders';
 import {LumenMotionProvider} from '../../design-system/MotionProvider';
+import {galleryAuthApi, galleryProvidersService, galleryUsageApi} from '../gallery/workflow-fixtures';
+import {ProvidersPage} from './pages/ProvidersPage';
 import {SettingsShell} from './SettingsShell';
 import {useSettingsStore} from './settings.store';
 
@@ -22,6 +25,43 @@ afterEach(() => {
 });
 
 describe('SettingsShell', () => {
+  it('reveals a restored provider trigger without applying the content policy to portals or navigation', async () => {
+    const user = userEvent.setup();
+    useSettingsStore.setState({activePage: 'providers', hydrated: true});
+    render(
+      <AppProviders appearance={{mode: 'dark', transparency: 'disabled', effects: 'reduced', motion: 'reduced'}}>
+        <SettingsShell onClose={vi.fn()} pages={{providers: <ProvidersPage
+          nativeRuntime providersService={galleryProvidersService('populated')}
+          authApi={galleryAuthApi} usageApi={galleryUsageApi}
+        />}} />
+      </AppProviders>,
+    );
+    const trigger = await screen.findByRole('button', {name: 'Edit simulated-long-profile-name-for-responsive-layout'});
+    await waitFor(() => expect(trigger).toBeEnabled());
+    const reveal = vi.fn();
+    Object.defineProperty(trigger, 'scrollIntoView', {value: reveal});
+    const navigation = screen.getByRole('tab', {name: 'Providers'});
+    const revealNavigation = vi.fn();
+    Object.defineProperty(navigation, 'scrollIntoView', {value: revealNavigation});
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog');
+    const save = within(dialog).getByRole('button', {name: 'Save'});
+    const revealModal = vi.fn();
+    Object.defineProperty(save, 'scrollIntoView', {value: revealModal});
+    reveal.mockClear();
+    save.focus();
+    expect(save).toHaveFocus();
+    expect(revealModal).not.toHaveBeenCalled();
+    expect(reveal).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(trigger.isConnected).toBe(true);
+    expect(reveal).toHaveBeenCalledWith({block: 'nearest', inline: 'nearest', behavior: 'instant'});
+    navigation.focus();
+    expect(revealNavigation).not.toHaveBeenCalledWith({block: 'nearest', inline: 'nearest', behavior: 'instant'});
+  });
+
   it('exposes only implemented pages in one persistent navigation rail', async () => {
     renderShell();
 

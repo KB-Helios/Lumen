@@ -184,6 +184,8 @@ struct ActivityState {
 
 pub struct ActivityRuntime {
     state: ActivityState,
+    #[cfg(test)]
+    observer: Option<std::sync::Arc<dyn Fn() -> ObservedActivity + Send + Sync>>,
 }
 
 impl ActivityRuntime {
@@ -207,6 +209,8 @@ impl ActivityRuntime {
             .map(ToOwned::to_owned)
             .collect();
         Self {
+            #[cfg(test)]
+            observer: None,
             state: ActivityState {
                 policy: Mutex::new(policy),
                 last_restricted: Mutex::new(None),
@@ -233,7 +237,14 @@ impl ActivityRuntime {
     }
 
     pub fn snapshot(&self) -> ActivitySnapshot {
+        #[cfg(not(test))]
         let observed = observe_activity();
+        #[cfg(test)]
+        let observed = self
+            .observer
+            .as_ref()
+            .map(|observe| observe())
+            .unwrap_or_else(observe_activity);
         let policy = self
             .state
             .policy
@@ -261,6 +272,15 @@ impl ActivityRuntime {
         }
         *last_restricted = None;
         current
+    }
+    #[cfg(test)]
+    pub(crate) fn with_observer(
+        path: &Path,
+        observer: std::sync::Arc<dyn Fn() -> ObservedActivity + Send + Sync>,
+    ) -> Self {
+        let mut runtime = Self::load(path);
+        runtime.observer = Some(observer);
+        runtime
     }
 }
 

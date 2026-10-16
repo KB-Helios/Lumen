@@ -1,0 +1,318 @@
+[
+  {
+    "name": "current-source",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\current-source.msix"
+    ],
+    "exit": 0,
+    "expectedAccepted": true,
+    "passed": true,
+    "output": "{\"metadataOnly\":true,\"packageName\":\"Bridgehammer.Lumen\",\"packageVersion\":\"0.1.0.0\",\"packagePublisher\":\"CN=Bridgehammer\",\"fixedAssets\":{\"Assets/actions.json\":\"239716fa3c1a4b18f9e2be13fe8939c52176504c401fcea814146d5a4cfc0106\",\"Assets/agentRegistration.json\":\"3a775ba3186d6898c29d847ca2bb808a2d2bca92966fe0cc933cec6970e3ccd1\",\"Assets/Lumen.png\":\"19b4fec485db7df51a691fcce72a3dd6f983e754fc4262da7154e4a4c688f69e\"}}\r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "formatting-and-comments",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\formatting-and-comments.msix"
+    ],
+    "exit": 0,
+    "expectedAccepted": true,
+    "passed": true,
+    "output": "{\"metadataOnly\":true,\"packageName\":\"Bridgehammer.Lumen\",\"packageVersion\":\"0.1.0.0\",\"packagePublisher\":\"CN=Bridgehammer\",\"fixedAssets\":{\"Assets/actions.json\":\"239716fa3c1a4b18f9e2be13fe8939c52176504c401fcea814146d5a4cfc0106\",\"Assets/agentRegistration.json\":\"3a775ba3186d6898c29d847ca2bb808a2d2bca92966fe0cc933cec6970e3ccd1\",\"Assets/Lumen.png\":\"19b4fec485db7df51a691fcce72a3dd6f983e754fc4262da7154e4a4c688f69e\"}}\r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "wrong-package-name",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-package-name.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "wrong-application-id",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-application-id.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "wrong-main-target",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-main-target.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "wrong-helper-target",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-helper-target.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "missing-helper",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\missing-helper.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "external-content-disabled",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\external-content-disabled.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "wrong-runtime-behavior",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-runtime-behavior.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "wrong-publisher",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-publisher.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "wrong-version",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-version.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "changed-fixed-action-asset",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\changed-fixed-action-asset.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Missing or changed fixed identity asset: Assets/actions.json\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Missing or chan...ts/actions.json:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nAt [workspace]\\scripts\\assert-identity-package.ps1:92 char:116\r\n+ ... d[$name]) { throw ('Missing or changed fixed identity asset: '+$name) ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Missing or chan...ts/actions.json:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Missing or changed fixed identity asset: Assets/actions.json\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "missing-fixed-registration-asset",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\missing-fixed-registration-asset.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Missing or changed fixed identity asset: Assets/agentRegistration.json\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Missing or chan...gistration.json:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nAt [workspace]\\scripts\\assert-identity-package.ps1:92 char:116\r\n+ ... d[$name]) { throw ('Missing or changed fixed identity asset: '+$name) ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Missing or chan...gistration.json:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Missing or changed fixed identity asset: Assets/agentRegistration.json\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "extra-payload",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\extra-payload.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Unexpected identity payload: Assets/other.json\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Unexpected iden...sets/other.json:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nAt [workspace]\\scripts\\assert-identity-package.ps1:80 char:169\r\n+ ... ppxSignature.p7x')) { throw ('Unexpected identity payload: '+$name) }\r\n+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Unexpected iden...sets/other.json:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Unexpected identity payload: Assets/other.json\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "duplicate-manifest",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\assert-identity-package.ps1",
+      "-PackagePath",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\duplicate-manifest.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Duplicate identity archive entry.\r\nAt [workspace]\\scripts\\test-identity-package.ps1:56 char:19\r\n+ ...   $output = & powershell.exe -NoProfile -File $validator -PackagePath ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Duplicate identity archive entry.:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nAt [workspace]\\scripts\\assert-identity-package.ps1:77 char:38\r\n+ ... (-not $seen.Add($name)) { throw 'Duplicate identity archive entry.' }\r\n+                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Duplicate identity archive entry.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Duplicate identity archive entry.\r\n \r\n",
+    "unsignedMetadataFixture": true
+  },
+  {
+    "name": "Sign-rejects-other-package-before-owner",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\sign-release.ps1",
+      "-Action",
+      "Sign",
+      "-Path",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-package-name.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:82 char:23\r\n+ ...         $output = & $command[0] $command[1..($command.Length-1)] 2>&1\r\n+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\nActual Lumen identity metadata contract validation failed.\r\nAt [workspace]\\scripts\\sign-release.ps1:130 char:32\r\n+ ... DE -ne 0) { throw 'Actual Lumen identity metadata contract validation ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual Lumen id...idation failed.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual Lumen identity metadata contract validation failed.\r\n \r\n",
+    "unsignedMetadataFixture": true,
+    "signingAttempted": false
+  },
+  {
+    "name": "Verify-rejects-other-package-before-signature",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\sign-release.ps1",
+      "-Action",
+      "Verify",
+      "-Path",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\wrong-package-name.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Actual identity manifest contract differs from the validated Lumen source (identity, sparse content, a\r\npplications or de\r\nAt [workspace]\\scripts\\test-identity-package.ps1:82 char:23\r\n+ ...         $output = & $command[0] $command[1..($command.Length-1)] 2>&1\r\n+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Actual identity...lications or de:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nclarations).\r\nAt [workspace]\\scripts\\assert-identity-package.ps1:90 char:49\r\n+ ... Contract) { throw 'Actual identity manifest contract differs from the ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual identity... declarations).:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual identity manifest contract differs from the validated Lumen source (identity, spa \r\n   rse content, applications or declarations).\r\n \r\nActual Lumen identity metadata contract validation failed.\r\nAt [workspace]\\scripts\\sign-release.ps1:130 char:32\r\n+ ... DE -ne 0) { throw 'Actual Lumen identity metadata contract validation ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Actual Lumen id...idation failed.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Actual Lumen identity metadata contract validation failed.\r\n \r\n",
+    "unsignedMetadataFixture": true,
+    "signingAttempted": false
+  },
+  {
+    "name": "Sign-valid-metadata-still-requires-owner",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\sign-release.ps1",
+      "-Action",
+      "Sign",
+      "-Path",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\current-source.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : An existing owner certificate thumbprint and exact subject are required.\r\nAt [workspace]\\scripts\\test-identity-package.ps1:82 char:23\r\n+ ...         $output = & $command[0] $command[1..($command.Length-1)] 2>&1\r\n+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (An existing own...t are required.:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nAt [workspace]\\scripts\\sign-release.ps1:22 char:104\r\n+ ... _SUBJECT) { throw 'An existing owner certificate thumbprint and exact ...\r\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (An existing own...t are required.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : An existing owner certificate thumbprint and exact subject are required.\r\n \r\n",
+    "unsignedMetadataFixture": true,
+    "signingAttempted": false
+  },
+  {
+    "name": "Verify-valid-metadata-still-requires-signature",
+    "command": [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      "[workspace]\\scripts\\sign-release.ps1",
+      "-Action",
+      "Verify",
+      "-Path",
+      "[user-home]\\AppData\\Local\\Temp\\lumen-identity-metadata-ec09f1e4ef754ee38de638b9e4f28fa5\\current-source.msix"
+    ],
+    "exit": 1,
+    "expectedAccepted": false,
+    "passed": true,
+    "output": "powershell.exe : Missing or oversized MSIX signature.\r\nAt [workspace]\\scripts\\test-identity-package.ps1:82 char:23\r\n+ ...         $output = & $command[0] $command[1..($command.Length-1)] 2>&1\r\n+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (Missing or oversized MSIX signature.:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nAt [workspace]\\scripts\\sign-release.ps1:45 char:62\r\n+ ... .Length -gt 1048576) { throw 'Missing or oversized MSIX signature.' }\r\n+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Missing or oversized MSIX signature.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Missing or oversized MSIX signature.\r\n \r\n",
+    "unsignedMetadataFixture": true,
+    "signingAttempted": false
+  }
+]

@@ -1,0 +1,15 @@
+﻿{
+    "atUtc":  "2026-10-15T10:26:45.5143812Z",
+    "availableGiB":  11.091,
+    "committedBytes":  22063095808,
+    "commitLimit":  52740075520,
+    "commitPercent":  41,
+    "pagesInputPerSec":  0,
+    "cpuPercent":  6,
+    "workloads":  [
+
+                  ],
+    "listeners1420":  [
+
+                      ]
+}

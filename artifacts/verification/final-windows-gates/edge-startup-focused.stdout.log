@@ -1,0 +1,7 @@
+
+Running 2 tests using 1 worker
+
+  ok 1 tests\e2e\accessibility.spec.ts:15:1 › core launcher and preview controls have accessible names and live status (10.3s)
+  ok 2 tests\e2e\accessibility.spec.ts:24:1 › keyboard-only search, selection, details, and focus restoration remain complete (8.7s)
+
+  2 passed (20.4s)

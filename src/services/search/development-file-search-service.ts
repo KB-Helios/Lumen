@@ -5,7 +5,11 @@ import {admitIndexRoots, indexStatusSchema, type IndexStatus} from '../ai/native
 import type {SearchService} from './search-service';
 import {
   filePreviewSchema,
+  previewBodyWithinBudget,
+  previewColumnsSchema,
   previewKindSchema,
+  previewRowsSchema,
+  previewTextSchema,
   searchResultKindSchema,
   type FilePreview,
   type SearchError,
@@ -79,7 +83,9 @@ const rustPreviewSchema = z.object({
   kind: previewKindSchema,
   title: z.string().min(1),
   subtitle: z.string(),
-  text: z.string().nullable().optional(),
+  text: previewTextSchema.nullable().optional(),
+  rows: previewRowsSchema.nullable().optional(),
+  columns: previewColumnsSchema.nullable().optional(),
   sourceUrl: z.string().nullable().optional(),
   mimeType: z.string().nullable().optional(),
   children: z.array(z.object({
@@ -88,7 +94,7 @@ const rustPreviewSchema = z.object({
     kind: searchResultKindSchema,
   })),
   metadata: z.record(z.string(), z.string()),
-});
+}).refine(previewBodyWithinBudget, 'Preview body exceeds 64 KiB');
 
 interface KnownFile {
   path: string;
@@ -417,6 +423,8 @@ export class DevelopmentFileSearchService implements SearchService {
         fileId,
         ...presentPreview(parsed.data),
         text: parsed.data.text ?? undefined,
+        rows: parsed.data.rows ?? undefined,
+        columns: parsed.data.columns ?? undefined,
         sourceUrl: parsed.data.sourceUrl ?? undefined,
         mimeType: parsed.data.mimeType ?? undefined,
       });

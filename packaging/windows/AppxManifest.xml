@@ -5,7 +5,7 @@
   <Resources><Resource Language="en-us" /></Resources>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.26100.0" MaxVersionTested="10.0.28000.0" />
-    <PackageDependency Name="Microsoft.WindowsAppRuntime.2-experimentalF" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" MinVersion="2.5.4.0" />
+    <PackageDependency Name="Microsoft.WindowsAppRuntime.2" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" MinVersion="2.5.1.0" />
   </Dependencies>
   <Capabilities><rescap:Capability Name="runFullTrust" /><rescap:Capability Name="unvirtualizedResources" /><systemai:Capability Name="systemAIModels" /></Capabilities>
   <Applications>

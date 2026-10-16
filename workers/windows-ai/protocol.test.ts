@@ -21,7 +21,7 @@ test('malformed JSON and unknown operations return bounded errors and recover', 
 test('passive status reports the actual architecture without downloads', async () => {
   const [output] = await requests([{id:'probe',operation:'status',payload:{preferences:{windowsEnabled:true}}}]);
   expect(output).toMatchObject({type:'result',data:{host:{architecture:process.arch},accessTokenConfigured:false}});
-  if (process.arch === 'x64') expect(output.data.features.find((feature: {id:string}) => feature.id === 'aion')).toMatchObject({availability:'unsupported',reasonCode:'aion_arm64_only'});
+  expect(output.data.features.find((feature: {id:string}) => feature.id === 'aion')).toMatchObject({availability:'unavailable',reasonCode:'aion_no_stable_contract'});
   expect(output.data.features.every((feature: {availability:string}) => feature.availability !== 'preparing')).toBe(true);
 });
 test('operation consent rejects preparation and private content before SDK access', async () => {
@@ -64,6 +64,15 @@ test('answer consent is independent of preview text-tool consent', async () => {
     {id:'write',operation:'text',payload:{requestId:'write',engine:'aion',task:'write',text:'test',preferences:{windowsEnabled:true,textToolsEnabled:false}}},
   ]);
   expect(output[0].code).not.toBe('consent_required');
-  if (process.arch === 'x64') expect(output[0].code).toBe('unsupported');
+  expect(output[0].code).toBe('aion_no_stable_contract');
   expect(output[1].code).toBe('consent_required');
+});
+
+test('stable search requires its own grant even when language access is configured', async () => {
+  const [output] = await requests([{id:'probe',operation:'status',payload:{accessToken:'synthetic-language-token',preferences:{windowsEnabled:true,appContentEnabled:true}}}]);
+  const feature = output.data.features.find((item: {id:string}) => item.id === 'appContentSearch');
+  expect(feature).toMatchObject(output.data.host.packageIdentity
+    ? {availability:'accessRequired',reasonCode:'app_content_access_not_provisioned'}
+    : {availability:'identityRequired',reasonCode:'package_identity_missing'});
+  expect(JSON.stringify(output)).not.toContain('synthetic-language-token');
 });

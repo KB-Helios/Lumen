@@ -1,0 +1,92 @@
+[
+    {
+        "prefix": "computer-use-runtime/",
+        "subject": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint": "21CA9DD6DA7C57C3A599880D17317D7BDA31899C"
+    },
+    {
+        "prefix": "computer-use-runtime/",
+        "subject": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint": "EA2F8CBC69A1A01142A1EDD8B1256FECBC1D9F2D"
+    },
+    {
+        "prefix": "windows-ai/",
+        "subject": "CN=Microsoft 3rd Party Application Component, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint": "C18BBD6EF7A93BF993072A3724004FF0357255D7"
+    },
+    {
+        "prefix":  "computer-use-runtime/",
+        "subject":  "CN=\"Cua AI, Inc.\", O=\"Cua AI, Inc.\", L=San Francisco, S=California, C=US",
+        "thumbprint":  "4BAF9559E44993980AC26FA704E5EB4E1DD73BF9"
+    },
+    {
+        "prefix":  "computer-use-runtime/",
+        "subject":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "6ACE61BAE3F09F4DD2697806D73E022CBFE70EB4"
+    },
+    {
+        "prefix":  "computer-use-runtime/",
+        "subject":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "F6EECCC7FF116889C2D5466AE7243D7AA7698689"
+    },
+    {
+        "prefix":  "computer-use-runtime/",
+        "subject":  "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "2650247AC56048BC7928663C02733D25898A1D6E"
+    },
+    {
+        "prefix":  "computer-use-runtime/",
+        "subject":  "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "EC5F0D7EE2327688384B4FDF5D7633553A0D055F"
+    },
+    {
+        "prefix":  "computer-use-runtime/",
+        "subject":  "CN=OpenJS Foundation, O=OpenJS Foundation, L=San Francisco, S=California, C=US",
+        "thumbprint":  "285AE8801AFDD52B8F7B9B6436B50052911AF7C2"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=.NET DAC, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "A9380DBC4DE2BB523C092A0D29DEF24E70EEA924"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "43A50DB15AC95D0C1D187616AE187467975846D0"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "724C8D7BBEB78F2618147BF7BA8060AC308B7468"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "BB793DB742624269BB5F4515BBE9A3DF418F588D"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "1D77A9B9E8FE2075D9AD15123257FB90DB0DA4A1"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "245D262748012A4FE6CE8BA6C951A4C4AFBC3E5D"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "3C9202BAFACBF9B5E3F1F1AC732C6BF4F98B4F27"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "AB172913A2960A224809EE8A0C371CD47A079B72"
+    },
+    {
+        "prefix":  "windows-ai/",
+        "subject":  "CN=Microsoft Windows Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint":  "BF1B0E852F06F6D0B6C6475E53AE7908AA7E2950"
+    }
+]

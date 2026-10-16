@@ -2,6 +2,7 @@ export interface TimingSample {
   name: 'launcher-visible' | 'input-response' | 'input-next-frame' | 'selection-paint' | 'other';
   durationMs: number;
   timestamp: number;
+  frame?: {startedAt: number; queuedAt: number; nominalAt: number; callbackAt: number};
 }
 
 export interface DiagnosticsSnapshot {

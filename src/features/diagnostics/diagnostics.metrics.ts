@@ -17,8 +17,8 @@ export function captureReactCommit(durationMs: number) {
   trim(reactCommits);
 }
 
-export function captureTiming(name: TimingSample['name'], durationMs: number) {
-  timingSamples.push({name, durationMs, timestamp: Date.now()});
+export function captureTiming(name: TimingSample['name'], durationMs: number, frame?: TimingSample['frame']) {
+  timingSamples.push({name, durationMs, timestamp: Date.now(), ...(frame ? {frame} : {})});
   trim(timingSamples);
 }
 
@@ -30,11 +30,13 @@ export function captureLog(message: string) {
 // Historical name: the endpoint is the next actual rAF callback, before presentation.
 export function measureAfterPaint(name: TimingSample['name'], startedAt: number) {
   let cancelled = false;
-  const finish = () => {
+  const queuedAt = performance.now();
+  const finish = (nominalAt?: number) => {
     if (cancelled) return;
     const end = performance.now();
     const duration = end - startedAt;
-    captureTiming(name, duration);
+    captureTiming(name, duration, typeof nominalAt === 'number'
+      ? {startedAt, queuedAt, nominalAt, callbackAt: end} : undefined);
   };
   if (typeof requestAnimationFrame === 'function') {
     const frame = requestAnimationFrame(finish);

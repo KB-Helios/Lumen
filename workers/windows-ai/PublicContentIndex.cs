@@ -21,6 +21,7 @@ internal sealed class PublicContentIndex
     {
         if (enabled && capabilityReady)
         {
+            AppContentAccess.Require();
             try
             {
                 // Open only a known existing index while its model is ready.
@@ -42,6 +43,7 @@ internal sealed class PublicContentIndex
     }
     private static AppContentIndexer Open(bool create)
     {
+        AppContentAccess.Require();
         if (!create && !AppContentIndexer.GetExistingIndexes().Contains(IndexName)) throw new HelperFault("index_missing");
         // Optional image capabilities are disabled; the index contains public text only.
         var options = new GetOrCreateIndexOptions { TextSemanticRequirement = IndexCapabilityRequirement.Required, TextLexicalRequirement = IndexCapabilityRequirement.Required, ImageOcrRequirement = IndexCapabilityRequirement.Suppressed, ImageSemanticRequirement = IndexCapabilityRequirement.Suppressed };
@@ -98,6 +100,7 @@ internal sealed class PublicContentIndex
     }
     public OperationResult Delete()
     {
+        AppContentAccess.Require();
         if (AppContentIndexer.GetExistingIndexes().Contains(IndexName))
         {
             var result = AppContentIndexer.DeleteIndex(IndexName, DeleteIndexWhileInUseBehavior.FailIfInUse);

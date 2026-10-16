@@ -1,0 +1,27 @@
+{
+  "label": "rust-tests-full",
+  "command": "powershell.exe",
+  "args": [
+    "-NoProfile",
+    "-File",
+    ".superpowers/run-native.ps1",
+    "test",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "--all-features",
+    "-j",
+    "1",
+    "--",
+    "--test-threads=1"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T14:08:41.987Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "releaseMarker": null,
+  "runnerPid": 33532,
+  "pid": 36264,
+  "ended": "2026-10-15T14:13:04.562Z",
+  "code": 0,
+  "signal": null
+}

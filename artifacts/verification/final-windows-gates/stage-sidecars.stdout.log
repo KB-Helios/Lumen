@@ -1,0 +1,27 @@
+AgentGateway v1.4.1 already staged and verified.
+Staged the compiled Rivet enrichment worker.
+Staged the provenance-verified static Rivet 2.3.10 engine.
+Fixed Computer Use executor is already staged.
+Staged sqlite-vector 1.0.0 (58ac4a99ff6904fd709f01b366cf0477c405b5bda45b96cf00e13d500aa60c6a).
+Verified 6 packaged runtime files.
+  Determining projects to restore...
+  Restored [workspace]\workers\windows-ai\Lumen.WindowsAi.csproj (in 5,88 sec).
+  Lumen.WindowsAi -> [workspace]\workers\windows-ai\.build\stable-win-x64-g53TQr\artifacts\bin\Lumen.WindowsAi\release_win-x64\lumen-windows-ai.dll
+  Lumen.WindowsAi -> [workspace]\workers\windows-ai\.build\stable-win-x64-g53TQr\publish\
+bun test v1.3.14 (0d9b296a)
+PASS stable app content search cannot run without its feature-specific activation contract
+PASS missing runtime errors name the stable runtime
+PASS request ids reject spaces and protocol delimiters
+PASS request ids reject empty and overlong values
+PASS request ids permit the shared bounded ASCII alphabet
+PASS text limits count UTF-8 bytes
+PASS text permits the exact UTF-8 boundary
+PASS request parser rejects duplicate protocol fields
+PASS request parser rejects arbitrary process operations
+PASS request parser rejects non-object payloads
+PASS native cancellation cancels an actual async wait
+11/11 tests passed.
+bun test v1.3.14 (0d9b296a)
+bun test v1.3.14 (0d9b296a)
+Staged Windows AI helper (win-x64) from [workspace]\workers\windows-ai\.build\stable-win-x64-g53TQr\publish; no model, execution provider, identity package, or certificate was installed.
+CLIProxyAPI v8.0.21 already staged and verified.

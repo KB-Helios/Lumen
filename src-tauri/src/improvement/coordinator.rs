@@ -59,6 +59,41 @@ fn policy_allows(app: &AppHandle) -> bool {
         && !app.state::<EnrichmentSupervisor>().health().paused
         && !app.state::<Arc<ImprovementRuntime>>().workflow_active()
 }
+fn generation_result<T>(result: Result<T, String>, budget_deferred: bool) -> Result<T, String> {
+    if result
+        .as_ref()
+        .err()
+        .is_some_and(|error| error == super::docker::CLEANUP_UNCERTAIN)
+    {
+        result
+    } else if budget_deferred {
+        Err(crate::gateway::enrichment_budget::DEFERRED.into())
+    } else {
+        result
+    }
+}
+fn lease_status(result: &Result<(), String>, paused: bool, cancelled: bool) -> &'static str {
+    if result.is_ok() {
+        "completed"
+    } else if result
+        .as_ref()
+        .err()
+        .is_some_and(|error| error == super::docker::CLEANUP_UNCERTAIN)
+    {
+        "failed"
+    } else if paused
+        || result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error == crate::gateway::enrichment_budget::DEFERRED)
+    {
+        "queued"
+    } else if cancelled {
+        "cancelled"
+    } else {
+        "failed"
+    }
+}
 fn send(
     channel: &Option<Channel<ImprovementEvent>>,
     id: &str,
@@ -493,6 +528,7 @@ impl ImprovementRuntime {
         });
         GatewayBroker::new(
             app.state::<GatewaySupervisor>().endpoint(true),
+            app.state::<GatewaySupervisor>().enrichment_budget(),
             alias,
             self.store.clone(),
             cloud,
@@ -596,7 +632,9 @@ impl ImprovementRuntime {
                 self.advance(app, &lease).await?;
                 let evidence_digest = digest(serde_json::to_string(&evidence).map_err(|_| "Invalid evidence.")?.as_bytes());
                 let input = json!({"activeVersion":base,"evidenceDigest":evidence_digest,"configDigest":config,"failures":evidence,"developmentCases":evaluation::development_cases()});
-                let result = self.docker.run(input, cancel.clone(), probe).await?;
+                let quota_probe = probe.clone();
+                let result = self.docker.run(input, cancel.clone(), probe).await;
+                let result = generation_result(result, quota_probe.budget_deferred())?;
                 if !self.store.phase_budget_valid(&lease.idempotency_key, "generation")? { return Err("improvement_budget_exceeded".into()); }
                 let manifest: CandidateManifest = serde_json::from_value(result.manifest).map_err(|_| "Prime returned an invalid candidate manifest.")?;
                 let active = self.active.lock().map_err(|_| "Improvement state is busy.")?;
@@ -610,7 +648,9 @@ impl ImprovementRuntime {
             self.phase(id, "evaluation", channel);
             self.store.mark(&candidate.id, CandidateStatus::Evaluating)?;
             let broker = match evaluation_broker { Some(broker) => broker, None => self.broker(app, &config, cancel.clone(), &lease.idempotency_key, "evaluation")? };
+            let quota_probe = broker.clone();
             let mut report = evaluation::evaluate(&candidate, &base, broker, cancel.clone()).await;
+            if quota_probe.budget_deferred() { return Err(crate::gateway::enrichment_budget::DEFERRED.into()); }
             if !self.store.phase_budget_valid(&lease.idempotency_key, "evaluation")? { report.budget_exceeded = true; report.complete = false; }
             // Fresh fence before publishing; never hold an admission lock during model work.
             self.advance(app, &lease).await?;
@@ -630,23 +670,17 @@ impl ImprovementRuntime {
             .as_ref()
             .err()
             .is_some_and(|error| error == super::docker::CLEANUP_UNCERTAIN);
-        let status = if result.is_ok() {
-            "completed"
-        } else if cleanup_uncertain {
-            "failed"
-        } else if paused {
-            "queued"
-        } else if cancel.is_cancelled() {
-            "cancelled"
-        } else {
-            "failed"
-        };
+        let budget_deferred = result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error == crate::gateway::enrichment_budget::DEFERRED);
+        let status = lease_status(&result, paused, cancel.is_cancelled());
         if result.is_err()
             && let Some(candidate_id) = lease.candidate_id.as_ref()
         {
             let _ = self.store.finish_interrupted_evaluation(
                 candidate_id,
-                paused && !cleanup_uncertain,
+                (paused || budget_deferred) && !cleanup_uncertain,
                 cancel.is_cancelled() && !cleanup_uncertain,
             );
         }
@@ -689,5 +723,41 @@ impl ImprovementRuntime {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn task_2a_review_cleanup_uncertainty_outweighs_quota_pause_and_cancellation() {
+        for deferred in [false, true] {
+            let result = generation_result::<()>(
+                Err(super::super::docker::CLEANUP_UNCERTAIN.into()),
+                deferred,
+            );
+            assert_eq!(
+                result.as_ref().unwrap_err(),
+                super::super::docker::CLEANUP_UNCERTAIN
+            );
+            for (paused, cancelled) in [(false, false), (true, false), (false, true), (true, true)]
+            {
+                assert_eq!(lease_status(&result, paused, cancelled), "failed");
+            }
+        }
+        for result in [Ok(()), Err("model request deferred".into())] {
+            let result = generation_result(result, true);
+            assert_eq!(
+                result.as_ref().unwrap_err(),
+                crate::gateway::enrichment_budget::DEFERRED
+            );
+            assert_eq!(lease_status(&result, false, false), "queued");
+        }
+        assert_eq!(lease_status(&Ok(()), false, false), "completed");
+        assert_eq!(
+            lease_status(&Err("cancelled".into()), false, true),
+            "cancelled"
+        );
+        assert_eq!(lease_status(&Err("failure".into()), false, false), "failed");
     }
 }

@@ -12,8 +12,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "test:performance": "node node_modules/@playwright/test/cli.js test --config playwright.performance.config.ts",
+    "build:performance": "vite build --config vite.performance.config.ts",
+    "preview:performance": "vite preview --config vite.performance.config.ts --host 127.0.0.1 --port 1424 --strictPort",
     "test:answer-native": "node scripts/answer-native-integration.mjs",
     "test:answer-bridge": "node --test scripts/answer-native-bridge.test.mjs scripts/answer-native-shutdown.test.mjs",
+    "test:tooling": "node --test scripts/native-performance-profile.test.mjs scripts/lib/lumen-dev-server.test.mjs",
     "profile": "node scripts/performance-profile.mjs",
     "capture:gallery": "node scripts/capture-gallery.mjs",
     "record:interactions": "node scripts/record-interactions.mjs",
@@ -23,7 +27,10 @@
     "stage:improvement": "bun scripts/stage-improvement.ts",
     "stage:windows-ai": "bun scripts/stage-windows-ai.ts",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "release:preflight": "bun scripts/release.ts preflight",
+    "release:build": "bun scripts/release.ts build",
+    "release:verify": "bun scripts/release.ts verify"
   },
   "dependencies": {
     "@openai/apps-sdk-ui": "^0.2.2",
@@ -44,7 +51,7 @@
     "react": "^19.1.0",
     "react-aria-components": "^1.19.0",
     "react-dom": "^19.1.0",
-    "rivetkit": "^2.3.10",
+    "rivetkit": "2.3.10",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3",
@@ -69,5 +76,8 @@
     "typescript-eslint": "^8.65.0",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
+  },
+  "patchedDependencies": {
+    "rivetkit@2.3.10": "patches/rivetkit@2.3.10.patch"
   }
 }

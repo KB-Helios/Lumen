@@ -1,0 +1,13 @@
+{
+    "mode":  "build",
+    "at":  "2026-10-15T15:40:59.8197282Z",
+    "head":  "ae412fb5587f87aa4914ff429cf0abf8e11dbee1",
+    "command":  [
+                    "bun",
+                    ".superpowers/callback-recovery/build.ts"
+                ],
+    "releaseMarker":  null,
+    "diagnosticOnly":  true,
+    "runnerPid":  40956,
+    "pid":  28880
+}

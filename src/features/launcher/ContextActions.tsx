@@ -1,3 +1,5 @@
+import {memo, useLayoutEffect, useMemo, useRef} from 'react';
+
 import {LumenUiIcon} from '../../design-system/icons/LumenUiIcon';
 import {LumenButton} from '../../design-system/primitives/LumenButton';
 import type {SearchResult} from '../../services/search/search.types';
@@ -19,6 +21,16 @@ export function ContextActions({
   onOpenContainingFolder,
   onPin,
 }: ContextActionsProps) {
+  const actions = useRef({onDetails, onOpen, onOpenContainingFolder, onPin});
+  useLayoutEffect(() => {
+    actions.current = {onDetails, onOpen, onOpenContainingFolder, onPin};
+  }, [onDetails, onOpen, onOpenContainingFolder, onPin]);
+  const stableActions = useMemo(() => ({
+    onDetails: () => actions.current.onDetails(),
+    onOpen: () => actions.current.onOpen(),
+    onOpenContainingFolder: () => actions.current.onOpenContainingFolder(),
+    onPin: () => actions.current.onPin(),
+  }), []);
   return (
     <div
       aria-label="Result actions"
@@ -30,9 +42,32 @@ export function ContextActions({
       >
         {result ? result.name : 'Choose a result for actions'}
       </span>
+      <ActionButtons
+        hasResult={result !== null}
+        isOpening={isOpening}
+        isAppContent={result?.kind === 'app-content'}
+        canPin={Boolean(result?.provenance)}
+        pinned={Boolean(result?.pinned)}
+        {...stableActions}
+      />
+    </div>
+  );
+}
+
+// Selection text changes every row; button work only changes with eligibility.
+const ActionButtons = memo(function ActionButtons({
+  hasResult, isOpening, isAppContent, canPin, pinned,
+  onDetails, onOpen, onOpenContainingFolder, onPin,
+}: Omit<ContextActionsProps, 'result'> & {
+  hasResult: boolean;
+  isAppContent: boolean;
+  canPin: boolean;
+  pinned: boolean;
+}) {
+  return <>
       <LumenButton
         aria-label={isOpening ? 'Opening selected result' : 'Open selected result'}
-        isDisabled={!result || isOpening}
+        isDisabled={!hasResult || isOpening}
         size="small"
         variant="quiet"
         onPress={onOpen}
@@ -43,7 +78,7 @@ export function ContextActions({
       </LumenButton>
       <LumenButton
         aria-label="Open containing folder"
-        isDisabled={!result || result.kind === 'app-content'}
+        isDisabled={!hasResult || isAppContent}
         size="small"
         variant="quiet"
         onPress={onOpenContainingFolder}
@@ -52,18 +87,18 @@ export function ContextActions({
         <span className="hidden @min-[640px]/actions:inline">Folder</span>
       </LumenButton>
       <LumenButton
-        aria-label={result?.pinned ? 'Unpin selected result' : 'Pin selected result'}
-        isDisabled={!result?.provenance}
+        aria-label={pinned ? 'Unpin selected result' : 'Pin selected result'}
+        isDisabled={!canPin}
         size="small"
         variant="quiet"
         onPress={onPin}
       >
-        <LumenUiIcon name={result?.pinned ? 'pinned' : 'pin'} size="small" />
-        <span className="hidden @min-[640px]/actions:inline">{result?.pinned ? 'Unpin' : 'Pin'}</span>
+        <LumenUiIcon name={pinned ? 'pinned' : 'pin'} size="small" />
+        <span className="hidden @min-[640px]/actions:inline">{pinned ? 'Unpin' : 'Pin'}</span>
       </LumenButton>
       <LumenButton
         aria-label="Show file details"
-        isDisabled={!result}
+        isDisabled={!hasResult}
         size="small"
         variant="quiet"
         onPress={onDetails}
@@ -71,6 +106,5 @@ export function ContextActions({
         <LumenUiIcon name="info" size="small" />
         <span className="hidden @min-[640px]/actions:inline">Details</span>
       </LumenButton>
-    </div>
-  );
-}
+    </>;
+});

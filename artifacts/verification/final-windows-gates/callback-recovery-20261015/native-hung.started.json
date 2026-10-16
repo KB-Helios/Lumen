@@ -1,0 +1,23 @@
+{
+    "gate":  "hung",
+    "test":  "gateway::enrichment::tests::rivet_worker_replaces_hung_owned_engine_without_false_readiness",
+    "started":  "2026-10-15T15:53:41.8852672Z",
+    "head":  "ae412fb5587f87aa4914ff429cf0abf8e11dbee1",
+    "binary":  "[native-target]/debug/deps/lumen_lib-4843514622e33193.exe",
+    "binarySha256":  "313ed3e6a94151fda08d710612054f9285c51f7b292bd0da4ac103b83b94799c",
+    "compiledSource":  "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+    "nativeSourceFilesVerified":  86,
+    "normalStagedWorkerSha256":  "4a02bdfe85051badd0d98e52067c4dad0b16c20bfe237cf0d21b6a34727d7dc0",
+    "args":  [
+                 "gateway::enrichment::tests::rivet_worker_replaces_hung_owned_engine_without_false_readiness",
+                 "--ignored",
+                 "--exact",
+                 "--test-threads=1",
+                 "--nocapture"
+             ],
+    "fixtureRoot":  "[workspace]\\.superpowers\\callback-recovery\\native-fixture-hung",
+    "releaseMarker":  null,
+    "originalStandaloneStagedGate":  "FAILED_OPEN",
+    "runnerPid":  40032,
+    "pid":  36648
+}

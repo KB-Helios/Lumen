@@ -1,0 +1,1478 @@
+{
+  "schemaVersion": 1,
+  "generatedUtc": "2026-10-15T08:56:50.437Z",
+  "reviewBase": "fc18b5a333077b33954802b6884505b677da1de9",
+  "evidenceClass": "owned real-filesystem native-core tests; lexical only; no installed UI or isolated performance claim",
+  "task13Acceptance": "NOT_ACCEPTED",
+  "largeWorkloads": {
+    "full50000": "PENDING_HOST_RESOURCES",
+    "acceptedRecordCap250000": "PENDING_HOST_RESOURCES"
+  },
+  "postRunHostPressure": {
+    "memory": {
+      "AvailableBytes": 348581888,
+      "CommittedBytes": 91997048832,
+      "CommitLimit": 93348233216,
+      "PercentCommittedBytesInUse": 98,
+      "PagesInputPersec": 61332
+    },
+    "freePhysicalKB": 299976,
+    "totalVirtualKB": 91160384,
+    "osObservedUtc": "2026-10-15T08:55:05.9660083Z",
+    "freeVirtualKB": 1333664,
+    "perfObservedUtc": "2026-10-15T08:55:07.5439456Z"
+  },
+  "osCacheFlushed": false,
+  "originalAcceptedRecordCap": 250000,
+  "runs": [
+    {
+      "rawLog": "20261015-084558-1000-native.log",
+      "source": "69dfa316dfcad96fe3efdada344af58c0d346f1f",
+      "dirtyState": "?? docs/superpowers/plans/2026-10-12-production-readiness.md",
+      "command": "rtk proxy powershell.exe -NoProfile -File .superpowers/run-native.ps1 test --manifest-path src-tauri/Cargo.toml --all-features -j 1 --lib --config profile.test.package.lumen.opt-level=3 native_filesystem_capacity -- --ignored --test-threads=1 --nocapture",
+      "files": 1000,
+      "profile": "test; lumen opt-level3; dependencies unoptimized; debug assertions enabled",
+      "nativeBinarySha256": [
+        "fe1f298c9460018ba233e3eb81241c253b0f43a050f4ffb27955e6d6b33a9ad9"
+      ],
+      "sourceAndRunnerHashes": [
+        {
+          "sha256": "35715a5db9f3ffbe86b3c68ccfb08b76c1744d7d556c4850d7f3e5af8826f4ff",
+          "path": "src-tauri/src/search/index.rs"
+        },
+        {
+          "sha256": "a8b95c8d92081854bca9f43080574f5ec81110442013e9fbcd1b5792c4705453",
+          "path": "src-tauri/src/search/indexing.rs"
+        },
+        {
+          "sha256": "637fc6436f815988b58bf05853564cb4fac54751eccdbbf836701c3bfd70476a",
+          "path": "src-tauri/src/search/index_worker.rs"
+        },
+        {
+          "sha256": "73446440a51aa0d152910aceee0306160d98fd910b29f852d8674f2f193774bf",
+          "path": "src-tauri/src/search/capacity_tests.rs"
+        },
+        {
+          "sha256": "f6cad014faa3386968359f40351608e7f163248240d2d6ad2a5382a7670d0a66",
+          "path": "src-tauri/src/search/recovery_tests.rs"
+        },
+        {
+          "sha256": "af024eb699f93aa18e0bed7549aa6502bf67d5a1155626f83c7fa05d14e73f26",
+          "path": "src-tauri/src/search/freshness_tests.rs"
+        },
+        {
+          "sha256": "f61474e2a7087df103cd2f6552df61f22b5d353d68faf9e861550550a17a3ceb",
+          "path": ".superpowers/task13-native.ps1"
+        },
+        {
+          "sha256": "4335652a77572d6334fd15933df009c1afb8ad135be689e3657c2c6c42116121",
+          "path": ".superpowers/task13-io.ps1"
+        },
+        {
+          "sha256": "6d25fa0fd710bac6d5b297bd39cf618caf477bbf1640dbe45648d282fd1b65ad",
+          "path": ".superpowers/run-native.ps1"
+        }
+      ],
+      "exit": {
+        "exitCode": 0,
+        "finished": "2026-10-15T08:54:11.7953983Z"
+      },
+      "functionalWorkloadPassed": true,
+      "performanceAcceptance": "UNVERIFIED_HOST_RESOURCE_PRESSURE",
+      "hardware": {
+        "cpu": {
+          "Name": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M           ",
+          "NumberOfLogicalProcessors": 24,
+          "LoadPercentage": 4
+        },
+        "filesystem": "NTFS",
+        "freeDiskBytesBefore": 340892794880,
+        "freePhysicalKBBefore": 2103264
+      },
+      "hostLoad": [
+        {
+          "freePhysicalKB": 1412940,
+          "utc": "2026-10-15T08:46:02.4190161Z",
+          "totalCpuPercent": 51
+        },
+        {
+          "freePhysicalKB": 491240,
+          "utc": "2026-10-15T08:46:10.2039055Z",
+          "totalCpuPercent": 62
+        },
+        {
+          "freePhysicalKB": 1390696,
+          "utc": "2026-10-15T08:46:17.8920015Z",
+          "totalCpuPercent": 27
+        },
+        {
+          "freePhysicalKB": 2595672,
+          "utc": "2026-10-15T08:46:25.6174385Z",
+          "totalCpuPercent": 4
+        },
+        {
+          "freePhysicalKB": 1113008,
+          "utc": "2026-10-15T08:46:33.2825271Z",
+          "totalCpuPercent": 20
+        },
+        {
+          "freePhysicalKB": 1232488,
+          "utc": "2026-10-15T08:46:40.9194617Z",
+          "totalCpuPercent": 12
+        },
+        {
+          "freePhysicalKB": 798096,
+          "utc": "2026-10-15T08:46:48.4556308Z",
+          "totalCpuPercent": 17
+        },
+        {
+          "freePhysicalKB": 1446876,
+          "utc": "2026-10-15T08:46:55.9789819Z",
+          "totalCpuPercent": 7
+        },
+        {
+          "freePhysicalKB": 847104,
+          "utc": "2026-10-15T08:47:03.5924576Z",
+          "totalCpuPercent": 48
+        },
+        {
+          "freePhysicalKB": 1610092,
+          "utc": "2026-10-15T08:47:11.3065804Z",
+          "totalCpuPercent": 17
+        },
+        {
+          "freePhysicalKB": 1161812,
+          "utc": "2026-10-15T08:47:18.8795191Z",
+          "totalCpuPercent": 40
+        },
+        {
+          "freePhysicalKB": 680072,
+          "utc": "2026-10-15T08:47:26.5811054Z",
+          "totalCpuPercent": 21
+        },
+        {
+          "freePhysicalKB": 1174560,
+          "utc": "2026-10-15T08:47:34.1995441Z",
+          "totalCpuPercent": 12
+        },
+        {
+          "freePhysicalKB": 799028,
+          "utc": "2026-10-15T08:47:41.7937752Z",
+          "totalCpuPercent": 48
+        },
+        {
+          "freePhysicalKB": 1352040,
+          "utc": "2026-10-15T08:47:49.2732765Z",
+          "totalCpuPercent": 1
+        },
+        {
+          "freePhysicalKB": 502952,
+          "utc": "2026-10-15T08:47:56.7499035Z",
+          "totalCpuPercent": 23
+        },
+        {
+          "freePhysicalKB": 582996,
+          "utc": "2026-10-15T08:48:04.5296884Z",
+          "totalCpuPercent": 51
+        },
+        {
+          "freePhysicalKB": 40936,
+          "utc": "2026-10-15T08:48:12.3029541Z",
+          "totalCpuPercent": 50
+        },
+        {
+          "freePhysicalKB": 1223860,
+          "utc": "2026-10-15T08:48:20.1691829Z",
+          "totalCpuPercent": 51
+        },
+        {
+          "freePhysicalKB": 2265972,
+          "utc": "2026-10-15T08:48:27.8345683Z",
+          "totalCpuPercent": 14
+        },
+        {
+          "freePhysicalKB": 3235652,
+          "utc": "2026-10-15T08:48:35.3576231Z",
+          "totalCpuPercent": 37
+        },
+        {
+          "freePhysicalKB": 3557184,
+          "utc": "2026-10-15T08:48:43.0000239Z",
+          "totalCpuPercent": 60
+        },
+        {
+          "freePhysicalKB": 4043400,
+          "utc": "2026-10-15T08:48:50.6363406Z",
+          "totalCpuPercent": 16
+        },
+        {
+          "freePhysicalKB": 3559336,
+          "utc": "2026-10-15T08:48:58.2951992Z",
+          "totalCpuPercent": 14
+        },
+        {
+          "freePhysicalKB": 3726824,
+          "utc": "2026-10-15T08:49:05.8271260Z",
+          "totalCpuPercent": 20
+        },
+        {
+          "freePhysicalKB": 1717272,
+          "utc": "2026-10-15T08:49:13.3972541Z",
+          "totalCpuPercent": 13
+        },
+        {
+          "freePhysicalKB": 838216,
+          "utc": "2026-10-15T08:49:20.9881674Z",
+          "totalCpuPercent": 54
+        },
+        {
+          "freePhysicalKB": 1991744,
+          "utc": "2026-10-15T08:49:28.6350989Z",
+          "totalCpuPercent": 50
+        },
+        {
+          "freePhysicalKB": 1194756,
+          "utc": "2026-10-15T08:49:36.2651079Z",
+          "totalCpuPercent": 7
+        },
+        {
+          "freePhysicalKB": 1205100,
+          "utc": "2026-10-15T08:49:43.9265705Z",
+          "totalCpuPercent": 53
+        },
+        {
+          "freePhysicalKB": 782224,
+          "utc": "2026-10-15T08:49:51.5829046Z",
+          "totalCpuPercent": 62
+        },
+        {
+          "freePhysicalKB": 1064560,
+          "utc": "2026-10-15T08:49:59.4514231Z",
+          "totalCpuPercent": 76
+        },
+        {
+          "freePhysicalKB": 164908,
+          "utc": "2026-10-15T08:50:07.5807608Z",
+          "totalCpuPercent": 87
+        },
+        {
+          "freePhysicalKB": 443780,
+          "utc": "2026-10-15T08:50:15.7329066Z",
+          "totalCpuPercent": 65
+        },
+        {
+          "freePhysicalKB": 1401100,
+          "utc": "2026-10-15T08:50:23.9049492Z",
+          "totalCpuPercent": 52
+        },
+        {
+          "freePhysicalKB": 928532,
+          "utc": "2026-10-15T08:50:31.7361801Z",
+          "totalCpuPercent": 39
+        },
+        {
+          "freePhysicalKB": 1897256,
+          "utc": "2026-10-15T08:50:39.6789319Z",
+          "totalCpuPercent": 11
+        },
+        {
+          "freePhysicalKB": 2126792,
+          "utc": "2026-10-15T08:50:47.4248419Z",
+          "totalCpuPercent": 5
+        },
+        {
+          "freePhysicalKB": 2299188,
+          "utc": "2026-10-15T08:50:55.1041512Z",
+          "totalCpuPercent": 14
+        },
+        {
+          "freePhysicalKB": 574144,
+          "utc": "2026-10-15T08:51:02.7703645Z",
+          "totalCpuPercent": 12
+        },
+        {
+          "freePhysicalKB": 1219420,
+          "utc": "2026-10-15T08:51:10.4939867Z",
+          "totalCpuPercent": 11
+        },
+        {
+          "freePhysicalKB": 163612,
+          "utc": "2026-10-15T08:51:18.2968684Z",
+          "totalCpuPercent": 59
+        },
+        {
+          "freePhysicalKB": 18004,
+          "utc": "2026-10-15T08:51:26.3600250Z",
+          "totalCpuPercent": 62
+        },
+        {
+          "freePhysicalKB": 1506092,
+          "utc": "2026-10-15T08:51:34.2624668Z",
+          "totalCpuPercent": 59
+        },
+        {
+          "freePhysicalKB": 2790332,
+          "utc": "2026-10-15T08:51:42.1009102Z",
+          "totalCpuPercent": 37
+        },
+        {
+          "freePhysicalKB": 3829428,
+          "utc": "2026-10-15T08:51:49.7996846Z",
+          "totalCpuPercent": 40
+        },
+        {
+          "freePhysicalKB": 4758708,
+          "utc": "2026-10-15T08:51:57.5079854Z",
+          "totalCpuPercent": 26
+        },
+        {
+          "freePhysicalKB": 3480052,
+          "utc": "2026-10-15T08:52:05.1869812Z",
+          "totalCpuPercent": 20
+        },
+        {
+          "freePhysicalKB": 2020536,
+          "utc": "2026-10-15T08:52:12.9047848Z",
+          "totalCpuPercent": 18
+        },
+        {
+          "freePhysicalKB": 3175716,
+          "utc": "2026-10-15T08:52:20.4614362Z",
+          "totalCpuPercent": 12
+        },
+        {
+          "freePhysicalKB": 2823160,
+          "utc": "2026-10-15T08:52:27.9971020Z",
+          "totalCpuPercent": 11
+        },
+        {
+          "freePhysicalKB": 1146072,
+          "utc": "2026-10-15T08:52:35.5328235Z",
+          "totalCpuPercent": 7
+        },
+        {
+          "freePhysicalKB": 1252128,
+          "utc": "2026-10-15T08:52:43.0689616Z",
+          "totalCpuPercent": 6
+        },
+        {
+          "freePhysicalKB": 1050420,
+          "utc": "2026-10-15T08:52:50.7206765Z",
+          "totalCpuPercent": 32
+        },
+        {
+          "freePhysicalKB": 1656204,
+          "utc": "2026-10-15T08:52:58.4876387Z",
+          "totalCpuPercent": 7
+        },
+        {
+          "freePhysicalKB": 1423324,
+          "utc": "2026-10-15T08:53:06.6571266Z",
+          "totalCpuPercent": 12
+        },
+        {
+          "freePhysicalKB": 239580,
+          "utc": "2026-10-15T08:53:14.2447366Z",
+          "totalCpuPercent": 19
+        },
+        {
+          "freePhysicalKB": 1462876,
+          "utc": "2026-10-15T08:53:21.8865291Z",
+          "totalCpuPercent": 35
+        },
+        {
+          "freePhysicalKB": 2466124,
+          "utc": "2026-10-15T08:53:29.3881995Z",
+          "totalCpuPercent": 14
+        },
+        {
+          "freePhysicalKB": 1931740,
+          "utc": "2026-10-15T08:53:36.7645606Z",
+          "totalCpuPercent": 4
+        },
+        {
+          "freePhysicalKB": 1054784,
+          "utc": "2026-10-15T08:53:44.0707458Z",
+          "totalCpuPercent": 10
+        },
+        {
+          "freePhysicalKB": 415360,
+          "utc": "2026-10-15T08:53:51.4853120Z",
+          "totalCpuPercent": 20
+        },
+        {
+          "freePhysicalKB": 1398668,
+          "utc": "2026-10-15T08:53:59.0481216Z",
+          "totalCpuPercent": 57
+        },
+        {
+          "freePhysicalKB": 983108,
+          "utc": "2026-10-15T08:54:06.5465254Z",
+          "totalCpuPercent": 18
+        }
+      ],
+      "nativeResources": [
+        {
+          "handles": 158,
+          "privateBytes": 3538944,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:00.0533989Z",
+          "threads": 8,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 12005376,
+          "cpu": 1.5
+        },
+        {
+          "handles": 157,
+          "privateBytes": 6467584,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:07.6563343Z",
+          "threads": 8,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 15347712,
+          "cpu": 7.71875
+        },
+        {
+          "handles": 157,
+          "privateBytes": 7012352,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:15.2604003Z",
+          "threads": 8,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 15880192,
+          "cpu": 12.828125
+        },
+        {
+          "handles": 158,
+          "privateBytes": 7380992,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:22.8519055Z",
+          "threads": 8,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 16183296,
+          "cpu": 18.953125
+        },
+        {
+          "handles": 158,
+          "privateBytes": 7286784,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:30.2308054Z",
+          "threads": 5,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 16138240,
+          "cpu": 18.96875
+        },
+        {
+          "handles": 158,
+          "privateBytes": 7286784,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:37.5644177Z",
+          "threads": 5,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 16138240,
+          "cpu": 18.96875
+        },
+        {
+          "handles": 158,
+          "privateBytes": 7286784,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:44.9647135Z",
+          "threads": 5,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 16138240,
+          "cpu": 18.96875
+        },
+        {
+          "handles": 158,
+          "privateBytes": 6963200,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:52.4569441Z",
+          "threads": 5,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 15949824,
+          "cpu": 19.328125
+        },
+        {
+          "handles": 157,
+          "privateBytes": 7712768,
+          "start": "2026-10-15T08:52:57.9882530Z",
+          "utc": "2026-10-15T08:53:59.9911733Z",
+          "threads": 5,
+          "name": "lumen_lib-e19585a0becebc07",
+          "pid": 27256,
+          "workingSet": 16814080,
+          "cpu": 25.84375
+        }
+      ],
+      "phases": [
+        {
+          "content_bytes_each": 96,
+          "files": 1000,
+          "os_cache_flushed": false,
+          "phase": "ownership",
+          "pid": 27256,
+          "profile": "debug",
+          "unix_ms": 1792054378088
+        },
+        {
+          "accepted_directories": 1,
+          "bytes": 96000,
+          "excluded_directories": 1,
+          "excluded_files": 1,
+          "expected_first_pass_records": 1001,
+          "extra_beyond_cap_files": 0,
+          "files": 1000,
+          "phase": "corpus_complete",
+          "unix_ms": 1792054379445
+        },
+        {
+          "ms": 77.7144,
+          "phase": "open",
+          "unix_ms": 1792054379529
+        },
+        {
+          "ms": 0.9512,
+          "phase": "admit",
+          "unix_ms": 1792054379532
+        },
+        {
+          "inventory_running": true,
+          "metadata_records": 509,
+          "ms": 2.8198,
+          "phase": "query_during_metadata_application",
+          "unix_ms": 1792054380797
+        },
+        {
+          "metrics": {
+            "commit_ms": 0,
+            "commits": 0,
+            "content_admission_ms": 0,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              }
+            ],
+            "extraction_ms": 0,
+            "max_commits_between_sleeps": 0,
+            "metadata_records": 1001,
+            "metadata_upsert_ms": 1786.683,
+            "scans": 1,
+            "scans_done": 1,
+            "selection_candidates": 0,
+            "selection_ms": 0,
+            "status_ms": 0.1786,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 2986.9106
+          },
+          "ms": 2992.3516,
+          "phase": "inventory_complete",
+          "status": {
+            "generation": 1,
+            "indexedItems": 1001,
+            "message": "Content indexing paused; filenames remain searchable",
+            "pendingItems": 1000,
+            "phase": "paused",
+            "queuedEnrichment": 0,
+            "skippedItems": 0
+          },
+          "unix_ms": 1792054382538
+        },
+        {
+          "metrics": {
+            "commit_ms": 2661.9995,
+            "commits": 1000,
+            "content_admission_ms": 2456.9624,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054382724
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 111.98769999999999,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2129.99
+              }
+            ],
+            "extraction_ms": 323.9713,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 2002,
+            "metadata_upsert_ms": 2569.6219,
+            "scans": 2,
+            "scans_done": 2,
+            "selection_candidates": 1000,
+            "selection_ms": 3.5394,
+            "status_ms": 88.6861,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 8281.3447
+          },
+          "ms": 10842.833499999999,
+          "phase": "content_complete",
+          "status": {
+            "generation": 1,
+            "indexedItems": 1001,
+            "message": "Local index ready",
+            "pendingItems": 0,
+            "phase": "ready",
+            "queuedEnrichment": 0,
+            "skippedItems": 0
+          },
+          "unix_ms": 1792054393391
+        },
+        {
+          "ms": 7.958200000000001,
+          "phase": "first_query",
+          "unix_ms": 1792054393402,
+          "workload": "exact_filename"
+        },
+        {
+          "metrics": {
+            "commit_ms": 2661.9995,
+            "commits": 1000,
+            "content_admission_ms": 2456.9624,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054382724
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 111.98769999999999,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2129.99
+              }
+            ],
+            "extraction_ms": 323.9713,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 2002,
+            "metadata_upsert_ms": 2569.6219,
+            "scans": 2,
+            "scans_done": 2,
+            "selection_candidates": 1000,
+            "selection_ms": 3.5494,
+            "status_ms": 88.6861,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 8433.2073
+          },
+          "p50_ms": 3.8404,
+          "p95_ms": 6.1203,
+          "percentile": "nearest-rank ceil(q*N)-1 N=30",
+          "phase": "warm_queries",
+          "query_thread": "ThreadId(2)",
+          "raw_ms": [
+            3.5493,
+            3.4221999999999997,
+            2.8489,
+            3.5476,
+            3.5249,
+            3.2173000000000003,
+            3.1986,
+            4.9591,
+            4.6042000000000005,
+            5.1879,
+            3.8404,
+            3.351,
+            3.5247,
+            3.6685,
+            3.2532,
+            3.4546,
+            3.3779,
+            3.3455999999999997,
+            4.1324,
+            4.372,
+            4.5437,
+            4.1000000000000005,
+            3.8516000000000004,
+            5.0873,
+            6.1053,
+            4.7543999999999995,
+            4.423500000000001,
+            6.1203,
+            6.133,
+            4.866
+          ],
+          "scan_delta_including_maintenance": 0,
+          "unix_ms": 1792054393531,
+          "workload": "exact_filename"
+        },
+        {
+          "ms": 5.5035,
+          "phase": "first_query",
+          "unix_ms": 1792054393540,
+          "workload": "sparse_content"
+        },
+        {
+          "metrics": {
+            "commit_ms": 2661.9995,
+            "commits": 1000,
+            "content_admission_ms": 2456.9624,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054382724
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 111.98769999999999,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2129.99
+              }
+            ],
+            "extraction_ms": 323.9713,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 2002,
+            "metadata_upsert_ms": 2569.6219,
+            "scans": 2,
+            "scans_done": 2,
+            "selection_candidates": 1000,
+            "selection_ms": 3.5559,
+            "status_ms": 88.6861,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 8534.4197
+          },
+          "p50_ms": 2.4724,
+          "p95_ms": 4.9289,
+          "percentile": "nearest-rank ceil(q*N)-1 N=30",
+          "phase": "warm_queries",
+          "query_thread": "ThreadId(2)",
+          "raw_ms": [
+            5.2479,
+            4.7111,
+            4.5847999999999995,
+            4.9289,
+            4.3951,
+            4.1925,
+            4.4691,
+            4.2692,
+            2.765,
+            2.5774,
+            2.2656,
+            2.3059,
+            2.625,
+            2.5561999999999996,
+            2.2523999999999997,
+            2.3237,
+            2.205,
+            2.2824,
+            2.2945,
+            2.4045,
+            2.1703,
+            2.654,
+            2.2755,
+            2.504,
+            2.2395,
+            2.7466,
+            2.2374,
+            2.4724,
+            2.1784,
+            2.3405
+          ],
+          "scan_delta_including_maintenance": 0,
+          "unix_ms": 1792054393632,
+          "workload": "sparse_content"
+        },
+        {
+          "ms": 4.0280000000000005,
+          "phase": "first_query",
+          "unix_ms": 1792054393638,
+          "workload": "no_match"
+        },
+        {
+          "metrics": {
+            "commit_ms": 2661.9995,
+            "commits": 1000,
+            "content_admission_ms": 2456.9624,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054382724
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 111.98769999999999,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2129.99
+              }
+            ],
+            "extraction_ms": 323.9713,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 2002,
+            "metadata_upsert_ms": 2569.6219,
+            "scans": 2,
+            "scans_done": 2,
+            "selection_candidates": 1000,
+            "selection_ms": 3.5607,
+            "status_ms": 88.6861,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 8610.5194
+          },
+          "p50_ms": 2.3489,
+          "p95_ms": 3.4751,
+          "percentile": "nearest-rank ceil(q*N)-1 N=30",
+          "phase": "warm_queries",
+          "query_thread": "ThreadId(2)",
+          "raw_ms": [
+            3.594,
+            3.0791999999999997,
+            3.1277000000000004,
+            2.9742,
+            3.1616,
+            3.3930000000000002,
+            3.0488,
+            2.2601,
+            2.3489,
+            2.0067000000000004,
+            2.1443,
+            2.6085000000000003,
+            3.3697000000000004,
+            3.1162,
+            2.4379,
+            2.9526,
+            3.4751,
+            2.3857,
+            2.3908,
+            2.2064,
+            2.121,
+            2.1935000000000002,
+            2.2679,
+            1.9680000000000002,
+            2.0885000000000002,
+            1.9620000000000002,
+            2.1004,
+            2.2899000000000003,
+            2.182,
+            1.9935
+          ],
+          "scan_delta_including_maintenance": 0,
+          "unix_ms": 1792054393718,
+          "workload": "no_match"
+        },
+        {
+          "ms": 22.925,
+          "phase": "first_query",
+          "unix_ms": 1792054393744,
+          "workload": "common_limit5"
+        },
+        {
+          "metrics": {
+            "commit_ms": 2661.9995,
+            "commits": 1000,
+            "content_admission_ms": 2456.9624,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054382724
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 111.98769999999999,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2129.99
+              }
+            ],
+            "extraction_ms": 323.9713,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 2002,
+            "metadata_upsert_ms": 2569.6219,
+            "scans": 2,
+            "scans_done": 2,
+            "selection_candidates": 1000,
+            "selection_ms": 3.611,
+            "status_ms": 88.6861,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 9343.9254
+          },
+          "p50_ms": 21.766000000000002,
+          "p95_ms": 32.5409,
+          "percentile": "nearest-rank ceil(q*N)-1 N=30",
+          "phase": "warm_queries",
+          "query_thread": "ThreadId(2)",
+          "raw_ms": [
+            22.7143,
+            21.766000000000002,
+            19.9365,
+            19.592399999999998,
+            14.447899999999999,
+            22.5565,
+            22.4971,
+            22.7347,
+            18.6171,
+            19.7766,
+            22.9888,
+            17.2275,
+            15.8123,
+            20.234599999999997,
+            16.7917,
+            16.5487,
+            16.5944,
+            22.1072,
+            17.0649,
+            20.550700000000003,
+            20.113200000000003,
+            26.6249,
+            32.5409,
+            33.0076,
+            29.5895,
+            31.749699999999997,
+            31.681300000000004,
+            31.966099999999997,
+            31.198900000000002,
+            31.826800000000002
+          ],
+          "scan_delta_including_maintenance": 0,
+          "unix_ms": 1792054394437,
+          "workload": "common_limit5"
+        },
+        {
+          "ms": 31.784399999999998,
+          "phase": "first_query",
+          "unix_ms": 1792054394473,
+          "workload": "extension_filter"
+        },
+        {
+          "metrics": {
+            "commit_ms": 2661.9995,
+            "commits": 1000,
+            "content_admission_ms": 2456.9624,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054382724
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 111.98769999999999,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2129.99
+              }
+            ],
+            "extraction_ms": 323.9713,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 2002,
+            "metadata_upsert_ms": 2569.6219,
+            "scans": 2,
+            "scans_done": 2,
+            "selection_candidates": 1000,
+            "selection_ms": 3.6811,
+            "status_ms": 88.6861,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 10229.5612
+          },
+          "p50_ms": 28.5971,
+          "p95_ms": 32.274499999999996,
+          "percentile": "nearest-rank ceil(q*N)-1 N=30",
+          "phase": "warm_queries",
+          "query_thread": "ThreadId(2)",
+          "raw_ms": [
+            38.2268,
+            29.5055,
+            31.259500000000003,
+            24.1032,
+            30.0908,
+            28.533900000000003,
+            30.9351,
+            28.4821,
+            31.0073,
+            28.3542,
+            30.1703,
+            25.6597,
+            22.5423,
+            31.420299999999997,
+            22.6027,
+            26.1852,
+            28.672,
+            28.0918,
+            30.3342,
+            28.5971,
+            21.023300000000003,
+            22.5205,
+            26.822599999999998,
+            32.274499999999996,
+            27.205900000000003,
+            28.6818,
+            31.9823,
+            31.4609,
+            27.0139,
+            29.9269
+          ],
+          "scan_delta_including_maintenance": 0,
+          "unix_ms": 1792054395330,
+          "workload": "extension_filter"
+        },
+        {
+          "actual_watcher": true,
+          "new_content_ms": 260.9073,
+          "old_content_invalidated_ms": 206.9059,
+          "ordinal": 1,
+          "phase": "watcher_same_size_mtime_edit",
+          "unix_ms": 1792054395597
+        },
+        {
+          "actual_watcher": true,
+          "new_content_ms": 240.62449999999998,
+          "old_content_invalidated_ms": 204.13709999999998,
+          "ordinal": 500,
+          "phase": "watcher_same_size_mtime_edit",
+          "unix_ms": 1792054395841
+        },
+        {
+          "actual_watcher": true,
+          "new_content_ms": 231.71249999999998,
+          "old_content_invalidated_ms": 200.0268,
+          "ordinal": 999,
+          "phase": "watcher_same_size_mtime_edit",
+          "unix_ms": 1792054396078
+        },
+        {
+          "ms": 212.815,
+          "phase": "watcher_rename",
+          "unix_ms": 1792054396294
+        },
+        {
+          "ms": 3189.0211000000004,
+          "phase": "watcher_delete",
+          "post_files": 999,
+          "unix_ms": 1792054399486
+        },
+        {
+          "phase": "settled_start",
+          "seconds": 35,
+          "unix_ms": 1792054399514
+        },
+        {
+          "metrics": {
+            "commit_ms": 2698.2443,
+            "commits": 1004,
+            "content_admission_ms": 2470.9998,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054379533
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 89.5879,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2975.5505
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054382724
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 111.98769999999999,
+                "records": 1001,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2129.99
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054396295
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 171.6945,
+                "records": 1000,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 3177.7731999999996
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054399646
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 114.77900000000001,
+                "records": 1000,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2393.8871000000004
+              },
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(3)",
+                "unix_ms": 1792054432075
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 151.1646,
+                "records": 1000,
+                "truncated": false,
+                "warnings": 0
+              }
+            ],
+            "extraction_ms": 325.4418,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 4958,
+            "metadata_upsert_ms": 5747.3845,
+            "scans": 5,
+            "scans_done": 4,
+            "selection_candidates": 1004,
+            "selection_ms": 7.0514,
+            "status_ms": 91.1408,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 49371.3082
+          },
+          "phase": "settled_complete",
+          "unix_ms": 1792054434517
+        },
+        {
+          "ms": 0.6655,
+          "phase": "stop_admission",
+          "unix_ms": 1792054434527
+        },
+        {
+          "ms": 68.71140000000001,
+          "phase": "teardown_joined",
+          "unix_ms": 1792054434597
+        },
+        {
+          "ms": 78.3367,
+          "phase": "reopen_unadmitted",
+          "scans": {
+            "commit_ms": 0,
+            "commits": 0,
+            "content_admission_ms": 0,
+            "errors": [],
+            "events": [],
+            "extraction_ms": 0,
+            "max_commits_between_sleeps": 0,
+            "metadata_records": 0,
+            "metadata_upsert_ms": 0,
+            "scans": 0,
+            "scans_done": 0,
+            "selection_candidates": 0,
+            "selection_ms": 0,
+            "status_ms": 0,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 25.5107
+          },
+          "unix_ms": 1792054434678
+        },
+        {
+          "ms": 2114.6115,
+          "pending_content": 999,
+          "phase": "reopen_readmitted_inventory",
+          "unix_ms": 1792054437699
+        },
+        {
+          "metrics": {
+            "commit_ms": 1127.8324,
+            "commits": 999,
+            "content_admission_ms": 2642.7107,
+            "errors": [],
+            "events": [
+              {
+                "event": "scan_start",
+                "forced": false,
+                "thread": "ThreadId(6)",
+                "unix_ms": 1792054435567
+              },
+              {
+                "event": "traversal",
+                "folders": 1,
+                "ms": 91.9266,
+                "records": 1000,
+                "truncated": false,
+                "warnings": 0
+              },
+              {
+                "event": "scan_complete",
+                "ms": 2109.3562
+              }
+            ],
+            "extraction_ms": 412.3822,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 1000,
+            "metadata_upsert_ms": 762.4977,
+            "scans": 1,
+            "scans_done": 1,
+            "selection_candidates": 999,
+            "selection_ms": 3.88,
+            "status_ms": 98.8598,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 6232.3836
+          },
+          "ms": 7471.0827,
+          "phase": "reopen_content_complete",
+          "unix_ms": 1792054445201
+        },
+        {
+          "admission_ms": 5.1091,
+          "join_ms": 31.9723,
+          "no_late_commit": true,
+          "phase": "cancel_during_inventory",
+          "records_at_stop": 103,
+          "source_exists": true,
+          "unix_ms": 1792054445766
+        },
+        {
+          "admission_ms": 0.0123,
+          "join_ms": 27.288,
+          "no_late_content": true,
+          "phase": "cancel_before_content_commit",
+          "query_during_extraction_barrier_ms": 2.6583,
+          "unix_ms": 1792054445877
+        },
+        {
+          "corpus_preserved": true,
+          "database_bytes": 1961984,
+          "phase": "complete",
+          "teardown_joined": true,
+          "unix_ms": 1792054445893
+        }
+      ],
+      "progress": [
+        {
+          "unix_ms": 1792054392557,
+          "phase": "content",
+          "progress_s": 10.0165995,
+          "status": {
+            "generation": 1,
+            "indexedItems": 1001,
+            "message": "Updating local inventory and pending content",
+            "pendingItems": 88,
+            "phase": "indexing",
+            "queuedEnrichment": 0,
+            "skippedItems": 0
+          },
+          "metrics": {
+            "commit_ms": 2390.4159,
+            "commits": 912,
+            "content_admission_ms": 2231.4279,
+            "errors": [],
+            "extraction_ms": 287.6015,
+            "max_commits_between_sleeps": 8,
+            "metadata_records": 2002,
+            "metadata_upsert_ms": 2569.6219,
+            "scans": 2,
+            "scans_done": 2,
+            "selection_candidates": 912,
+            "selection_ms": 3.2286,
+            "status_ms": 80.5009,
+            "status_retry_candidates": 0,
+            "worker_sleep_ms": 8002.9621
+          }
+        }
+      ]
+    }
+  ]
+}

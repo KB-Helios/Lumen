@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-15T15:41:52.000Z",
+  "success": true,
+  "executable": {
+    "path": "[workspace]\\.superpowers\\callback-recovery\\diagnostic-worker.exe",
+    "bytes": 103303680,
+    "sha256": "f27e000e4a731259aeb7aa956c613da7eae2a111d60541dd4365126e99d9bba4"
+  },
+  "transformed": [
+    {
+      "path": "node_modules/rivetkit/dist/tsup/mod.js",
+      "sha256": "a584e09851b53e46a0cbfe579cdf9ec88d0183949f5a5bcbc24f82aa52f9feb4"
+    },
+    {
+      "path": "node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js",
+      "sha256": "49d0e334696294d53e9526eb1a92f1584bdab85a4e246713829e413ff5cff5f0"
+    }
+  ],
+  "originalTest": "aac01683857c37d129e7d9420e0133b7b68e98ded201863962b7103615c684a6",
+  "diagnosticTest": "e28c95e065326b475ebb23c58c707117809e7fe2c8d8f2ce79f1989c64c61cda"
+}

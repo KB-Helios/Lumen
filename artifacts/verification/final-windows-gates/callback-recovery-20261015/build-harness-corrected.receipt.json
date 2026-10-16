@@ -1,0 +1,15 @@
+{
+    "mode":  "build",
+    "at":  "2026-10-15T15:41:49.6089093Z",
+    "head":  "ae412fb5587f87aa4914ff429cf0abf8e11dbee1",
+    "command":  [
+                    "bun",
+                    ".superpowers/callback-recovery/build.ts"
+                ],
+    "releaseMarker":  null,
+    "diagnosticOnly":  true,
+    "runnerPid":  33728,
+    "pid":  33876,
+    "ended":  "2026-10-15T15:41:52.3909206Z",
+    "exitCode":  0
+}

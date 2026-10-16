@@ -1,0 +1,8 @@
+bun test v1.3.14 (0d9b296a)
+Owned compiled fixture directory: [user-home]\AppData\Local\Temp\lumen-task2b-UNikad; engine PID 8596
+Owned worker PID 33236
+level=warn msg="http error response" group=api code=forbidden message="Access denied"
+level=warn msg="http error response" group=api code=forbidden message="Access denied"
+level=warn msg="http error response" group=api code=forbidden message="Access denied"
+level=warn msg="http error response" group=api code=forbidden message="Access denied"
+Owned fixture stopped; retained logs: [user-home]\AppData\Local\Temp\lumen-task2b-UNikad

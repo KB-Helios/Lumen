@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-15T01:14:54.292Z",
+  "head": "911fa8546d57aba87d2e3ddff2169b928666c4ff",
+  "status": "?? docs/superpowers/plans/2026-10-12-production-readiness.md",
+  "exeMatches": true,
+  "exeSha256": "c45dd0731cb30b39376b0c5cd9ed29da7e518dafa3a8d5cb3b967c359f4a4006",
+  "sourceMatches": {
+    "src-tauri/src/window.rs": true,
+    "src-tauri/src/lib.rs": true,
+    "src-tauri/src/native_performance.rs": true,
+    "src-tauri/tauri.conf.json": true,
+    "src/design-system/global.css": true,
+    "src/test/NativePerformanceFixture.tsx": true,
+    ".superpowers/launcher-native-verify.mjs": true,
+    ".superpowers/launcher-controlled-underlay.ps1": true
+  },
+  "screenshotHashes": {
+    "browser-alpha.png": "160095cf3cbf763c91651b3ded0dcefb80b49ef7eeb4e3b8bd22cd9d90cbfb47",
+    "collapsed-initial-cyan.png": "ca32034d860758e49cb358fabe365ba874a49714a90b705a1980c8c4b90ad1e2",
+    "collapsed-initial-orange.png": "fbc17755360b642a25d7e22c67daf5efde99598f6f23fbc2e489eb184b3d8dda",
+    "collapsed-reopened.png": "7546bd3bcc7ecb2367545ebe843cd451fbe44a2d34a9e161f2e08cfc3f4c59ee",
+    "expanded-to-collapsed-cyan.png": "4799849125717e34c483e693d46adf9c326ae229778e48b0c366bdbf875a52a2",
+    "expanded-to-collapsed-orange.png": "243434c91a0926c566f9f25d80503a7ae95715a498a215b03a2cea016317997c",
+    "expanded.png": "5bc9b1b45d1d6440a67251f8f9d63d9f3bf9ec8b8a977f065b5685b70988cf76"
+  }
+}

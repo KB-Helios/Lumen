@@ -16,6 +16,7 @@ workers/improvement-runtime/rust-tests/target/
 src-tauri/resources/improvement/*.tar
 src-tauri/resources/improvement/*.json
 src-tauri/resources/improvement/*.staged
+src-tauri/resources/rivet-engine/
 .tmp-agentgateway-schema.json
 *.local
 
@@ -39,6 +40,7 @@ pnpm-debug.log*
 *.sw?
 
 # Test artifacts
+/.build/
 playwright-report/
 test-results/
 .playwright-cli/

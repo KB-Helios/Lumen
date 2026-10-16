@@ -116,6 +116,365 @@ fn manual_setup(label: &str) -> (SearchFixture, IndexRuntime, Vec<IndexRootReque
     (fixture, runtime, roots)
 }
 
+#[test]
+fn enrichment_admission_refuses_changed_bytes_before_watcher_metadata_update() {
+    let (fixture, runtime, mut roots) = manual_setup("enrichment-byte-admission");
+    let path = fixture.file("photo.png", b"synthetic-image-original");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    assert!(runtime.enrichment_dispatch_is_admitted(&job).unwrap());
+    std::fs::write(path, b"synthetic-image-replaced").unwrap();
+    assert!(!runtime.enrichment_dispatch_is_admitted(&job).unwrap());
+}
+
+#[test]
+fn task_2a_review_native_activity_cancels_pending_provider_and_neutrally_releases_lease() {
+    use crate::{
+        activity::{ActivityRuntime, BackgroundPolicy, ObservedActivity},
+        gateway::{EnrichmentSupervisor, registry::ProviderRegistry},
+        local_http_tests as http,
+    };
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::{Arc, Mutex, atomic::AtomicBool},
+    };
+    struct Dropped(Arc<AtomicBool>);
+    impl Drop for Dropped {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    for restriction in ["fullscreen", "game", "battery"] {
+        let (fixture, runtime, mut roots) = manual_setup("autonomous-activity-cancellation");
+        fixture.file("scan.png", b"synthetic-image");
+        roots[0].cloud_enrichment = true;
+        runtime.configure_roots(roots, true).unwrap();
+        runtime.reconcile_inventory(false).unwrap();
+        runtime.extract_pending().unwrap();
+        let lease = crate::search::enrichment::EnrichmentLease {
+            job: runtime.pending_enrichment().unwrap().remove(0),
+            generation: 1,
+            attempts: 1,
+        };
+        let generation = runtime.current_generation();
+        let settings = fixture.file("owned-settings.json", serde_json::json!({"management":{"activity":{"userGames":[{"identityHash":"a".repeat(64)}]}}}).to_string().as_bytes());
+        let observed = Arc::new(Mutex::new(ObservedActivity::default()));
+        let source = observed.clone();
+        let activity = ActivityRuntime::with_observer(
+            &settings,
+            Arc::new(move || source.lock().unwrap().clone()),
+        );
+        assert_eq!(
+            activity.snapshot().background_policy,
+            BackgroundPolicy::Normal
+        );
+        let queue = EnrichmentSupervisor::new(
+            PathBuf::from("unused"),
+            PathBuf::from("unused"),
+            fixture.root().join("owned-queue"),
+        )
+        .unwrap();
+        let queue_server = http::server_at(
+            TcpListener::bind(("127.0.0.1", queue.health().control_port)).unwrap(),
+            http::json(r#"{"accepted":true}"#),
+            Duration::ZERO,
+        );
+        let registry = ProviderRegistry::in_memory();
+        let route = registry
+            .routes()
+            .into_iter()
+            .find(|route| route.alias == "lumen.vision.cloud")
+            .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let (entered, ready) = tokio::sync::oneshot::channel();
+        let (release, wait) = std::sync::mpsc::sync_channel(1);
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0; 4096];
+            assert!(stream.read(&mut request).unwrap() > 0);
+            entered.send(()).unwrap();
+            let _ = wait.recv_timeout(Duration::from_secs(5));
+            let _ = stream.write_all(&http::json(r#"{"text":"restrictedactivityquasar"}"#));
+        });
+        let completed = Arc::new(AtomicBool::new(false));
+        let dropped = Arc::new(AtomicBool::new(false));
+        let guard = Dropped(dropped.clone());
+        tauri::async_runtime::block_on(async {
+            let provider = async {
+                let _guard = guard;
+                let client = crate::local_http::client(Duration::from_secs(60))
+                    .map_err(|error| error.message("fixture"))
+                    .unwrap();
+                let response: serde_json::Value = crate::local_http::json(
+                    client
+                        .post(endpoint)
+                        .json(&serde_json::json!({"source":"owned-synthetic"})),
+                )
+                .await
+                .map_err(|error| error.message("fixture"))?;
+                completed.store(true, Ordering::SeqCst);
+                Ok(response["text"].as_str().unwrap().to_owned())
+            };
+            let consume = crate::search::enrichment::consume_lease(
+                &runtime,
+                &queue,
+                &lease,
+                generation,
+                &route,
+                provider,
+                || {
+                    crate::search::enrichment::observe_background_activity(
+                        &runtime, &queue, &activity,
+                    ) && runtime.enrichment_is_current(generation)
+                },
+            );
+            let transition = async {
+                tokio::time::timeout(Duration::from_secs(5), ready)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                {
+                    let mut changed = observed.lock().unwrap();
+                    match restriction {
+                        "fullscreen" => changed.fullscreen = true,
+                        "game" => changed.identity_hash = Some("a".repeat(64)),
+                        "battery" => changed.on_battery = true,
+                        _ => unreachable!(),
+                    }
+                }
+                assert_eq!(
+                    activity.snapshot().background_policy,
+                    BackgroundPolicy::Paused
+                );
+                tokio::time::sleep(Duration::from_millis(600)).await;
+                release.send(()).unwrap();
+            };
+            let (result, ()) = tokio::join!(consume, transition);
+            result.unwrap();
+        });
+        server.join().unwrap();
+        let request = queue_server.join().unwrap();
+        let body = request
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        let finish: serde_json::Value = serde_json::from_slice(&request[body..]).unwrap();
+        assert!(
+            !completed.load(Ordering::SeqCst),
+            "{restriction}: pending provider must be cancelled before response"
+        );
+        assert!(dropped.load(Ordering::SeqCst));
+        assert!(
+            !runtime.work.content_enabled.load(Ordering::SeqCst),
+            "{restriction}: extraction flag must pause without activity IPC"
+        );
+        assert!(queue.is_paused());
+        assert_eq!(finish["status"], "deferred");
+        assert_eq!(finish["generation"], 1);
+        assert_eq!(finish["idempotencyKey"], lease.job.idempotency_key);
+        assert!(
+            runtime
+                .database
+                .search("restrictedactivityquasar", 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            runtime
+                .database
+                .enrichment_job_is_queued(&lease.job)
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn enrichment_results_recheck_generation_roots_consent_pause_and_stop() {
+    for invalidation in ["generation", "root", "consent", "pause", "stop", "bytes"] {
+        let (fixture, runtime, mut roots) = manual_setup("enrichment-result-admission");
+        let path = fixture.file("scan.png", b"synthetic-image");
+        roots[0].cloud_enrichment = true;
+        runtime.configure_roots(roots.clone(), true).unwrap();
+        runtime.reconcile_inventory(false).unwrap();
+        runtime.extract_pending().unwrap();
+        let job = runtime.pending_enrichment().unwrap().remove(0);
+        let generation = runtime.current_generation();
+        assert!(runtime.enrichment_source(&job).unwrap().is_some());
+        match invalidation {
+            "generation" => {
+                runtime.generation.fetch_add(1, Ordering::SeqCst);
+            }
+            "root" => {
+                runtime.configure_roots(Vec::new(), true).unwrap();
+            }
+            "consent" => {
+                roots[0].cloud_enrichment = false;
+                runtime.configure_roots(roots, true).unwrap();
+            }
+            "pause" => runtime.set_content_enabled(false),
+            "stop" => runtime.work.stop.store(true, Ordering::SeqCst),
+            _ => std::fs::write(&path, b"synthetic-edited").unwrap(),
+        }
+        assert!(
+            !runtime
+                .commit_enrichment(generation, &job, "forbiddenquasar", "fixture", "fixture")
+                .unwrap(),
+            "{invalidation}"
+        );
+        assert!(
+            runtime
+                .database
+                .search("forbiddenquasar", 10)
+                .unwrap()
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn task_2a_review_activity_resume_reaches_lifecycle_sync_and_dispatch_without_ipc() {
+    use crate::{
+        activity::{ActivityPolicy, ActivityRuntime, ObservedActivity},
+        gateway::EnrichmentSupervisor,
+        local_http_tests as http,
+    };
+    use std::{
+        net::TcpListener,
+        sync::{Arc, Mutex},
+    };
+    let (fixture, runtime, mut roots) = manual_setup("autonomous-activity-resume");
+    fixture.file("scan.png", b"synthetic-image");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    let observed = Arc::new(Mutex::new(ObservedActivity {
+        fullscreen: true,
+        ..Default::default()
+    }));
+    let source = observed.clone();
+    let activity = ActivityRuntime::with_observer(
+        &fixture.root().join("missing-owned-settings.json"),
+        Arc::new(move || source.lock().unwrap().clone()),
+    );
+    let queue = EnrichmentSupervisor::new(
+        PathBuf::from("unused"),
+        PathBuf::from("unused"),
+        fixture.root().join("owned-queue"),
+    )
+    .unwrap();
+    assert!(!crate::search::enrichment::observe_background_activity(
+        &runtime, &queue, &activity
+    ));
+    assert!(queue.is_paused());
+    assert!(!runtime.observe_lifecycle_activity(&activity, &queue));
+    assert!(!runtime.work.content_enabled.load(Ordering::SeqCst));
+    // No provider was dispatched: this isolates activity gates from legitimate unknown-usage holds.
+    observed.lock().unwrap().fullscreen = false;
+    tauri::async_runtime::block_on(async {
+        tokio::time::sleep(Duration::from_secs(
+            ActivityPolicy::default().resume_delay_seconds,
+        ))
+        .await;
+        let server = http::server_at(
+            TcpListener::bind(("127.0.0.1", queue.health().control_port)).unwrap(),
+            http::json(r#"{"accepted":true}"#),
+            Duration::ZERO,
+        );
+        assert!(runtime.observe_lifecycle_activity(&activity, &queue));
+        assert!(runtime.work.content_enabled.load(Ordering::SeqCst));
+        let queue_ready = runtime.sync_enrichment_queue(&queue).await;
+        let request = server.join().unwrap();
+        assert!(
+            queue_ready,
+            "Normal lifecycle must clear stale activity pause before queue sync"
+        );
+        assert!(!queue.is_paused());
+        let body = request
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        let submitted: serde_json::Value = serde_json::from_slice(&request[body..]).unwrap();
+        assert_eq!(submitted["idempotencyKey"], job.idempotency_key);
+        assert!(runtime.enrichment_dispatch_is_admitted(&job).unwrap());
+        assert!(crate::search::enrichment::observe_background_activity(
+            &runtime, &queue, &activity
+        ));
+        assert!(runtime.enrichment_is_current(runtime.current_generation()));
+        queue.pause();
+        assert!(
+            runtime.observe_lifecycle_activity(&activity, &queue),
+            "Cloud queue user pause does not disable local content work"
+        );
+        assert!(
+            queue.is_paused(),
+            "Native observation must preserve explicit queue pause"
+        );
+        assert!(!runtime.sync_enrichment_queue(&queue).await);
+    });
+}
+
+#[test]
+fn admitted_enrichment_result_is_searchable_without_waiting_for_reindexing() {
+    let (fixture, runtime, mut roots) = manual_setup("enrichment-admitted-result");
+    fixture.file("scan.png", b"synthetic-image");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    assert!(
+        runtime
+            .commit_enrichment(
+                runtime.current_generation(),
+                &job,
+                "searchablequasar",
+                "fixture",
+                "fixture"
+            )
+            .unwrap()
+    );
+    assert_eq!(
+        runtime
+            .database
+            .search("searchablequasar", 10)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn exhausted_enrichment_is_visible_as_degraded_and_preserves_file_metadata() {
+    let (fixture, runtime, mut roots) = manual_setup("enrichment-failed-status");
+    fixture.file("scan.png", b"synthetic-image");
+    roots[0].cloud_enrichment = true;
+    runtime.configure_roots(roots, true).unwrap();
+    runtime.reconcile_inventory(false).unwrap();
+    runtime.extract_pending().unwrap();
+    let job = runtime.pending_enrichment().unwrap().remove(0);
+    runtime
+        .fail_enrichment(runtime.current_generation(), &job)
+        .unwrap();
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "degraded");
+    assert_eq!(status.skipped_items, 1);
+    assert_eq!(status.queued_enrichment, 0);
+    assert_eq!(status.indexed_items, 1);
+    assert!(status.message.contains("cloud enrichment is unavailable"));
+}
+
 fn reopened_worker_preserves_unadmitted_policy(empty_policy: bool) {
     let (fixture, runtime, roots) = manual_setup("unadmitted-reopen");
     let path = fixture.file("saved.txt", b"savedquasar");
@@ -464,15 +823,67 @@ fn directory_events_preserve_existing_body_and_enrichment() {
 }
 
 #[test]
+fn retry_status_clears_after_success_and_root_revocation() {
+    let (fixture, runtime, roots) = setup("retry-status");
+    let path = fixture.file("retry.txt", &[0xff, 0xfe]);
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    admit(&runtime, roots, true);
+    eventually("first extraction reports its retry", || {
+        runtime.snapshot().skipped_items == 1
+    });
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "degraded");
+    assert_eq!((status.pending_items, status.skipped_items), (1, 1));
+    runtime.set_content_enabled(false);
+    assert_eq!(runtime.snapshot().phase, "paused");
+    assert_eq!(runtime.snapshot().skipped_items, 1);
+    std::fs::write(&path, b"ok").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    runtime.work.pending.lock().unwrap().make_due_for_test();
+    runtime.set_content_enabled(true);
+    eventually("successful retry publishes ready", || {
+        runtime.snapshot().phase == "ready"
+    });
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "ready");
+    assert_eq!((status.pending_items, status.skipped_items), (0, 0));
+    assert_eq!(status.indexed_items, 1);
+    assert!(!runtime.database.search("ok", 10).unwrap().is_empty());
+    let broken = fixture.file("broken.txt", &[0xff, 0xfe]);
+    assert!(broken.is_file());
+    eventually("new extraction reports its retry", || {
+        runtime.snapshot().skipped_items == 1
+    });
+    assert_eq!(runtime.snapshot().skipped_items, 1);
+    runtime.configure_roots(Vec::new(), true).unwrap();
+    eventually("revocation completes empty inventory", || {
+        runtime.snapshot().phase == "ready"
+    });
+    let status = runtime.snapshot();
+    assert_eq!(status.phase, "ready");
+    assert_eq!(
+        (
+            status.pending_items,
+            status.skipped_items,
+            status.indexed_items
+        ),
+        (0, 0, 0)
+    );
+}
+
+#[test]
 fn permanent_invalid_utf8_has_bounded_retries_and_truthful_metadata_only_state() {
     let (fixture, runtime, roots) = manual_setup("terminal-extraction");
     let path = fixture.file("broken.txt", &[0xff, 0xfe, 0xff]);
     admit(&runtime, roots, true);
     runtime.reconcile_inventory(false).unwrap();
     for attempt in 1..=6 {
-        for pending in runtime.work.pending.lock().unwrap().values_mut() {
-            pending.retry_at = Instant::now();
-        }
+        runtime.work.pending.lock().unwrap().make_due_for_test();
         runtime.extract_pending().unwrap();
         assert_eq!(runtime.snapshot().skipped_items, 1);
         if attempt < 3 {
@@ -1516,4 +1927,165 @@ fn ancestor_replacement(replace_at_commit: bool) {
             "reject the redirected boundary before actual extraction"
         );
     }
+}
+
+#[test]
+#[ignore = "explicit compiled enrichment integration gate after sidecar staging"]
+fn compiled_enrichment_consumer_indexes_scanned_pdf_image_audio_video_and_cancels_stop() {
+    use crate::search::enrichment::tests::{fixture_provider, scanned_pdf};
+    use crate::{
+        activity::ActivityRuntime,
+        gateway::{EnrichmentSupervisor, registry::ProviderRegistry},
+        search::enrichment::{EnrichmentLease, consume_lease, observe_background_activity},
+    };
+    use std::sync::Arc;
+    let (fixture, index, mut roots) = manual_setup("compiled-consumer");
+    roots[0].cloud_enrichment = true;
+    index.configure_roots(roots, true).unwrap();
+    let binaries = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+    let queue = EnrichmentSupervisor::new(
+        binaries.join("lumen-enrichment-x86_64-pc-windows-msvc.exe"),
+        binaries.join("lumen-rivet-engine-x86_64-pc-windows-msvc.exe"),
+        fixture.root().parent().unwrap().join("queue"),
+    )
+    .unwrap();
+    queue.start().unwrap();
+    let activity = ActivityRuntime::with_observer(
+        &fixture.file("private/owned-settings.json", b"{}"),
+        Arc::new(crate::activity::ObservedActivity::default),
+    );
+    let registry = ProviderRegistry::in_memory();
+    let budget = crate::gateway::enrichment_budget::EnrichmentBudget::open(
+        &fixture.root().parent().unwrap().join("budget.sqlite"),
+    )
+    .unwrap();
+    tauri::async_runtime::block_on(async {
+        let ready = std::time::Instant::now();
+        while queue.queue_status().await.is_err() {
+            assert!(ready.elapsed() < Duration::from_secs(20));
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        for (extension, audio) in [
+            ("pdf", false),
+            ("png", false),
+            ("wav", true),
+            ("mp4", true),
+            ("webm", true),
+        ] {
+            let bytes = if extension == "pdf" {
+                scanned_pdf()
+            } else {
+                b"owned-synthetic-source".to_vec()
+            };
+            fixture.file(&format!("scan.{extension}"), &bytes);
+            index.reconcile_inventory(false).unwrap();
+            index.extract_pending().unwrap();
+            let jobs = index.pending_enrichment().unwrap();
+            assert_eq!(
+                jobs.len(),
+                1,
+                "{extension}: native extraction must admit exactly this pending source"
+            );
+            assert!(queue.sync_jobs(&jobs).await);
+            let lease: EnrichmentLease = queue
+                .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(&lease.job).unwrap(),
+                serde_json::to_value(&jobs[0]).unwrap()
+            );
+            let generation = index.current_generation();
+            let (path, admitted_bytes) = index.enrichment_source(&lease.job).unwrap().unwrap();
+            assert_eq!(admitted_bytes, bytes);
+            let route = registry
+                .routes()
+                .into_iter()
+                .find(|route| route.alias == lease.job.route)
+                .unwrap();
+            let admitted = || {
+                observe_background_activity(&index, &queue, &activity)
+                    && index.enrichment_is_current(generation)
+            };
+            let provider = fixture_provider(&route, &path, &bytes, audio, &budget);
+            consume_lease(
+                &index, &queue, &lease, generation, &route, provider, admitted,
+            )
+            .await
+            .unwrap();
+            assert!(
+                index
+                    .database
+                    .search("compiledquasar", 10)
+                    .unwrap()
+                    .iter()
+                    .any(|hit| hit.stable_id == lease.job.file_id),
+                "{extension}: searchable native completion"
+            );
+            assert!(index.pending_enrichment().unwrap().is_empty());
+            assert!(
+                queue
+                    .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        fixture.file("cancel.png", b"owned-cancel-source");
+        index.reconcile_inventory(false).unwrap();
+        index.extract_pending().unwrap();
+        let jobs = index.pending_enrichment().unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert!(queue.sync_jobs(&jobs).await);
+        let lease: EnrichmentLease = queue
+            .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        let route = registry
+            .routes()
+            .into_iter()
+            .find(|route| route.alias == lease.job.route)
+            .unwrap();
+        let generation = index.current_generation();
+        let consume = consume_lease(
+            &index,
+            &queue,
+            &lease,
+            generation,
+            &route,
+            std::future::pending::<Result<String, String>>(),
+            || {
+                observe_background_activity(&index, &queue, &activity)
+                    && index.enrichment_is_current(generation)
+            },
+        );
+        let stop = async {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            index
+                .work
+                .stop
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+        };
+        let (result, ()) = tokio::join!(consume, stop);
+        result.unwrap();
+        assert!(index.database.enrichment_job_is_queued(&lease.job).unwrap());
+        let neutral: EnrichmentLease = queue
+            .enrichment_request::<Option<EnrichmentLease>>("lease", &serde_json::json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(neutral.attempts, 1);
+        assert_eq!(neutral.generation, lease.generation + 1);
+        assert!(
+            !index
+                .database
+                .search("compiledquasar", 10)
+                .unwrap()
+                .iter()
+                .any(|hit| hit.stable_id == lease.job.file_id)
+        );
+    });
+    drop(queue);
 }

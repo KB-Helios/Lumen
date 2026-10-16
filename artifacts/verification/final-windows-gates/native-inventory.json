@@ -1,0 +1,18 @@
+{
+  "label": "native-inventory",
+  "command": "node",
+  "args": [
+    ".superpowers/task14c-native-exact.mjs",
+    "inventory"
+  ],
+  "cwd": "[workspace]",
+  "started": "2026-10-15T14:13:17.696Z",
+  "head": "8a337eb960e1aa2274c60c7f7f64b1e2e79336be",
+  "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "releaseMarker": null,
+  "runnerPid": 36620,
+  "pid": 19492,
+  "ended": "2026-10-15T14:13:17.823Z",
+  "code": 0,
+  "signal": null
+}

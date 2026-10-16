@@ -48,7 +48,9 @@ fn live_path(home: &Path, app: &str) -> Result<PathBuf, String> {
         "opencode" => paths::opencode_config(home),
         "openclaw" => paths::openclaw_config(home),
         _ => {
-            return Err("unknown app; expected claude, codex, gemini, opencode, or openclaw".into());
+            return Err(
+                "unknown app; expected claude, codex, gemini, opencode, or openclaw".into(),
+            );
         }
     };
     ensure_within_home(home, &path)?;

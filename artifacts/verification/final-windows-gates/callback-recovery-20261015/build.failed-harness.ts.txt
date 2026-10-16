@@ -1,0 +1,165 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import vm from 'node:vm';
+import ts from 'typescript';
+
+const directory = resolve(import.meta.dirname);
+const evidence = resolve(directory, 'evidence');
+const sdk = 'node_modules/rivetkit/dist/tsup/mod.js';
+const glue = 'node_modules/@rivetkit/rivetkit-wasm/pkg/rivetkit_wasm.js';
+const staged = 'src-tauri/binaries/lumen-enrichment-x86_64-pc-windows-msvc.exe';
+const testPath = 'workers/enrichment-runtime.test.ts';
+const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
+const expected = new Map([
+  [sdk, '5c35664868f2331e2495a395911d2645aabaf89ced9073c530479c8ce502cd46'],
+  [glue, 'c82a029ca57f10b0e7e136efcb4e895fa28df89d2d4ac1b59aade3e7e780b24d'],
+  [staged, '4a02bdfe85051badd0d98e52067c4dad0b16c20bfe237cf0d21b6a34727d7dc0'],
+  [testPath, 'aac01683857c37d129e7d9420e0133b7b68e98ded201863962b7103615c684a6'],
+]);
+if (Bun.version !== '1.3.14') throw new Error('Bun pin mismatch');
+for (const [path, version] of [['node_modules/rivetkit/package.json', '2.3.10'], ['node_modules/@rivetkit/rivetkit-wasm/package.json', '2.3.10'], ['node_modules/cbor-x/package.json', '1.6.5']]) {
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).version, version, 'package pin mismatch: ' + path);
+}
+if (process.env.LUMEN_RELEASE_BUILD) throw new Error('release marker must be absent');
+if (existsSync(resolve(evidence, 'build-started.json'))) throw new Error('refusing repeated build');
+mkdirSync(evidence, {recursive: true});
+const originals = new Map([...expected].map(([path, digest]) => {
+  const bytes = readFileSync(path);
+  assert.equal(hash(bytes), digest, 'original identity mismatch: ' + path);
+  return [path, bytes] as const;
+}));
+const changes: {path: string; start: number; end: number; before: string; after: string}[] = [];
+function replaceOnce(path: string, source: string, before: string, after: string) {
+  assert.equal(source.split(before).length, 2, 'expected unique source anchor: ' + before);
+  const start = source.indexOf(before);
+  changes.push({path, start, end: start + before.length, before, after});
+  return source.replace(before, after);
+}
+let sdkSource = originals.get(sdk)!.toString();
+const source = ts.createSourceFile(sdk, sdkSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+assert.equal(source.parseDiagnostics.length, 0);
+const inserts: {at: number; text: string}[] = [];
+let callbacks = 0, returns = 0, cleanups = 0;
+function collect(node: ts.Node) {
+  if (ts.isCallExpression(node) && node.expression.getText(source) === 'wrapNativeCallback') {
+    const callback = node.arguments[0];
+    assert.ok(callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body));
+    let ancestor: ts.Node | undefined = node.parent;
+    while (ancestor && !ts.isPropertyAssignment(ancestor)) ancestor = ancestor.parent;
+    assert.ok(ancestor && ts.isPropertyAssignment(ancestor));
+    const property = ancestor.name.getText(source);
+    const label = property === 'actions' ? '"actions." + name' : JSON.stringify(property);
+    inserts.push({at: callback.body.getStart(source) + 1, text: '\nconst __ownedCall = globalThis.__ownedRecovery.begin(' + label + ');\n'});
+    inserts.push({at: node.end - 1, text: ', ' + label});
+    callbacks++;
+    function body(child: ts.Node) {
+      if (ts.isFunctionLike(child)) return;
+      if (ts.isReturnStatement(child) && child.expression) {
+        inserts.push({at: child.expression.getStart(source), text: 'globalThis.__ownedRecovery.capture(__ownedCall, ('});
+        inserts.push({at: child.expression.end, text: '))'});
+        returns++;
+      }
+      if (ts.isAwaitExpression(child) && /\b(?:actorCtx|requestCtx)\b.*dispose\(/s.test(child.expression.getText(source))) {
+        inserts.push({at: child.getStart(source), text: '(globalThis.__ownedRecovery.check(__ownedCall, "before-cleanup"), '});
+        inserts.push({at: child.end, text: ', globalThis.__ownedRecovery.check(__ownedCall, "after-cleanup"))'});
+        cleanups++;
+      }
+      ts.forEachChild(child, body);
+    }
+    ts.forEachChild(callback.body, body);
+  }
+  ts.forEachChild(node, collect);
+}
+collect(source);
+assert.equal(callbacks, 22, 'callback coverage changed');
+assert.ok(returns >= 14 && cleanups >= 18, 'missing return/cleanup coverage');
+for (const insert of inserts.sort((a, b) => b.at - a.at)) {
+  changes.push({path: sdk, start: insert.at, end: insert.at, before: '', after: insert.text});
+  sdkSource = sdkSource.slice(0, insert.at) + insert.text + sdkSource.slice(insert.at);
+}
+sdkSource = replaceOnce(sdk, sdkSource, 'function wrapNativeCallback(callback) {', 'function wrapNativeCallback(callback, __ownedName) {');
+sdkSource = replaceOnce(sdk, sdkSource, 'return await callback(...args);', 'const __ownedResult = await callback(...args);\n      globalThis.__ownedRecovery.resolved(__ownedName, __ownedResult);\n      return __ownedResult;');
+sdkSource = replaceOnce(sdk, sdkSource, 'return encodeCborCompat(value);', 'const __ownedEncoded = encodeCborCompat(value);\n  globalThis.__ownedRecovery?.note("encode-complete", __ownedEncoded);\n  return __ownedEncoded;');
+let glueSource = originals.get(glue)!.toString();
+glueSource = replaceOnce(glue, glueSource, 'const ret = new Uint8Array(arg0);', `globalThis.__ownedRecovery.wasm(wasm.memory.buffer);
+        globalThis.__ownedRecovery.note("constructor-entry", arg0);
+        let ret;
+        try { ret = new Uint8Array(arg0); } catch (error) {
+            globalThis.__ownedRecovery.note("constructor-threw", arg0);
+            throw error;
+        }`);
+glueSource = replaceOnce(glue, glueSource, 'cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);', 'globalThis.__ownedRecovery.wasm(wasm.memory.buffer);\n        cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);');
+glueSource = replaceOnce(glue, glueSource, 'wasm = instance.exports;', 'wasm = instance.exports;\n    globalThis.__ownedRecovery.wasm(wasm.memory.buffer);');
+const metadata = readFileSync(resolve(directory, 'metadata.js'), 'utf8');
+// Small infrastructure self-check; synthetic bytes are never a product reproducer.
+const observed: string[] = [];
+const sandbox = vm.createContext({console: {error: (line: string) => observed.push(line)}});
+vm.runInContext(metadata + `
+  const bytes = new Uint8Array([31, 47]);
+  const token = __ownedRecovery.begin('owned-selfcheck');
+  if (__ownedRecovery.capture(token, bytes) !== bytes) throw Error('capture changed identity');
+  __ownedRecovery.check(token, 'before-cleanup');
+  __ownedRecovery.check(token, 'after-cleanup');
+  __ownedRecovery.resolved('owned-selfcheck', {body: bytes, state: bytes, response: bytes, connHibernation: [{bytes}]});
+`, sandbox);
+const records = observed.map(line => JSON.parse(line.slice('OWNED_CALLBACK_METADATA '.length)));
+assert.deepEqual(records.slice(0, 3).map(record => record.stage), ['return-created', 'before-cleanup', 'after-cleanup']);
+assert.equal(new Set(records.slice(0, 3).map(record => record.resultId)).size, 1);
+assert.equal(new Set(records.slice(0, 3).map(record => record.bufferId)).size, 1);
+assert.ok(records.slice(0, 3).every(record => record.viewValid === true && record.detached === false));
+assert.ok(records.some(record => record.path === 'result.connHibernation[0].bytes'));
+assert.ok(!observed.join('').includes('[31,47]'), 'payload leaked');
+writeFileSync(resolve(evidence, 'metadata-selfcheck.json'), JSON.stringify({passed: true, records: records.length, productRegression: false}, null, 2));
+glueSource = metadata + '\n' + glueSource;
+changes.push({path: glue, start: 0, end: 0, before: '', after: metadata + '\n'});
+const awaitCount = (text: string) => {
+  let count = 0;
+  const tree = ts.createSourceFile('check.js', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  assert.equal(tree.parseDiagnostics.length, 0, 'transformed parse failed');
+  function walk(node: ts.Node) { if (ts.isAwaitExpression(node)) count++; ts.forEachChild(node, walk); }
+  walk(tree); return count;
+};
+assert.equal(awaitCount(sdkSource), awaitCount(originals.get(sdk)!.toString()), 'added/removed await');
+assert.equal(awaitCount(glueSource), awaitCount(originals.get(glue)!.toString()), 'added/removed glue await');
+assert.ok(!sdkSource.includes('Promise.resolve(callback('), 'callback-wide promise wrapper forbidden');
+writeFileSync(resolve(evidence, 'source-transform.json'), JSON.stringify({callbacks, returns, cleanups, changes}, null, 2));
+for (const [path, transformed] of [[sdk, sdkSource], [glue, glueSource]]) {
+  const name = path === sdk ? 'sdk' : 'glue';
+  writeFileSync(resolve(evidence, name + '.original.js'), originals.get(path)!);
+  writeFileSync(resolve(evidence, name + '.diagnostic.js'), transformed);
+  const patch = spawnSync('rtk', ['proxy', 'git', 'diff', '--no-index', '--', resolve(evidence, name + '.original.js'), resolve(evidence, name + '.diagnostic.js')], {windowsHide: true});
+  assert.equal(patch.status, 1, 'missing exact source patch');
+  assert.equal(patch.stderr.length, 0, 'source patch command emitted error');
+  writeFileSync(resolve(evidence, name + '.patch'), patch.stdout);
+}
+const needle = "const worker = join(binaries, 'lumen-enrichment-x86_64-pc-windows-msvc.exe');";
+const test = originals.get(testPath)!.toString();
+assert.equal(test.split(needle).length, 2);
+const diagnosticTest = test.replace(needle, "const worker = resolve('.superpowers/callback-recovery/diagnostic-worker.exe');");
+assert.equal(diagnosticTest.replace("const worker = resolve('.superpowers/callback-recovery/diagnostic-worker.exe');", needle), test);
+writeFileSync(resolve(directory, 'diagnostic-runtime.test.ts'), diagnosticTest);
+writeFileSync(resolve(evidence, 'build-started.json'), JSON.stringify({at: new Date().toISOString(), bun: Bun.version, callbacks, returns, cleanups}, null, 2));
+let success = false;
+try {
+  writeFileSync(sdk, sdkSource); writeFileSync(glue, glueSource);
+  const result = await Bun.build({entrypoints: ['workers/enrichment-worker.ts'], compile: {target: 'bun-windows-x64', outfile: resolve(directory, 'diagnostic-worker.exe')}, minify: true});
+  if (!result.success) throw new AggregateError(result.logs, 'diagnostic build failed');
+  success = true;
+} finally {
+  // Restore every original dependency even when compilation fails. No staging writes.
+  const restored = [];
+  for (const path of [sdk, glue]) {
+    writeFileSync(path, originals.get(path)!);
+    const actual = hash(readFileSync(path));
+    restored.push({path, originalSha256: expected.get(path), restoredSha256: actual});
+    assert.equal(actual, expected.get(path), 'exact dependency restore failed');
+  }
+  assert.equal(hash(readFileSync(staged)), expected.get(staged), 'original staged worker changed');
+  writeFileSync(resolve(evidence, 'dependency-restore.json'), JSON.stringify({at: new Date().toISOString(), success, files: restored, stagedSha256: hash(readFileSync(staged)), testSha256: hash(readFileSync(testPath))}, null, 2));
+}
+const exe = resolve(directory, 'diagnostic-worker.exe');
+writeFileSync(resolve(evidence, 'build.json'), JSON.stringify({at: new Date().toISOString(), success, executable: {path: exe, bytes: readFileSync(exe).length, sha256: hash(readFileSync(exe))}, transformed: [{path: sdk, sha256: hash(sdkSource)}, {path: glue, sha256: hash(glueSource)}], originalTest: hash(test), diagnosticTest: hash(diagnosticTest)}, null, 2));
+console.log(JSON.stringify({success, callbacks, returns, cleanups, executableSha256: hash(readFileSync(exe)), originalStagedSha256: hash(readFileSync(staged)), exactDependencyRestore: true}));
