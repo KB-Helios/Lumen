@@ -291,7 +291,7 @@ mod tests {
             let host_path = canary.to_str().unwrap().replace('\\', "/");
             let host_path = host_path.trim_start_matches("//?/");
             let mapped = host_path.replacen(':', "", 1);
-            let mapped = format!("{}{}", &mapped[..1].to_lowercase(), &mapped[1..]);
+            let mapped = format!("{}{}", mapped[..1].to_lowercase(), &mapped[1..]);
             let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
             listener.set_nonblocking(true).unwrap();
             let route = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();

@@ -70,3 +70,15 @@ All **86 gallery states** and **six interaction recordings** were regenerated at
 The [required run on f36aa07](https://github.com/KB-Helios/Lumen/actions/runs/38896479987) still fails selection: **19.7 ms vs <18.8 ms**, with **1 performance case passed / 1 failed / 2 not run**. Ordinary samples again measure 2.1 ms, with their assertion not reached. The [120 raw selection samples](../../../artifacts/performance/selection-frame-failure.json) preserve this failure. Removing duplicate measurements has not established a fix for the hosted deadline.
 
 The next observation-only change adds the existing start time, rAF queue time, nominal frame timestamp and actual callback time to each frame sample. The measured duration still ends at the same actual callback, and workload, limits and assertions are unchanged. Its regression verifies a 20 ms actual latency remains 20 ms even when the nominal frame timestamp is earlier. All 26 diagnostic unit tests and all four local production performance cases pass with this metadata. The superseded local full development run was stopped after 56 cases; it is not a completed pass.
+
+## Current-head native follow-up
+
+The [required run on 8b8a1ea](https://github.com/KB-Helios/Lumen/actions/runs/38897489210) passed all four production performance cases: ordinary render p95 **2.2 ms vs <3 ms**, selection **17.2 ms vs <18.7 ms**, hover **16.1 ms vs 18.734 ms**, all 80 hover samples ready. Synchronous selection handling measured **0.2 ms p95**. The new timestamps preserve frame waiting and callback offset without attributing either entirely to application work. This observation does not erase the preceding hosted failures.
+
+The complete development functional suite passed both hosted and locally (**131 cases**, local duration 30.7 minutes). All **755 local unit tests**, typecheck, zero-warning frontend lint and the normal production build pass. Normal release assets contain none of the diagnostic hook/hide entry points. CodeQL passed for all five languages/workflows.
+
+Hosted staging, vendor-signature checks, sparse-identity admission, compiled Gateway checksum admission, pinned-worker integrity, compiled enrichment recovery and Rust formatting also passed. The required job then failed Clippy under **Rust 1.99.0**: `useless_borrows_in_formatting` flagged an unnecessary reference to the lowercase drive-letter string in the ignored Docker confinement fixture. The follow-up removes that reference; fixture behavior and all lint/test gates are retained. The local default Rust 1.95 did not report this newer lint, so verification uses a separately installed 1.99.0 toolchain without changing the default.
+
+Rust tests, remaining compiled-native fixtures, native answers and installers were skipped after that lint failure. No complete required-check pass or installer acceptance is claimed from this run.
+
+The local **Rust 1.99.0** `cargo clippy --all-targets --all-features -- -D warnings` and `cargo fmt --all -- --check` both pass after the one-reference fix. Full native tests and packaging continue separately; their pending status is not a pass.
