@@ -50,7 +50,7 @@ An isolated local diagnostic used that profiling renderer with the same fixture 
 
 The hover sampler compares an actual callback endpoint with a nominal rendering-timestamp budget. Callback offset growth contributes to that result. A separate alternating diagnostic measured no-input callback p95 **6.1 ms** at **4.3 ms** nominal cadence, showing that the bound can be exceeded without an input dispatch. This does not attribute every hover miss to the host or establish physical paint latency. Application work, browser scheduling and host contention remain possible contributors.
 
-The qualification decision remains open: retain the current development-renderer budget, or explicitly qualify production profiling while retaining development functional coverage and all existing limits. The required check is unchanged pending that decision. Hover's actual callback boundary also needs a defined qualification environment; no failure has been normalized into a pass.
+At the end of that investigation, the qualification decision was still open. On 2026-10-16 the owner selected production profiling with unchanged workload/limits and retained development functional tests. The [follow-up report](2026-10-16-production-profiling-gate.md) records the implemented split and remaining strict hover failure. No failure was normalized into a pass.
 
 The native staging, Rust, compiled-worker and packaging steps after Edge did not run in the new hosted workflow. Their earlier revision-bound reports remain separate evidence. The independently documented compiled enrichment crash and other production release gates remain open.
 
