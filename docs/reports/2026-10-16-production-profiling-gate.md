@@ -52,3 +52,17 @@ The regenerated clean-source [profile on e5b9c05](../../../artifacts/performance
 A separate focused run reached the two cases skipped by the full run: **2 passed**, including hover p95 **6.3 ms vs 6.4 ms**, all 80 ready, bounded idle CPU/heap and the static answer-region check. The JSON report was decoded and verified to contain all 80 raw hover samples. Those focused passes do not erase the failed full workload.
 
 The owner-approved allowance is committed as `e5b9c05`. Final hosted qualification remains necessary; no complete required-check pass is claimed from these local results.
+
+## Selection measurement follow-up
+
+The [required run on 5158f5a](https://github.com/KB-Helios/Lumen/actions/runs/38893922644) failed selection p95 at **19.9 ms vs <18.8 ms**, before reaching hover. Its preserved ordinary-render samples measured **2.1 ms**; the ordinary assertion was not reached, so this is not a passed complete interaction case.
+
+Tracing selection in the production build found **240 capsule measurements for 120 selections**. Each newly observed row received an initial ResizeObserver notification after it had already been measured, queuing a redundant frame. Commit `2123aba` skips that notification only when its reported border-box dimensions exactly match the last measured dimensions. Real size changes, unavailable box data and transformed-size mismatches still schedule measurement. A regression failed before the fix and passes for both row growth and shrinkage afterward. The diagnostic then recorded **120 measurements for 120 selections**; its selection p95 remained 4.1 ms, so that trace alone does not prove the hosted deadline is fixed.
+
+Verification on the fix: **754 unit tests**, typecheck, zero-warning lint and **20 focused development Edge cases** pass, including virtual-row scrolling, large text, high contrast, preview geometry and rapid selection. A fresh full production performance run passes **all four cases**, without retries: ordinary render p95 **1.2 ms vs <3 ms**, selection **3.6 ms vs <6.5 ms**, hover **4.8 ms vs 6.3 ms**, all 80 hover samples ready. The JSON report now also preserves raw input/selection samples before their assertions.
+
+The clean-source profile on `2123aba` passes all cadence-aware checks: ordinary render **1.5 ms**, warm launcher **4.0 ms**, input-next-frame **5.3 ms**, selection **4.0 ms**, hover **4.7 ms**, zero long tasks, zero settled/hidden measurements and zero settled alignment error. Strict **120 Hz passes** for this observation; strict **240 Hz fails**. This later pass does not erase the earlier failures or replace complete hosted qualification.
+
+Sidecar staging and the compiled enrichment fixture also passed locally (**1 test / 185 assertions**, Python 3.11). That fixture result does not establish broader worker recovery reliability or live-provider acceptance.
+
+All **86 gallery states** and **six interaction recordings** were regenerated at `2123aba`. The vendor-signature positive/tampered-negative check and all **19 unsigned sparse-identity metadata/ordering cases** also pass. These checks neither sign Lumen nor establish signed installer/MSIX acceptance.
