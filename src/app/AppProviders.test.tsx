@@ -5,6 +5,8 @@ import type {AppearancePreferences} from '../design-system/theme';
 import {appearanceStore} from '../state/appearance.store';
 import {AppProviders} from './AppProviders';
 import {useSettingsStore} from '../features/settings/settings.store';
+import {useLauncherStore} from '../features/launcher/launcher.store';
+import {useQueryStore} from '../features/launcher/query.store';
 
 const fullMotion: AppearancePreferences = {
   effects: 'full',
@@ -40,6 +42,15 @@ function expectApplicationRoot(root: HTMLElement) {
 }
 
 describe('AppProviders appearance contract', () => {
+  it('lets browser diagnostics hide the launcher without discarding its query', () => {
+    useLauncherStore.getState().show('expanded');
+    useQueryStore.getState().setDraft('report');
+    renderAppearance(fullMotion);
+    const diagnostics = (window as unknown as {__LUMEN_DIAGNOSTICS__: {hideLauncher(): void}}).__LUMEN_DIAGNOSTICS__;
+    act(() => diagnostics.hideLauncher());
+    expect(useLauncherStore.getState().visible).toBe(false);
+    expect(useQueryStore.getState().draft).toBe('report');
+  });
   it('shares decorative glass intensity with a neutral 72 baseline', () => {
     useSettingsStore.setState({presentation: {glassIntensity: 36}, hydrated: true});
     const root = renderAppearance(fullMotion);
@@ -54,6 +65,8 @@ describe('AppProviders appearance contract', () => {
     expect(root.style.getPropertyValue('--lumen-glass-strength')).toBe('0.5');
   });
   afterEach(() => {
+    useLauncherStore.getState().reset();
+    useQueryStore.getState().reset();
     useSettingsStore.setState({presentation: {glassIntensity: 72}, hydrated: false});
     appearanceStore.setState({density: 'comfortable'});
     vi.unstubAllGlobals();

@@ -78,6 +78,7 @@ bun run typecheck
 bun run lint
 bun run test
 bun run test:e2e
+bun run test:performance
 bun run profile
 bun run capture:gallery
 bun run record:interactions

@@ -1,6 +1,7 @@
 import {expect, test, type Page} from '@playwright/test';
 
 import {sampleHover} from '../../scripts/lib/hover-sample.mjs';
+import {installReactRendererProbe, readReactRenderers} from '../../scripts/lib/react-renderer-probe.mjs';
 import {sampleFrameCadence} from '../../src/features/diagnostics/diagnostics.refresh.mjs';
 
 const frameSchedulingToleranceMs = 2;
@@ -17,8 +18,18 @@ test.use({
   },
 });
 
+test.beforeEach(async ({page}) => {
+  await installReactRendererProbe(page);
+});
+
+async function openPerformancePage(page: Page, url: string) {
+  await page.goto(url);
+  const bundleTypes = (await readReactRenderers(page)).map((renderer: {bundleType: number}) => renderer.bundleType);
+  expect(bundleTypes, 'Performance qualification requires the production renderer').toEqual([0]);
+}
+
 test('keeps the ready activity indicator settled', async ({page}) => {
-  await page.goto('/?onboarded=1&service=memory');
+  await openPerformancePage(page, '/?onboarded=1&service=memory');
 
   await page.getByRole('searchbox', {name: 'Search files'}).fill('report');
   await expect(page.getByRole('grid', {name: 'Search results'})).toBeVisible();
@@ -110,7 +121,7 @@ async function measureFrameCadence(page: Page, sampleCount = 60) {
 test('warm launcher and ordinary interactions stay inside browser budgets', async ({page}) => {
   test.setTimeout(60_000);
   await page.setViewportSize({width: 800, height: 540});
-  await page.goto('/?onboarded=1&service=memory');
+  await openPerformancePage(page, '/?onboarded=1&service=memory');
   const search = page.getByRole('searchbox', {name: 'Search files'});
   await expect(search).toBeFocused();
 
@@ -213,7 +224,7 @@ test('warm launcher and ordinary interactions stay inside browser budgets', asyn
 
 test('hover, idle work, animation count, and browser heap remain bounded', async ({page, context}, testInfo) => {
   await page.setViewportSize({width: 800, height: 540});
-  await page.goto('/?gallery=1&scenario=expanded-results&capture=1&theme=reduced-motion');
+  await openPerformancePage(page, '/?gallery=1&scenario=expanded-results&capture=1&theme=reduced-motion');
   const row = page.getByRole('row').first();
   await expect(row).toBeVisible();
 
@@ -272,7 +283,7 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
 
 test('the static palette keeps one answer region and exposes diagnostics instrumentation', async ({page}) => {
   await page.setViewportSize({width: 800, height: 540});
-  await page.goto('/?gallery=1&scenario=ai-streaming&capture=1');
+  await openPerformancePage(page, '/?gallery=1&scenario=ai-streaming&capture=1');
 
   await expect(page.getByTestId('answer-region')).toHaveCount(1);
   await expect(page.getByRole('button', {name: 'Stop answer'})).toBeVisible();

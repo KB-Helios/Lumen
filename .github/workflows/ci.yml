@@ -83,7 +83,11 @@ jobs:
       - name: Run native performance and dev server tooling tests
         run: bun run test:tooling
 
-      - name: Run Edge end-to-end tests
+      - name: Qualify production profiling in Edge
+        run: bun run test:performance
+        timeout-minutes: 5
+
+      - name: Run Edge functional tests in development mode
         run: bun run test:e2e
         timeout-minutes: 45
 

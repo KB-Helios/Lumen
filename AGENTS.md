@@ -24,7 +24,8 @@ Verification order — run all of these before considering work done:
 bun run typecheck        # tsc --noEmit
 bun run lint             # eslint --max-warnings 0: warnings FAIL the run
 bun run test             # vitest run (unit/component, colocated src/**/*.test.ts(x))
-bun run test:e2e         # playwright
+bun run test:e2e         # development functional tests in Edge
+bun run test:performance # production profiling build, same Edge workload/budgets
 bun run tauri build      # full release build when touching src-tauri
 ```
 
@@ -77,7 +78,7 @@ The plain browser has no Tauri IPC, so deterministic states are reached via quer
 - `bun run record:interactions` → `artifacts/recordings/` (6 WebM studies + manifest)
 - `bun run profile` → `artifacts/performance/profile-summary.json` (240 Hz frame budgets, driven via the dev-only `window.__LUMEN_DIAGNOSTICS__`)
 
-All three auto-start a dev server if none is running. Build outputs under `src-tauri/target/release/bundle` are not committed.
+Gallery and recording capture auto-start a dev server if none is running. Browser performance tests and `profile` build a separate production profiling bundle under `node_modules/.cache/lumen-performance` and require their own strict loopback preview on port 1424. That test-only bundle retains fixtures/diagnostics and is never the Tauri release output. Build outputs under `src-tauri/target/release/bundle` are not committed.
 
 ## Docs
 

@@ -11,6 +11,7 @@ import {
 } from '../features/diagnostics/diagnostics.metrics';
 import {useAppearanceStore} from '../state/appearance.store';
 import {useSettingsStore} from '../features/settings/settings.store';
+import {useLauncherStore} from '../features/launcher/launcher.store';
 
 function subscribeToMedia(query: string, onChange: () => void) {
   if (typeof window.matchMedia !== 'function') {
@@ -104,11 +105,13 @@ export function AppProviders({
       __LUMEN_DIAGNOSTICS__?: {
         read: typeof readDiagnosticMetrics;
         reset: typeof resetDiagnosticMetrics;
+        hideLauncher(): void;
       };
     };
     diagnosticsWindow.__LUMEN_DIAGNOSTICS__ = {
       read: readDiagnosticMetrics,
       reset: resetDiagnosticMetrics,
+      hideLauncher: () => useLauncherStore.getState().hide(),
     };
     return () => {
       delete diagnosticsWindow.__LUMEN_DIAGNOSTICS__;
