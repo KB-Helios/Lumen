@@ -9,6 +9,8 @@ export default defineConfig({
   testIgnore: [],
   testMatch: '**/performance.spec.ts',
   outputDir: 'test-results/performance',
+  // Preserve attached raw samples for CI evidence uploads.
+  reporter: [['list'], ['json', {outputFile: 'test-results/performance-results.json'}]],
   use: {...functionalConfig.use, baseURL: url},
   webServer: {
     command: 'bun run build:performance && bun run preview:performance',

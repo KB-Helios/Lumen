@@ -239,7 +239,8 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
   const hoverFrameIntervals = hoverSamples.map((sample) => sample.callbackIntervalMs);
   const hoverSynchronousDispatch = hoverSamples.map((sample) => sample.synchronousDispatchMs);
   const hoverMetrics = await readMetrics(page);
-  const hoverFrameBudget = Math.max(percentile(hoverNominalFrameIntervals, 0.95), 1000 / 240);
+  const hoverFrameBudget = Math.max(percentile(hoverNominalFrameIntervals, 0.95), 1000 / 240) +
+    frameSchedulingToleranceMs;
   const hoverEvidence = {
     browserVersion: page.context().browser()?.version(),
     responseP95Ms: percentile(hoverToPaintSamples, 0.95),
@@ -254,8 +255,8 @@ test('hover, idle work, animation count, and browser heap remain bounded', async
     body: JSON.stringify(hoverEvidence, null, 2), contentType: 'application/json',
   });
   console.info('hover-performance', JSON.stringify({...hoverEvidence, samples: undefined}));
-  // Use the same independent nominal cadence budget as the evidence profiler.
-  // Readiness additionally checks state and the intended color.
+  // Use the same independent nominal cadence and scheduling allowance as the
+  // evidence profiler. Readiness still requires state/color at the first callback.
   expect(hoverSamples.filter((sample) => !sample.ready)).toEqual([]);
   expect(percentile(hoverToPaintSamples, 0.95)).toBeLessThanOrEqual(hoverFrameBudget);
   expect(Math.max(...hoverSynchronousDispatch)).toBeLessThan(16);

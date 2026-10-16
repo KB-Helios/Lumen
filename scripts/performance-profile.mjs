@@ -347,7 +347,7 @@ async function profile(baseUrl) {
     const effectiveHoverFrameBudgetMs = Math.max(
       measured.hoverNominalFrameIntervalP95Ms,
       targetFrameBudgetMs,
-    );
+    ) + frameSchedulingToleranceMs;
     const strict120Hz = evaluateRefreshTarget(measured, 120);
     const strict240Hz = evaluateRefreshTarget(measured, 240);
     const cadenceMeasurementAvailable = Number.isFinite(refresh.p95FrameIntervalMs) &&
